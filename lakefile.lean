@@ -1,11 +1,12 @@
 import Lake
 open Lake DSL
 
-require mathlib from git
-  "https://github.com/leanprover-community/mathlib4" @ "master"
-
 require VersoBlueprint from git
-  "https://github.com/leanprover/verso-blueprint" @ "v4.34.0"
+  "https://github.com/leanprover/verso-blueprint" @ "v4.33.0"
+
+-- Mathlib last so its transitive pins win for `lake exe cache get` hashes.
+require mathlib from git
+  "https://github.com/leanprover-community/mathlib4" @ "v4.33.1"
 
 package «LaPToP» where
   precompileModules := false

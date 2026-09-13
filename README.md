@@ -5,9 +5,9 @@ Lean formalization of Eric Hehner's *A Practical Theory of Programming*, with a
 
 ## Toolchain
 
-- Lean: `leanprover/lean4:v4.34.0-rc2` (do not bump without an explicit decision)
-- Blueprint: `leanprover/verso-blueprint` **v4.34.0**
-- Mathlib: via Lake; always use precompiled oleans (`lake exe cache get`)
+- Lean: `leanprover/lean4:v4.33.1` (latest stable)
+- Blueprint: `leanprover/verso-blueprint` **v4.33.0**
+- Mathlib: pinned to **v4.33.1**; always use precompiled oleans (`lake exe cache get`)
 
 ## Build the Blueprint site (HTML only)
 
