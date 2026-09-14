@@ -8,6 +8,7 @@ import LaPToP.Chapters.BasicTheories
 import LaPToP.Chapters.FunctionTheory
 import LaPToP.Chapters.DataStructures
 import LaPToP.Chapters.ProgramTheory
+import LaPToP.Chapters.ProgrammingLanguage
 import LaPToP.Chapters.RecursionConcurrency
 import LaPToP.Chapters.Collatz
 
@@ -27,6 +28,7 @@ the generated graph and summary show an in-progress goal.
 {include 0 LaPToP.Chapters.FunctionTheory}
 {include 0 LaPToP.Chapters.DataStructures}
 {include 0 LaPToP.Chapters.ProgramTheory}
+{include 0 LaPToP.Chapters.ProgrammingLanguage}
 {include 0 LaPToP.Chapters.RecursionConcurrency}
 {include 0 LaPToP.Chapters.Collatz}
 
