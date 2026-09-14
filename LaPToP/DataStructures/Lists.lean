@@ -205,3 +205,27 @@ end Examples
 end HList
 
 end LaPToP.DataStructures
+
+/-! ### Modification and indexing -/
+
+namespace LaPToP.DataStructures.HList
+
+variable {α : Type u}
+
+/-- `#(n→i | L) = #L`: modification preserves length. -/
+theorem length_contents_modify (L : HList α) (n : ℕ) (i : α) :
+    (modify n i L).contents.length = L.contents.length := List.length_set ..
+
+variable [Inhabited α]
+
+/-- `(n→i | L) n = i` for `n` an index of `L`. -/
+theorem at_modify_self (L : HList α) {n : ℕ} (i : α) (h : n < L.contents.length) :
+    (modify n i L).at n = i := by
+  simp [modify, «at», Str.update, Str.at, List.getD_eq_getElem?_getD, List.getElem?_set_self h]
+
+/-- `(n→i | L) m = L m` for `m ≠ n`. -/
+theorem at_modify_ne (L : HList α) {n m : ℕ} (i : α) (h : m ≠ n) :
+    (modify n i L).at m = L.at m := by
+  simp [modify, «at», Str.update, Str.at, List.getD_eq_getElem?_getD, List.getElem?_set_ne (Ne.symm h)]
+
+end LaPToP.DataStructures.HList
