@@ -3,6 +3,7 @@ import VersoManual
 import VersoBlueprint
 import LaPToP.ProgramTheory.Specifications
 import LaPToP.ProgramTheory.Programs
+import LaPToP.ProgramTheory.Time
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -13,8 +14,9 @@ open Informal
 :::group "program_theory_core"
 Programs as predicates on pre- and post-states; refinement as implication;
 sequential composition, conditionals, and assignment in Hehner's theory.
-Sections 4.0–4.1 of the book are formalized in the Lean modules
-`LaPToP.ProgramTheory.Specifications` and `LaPToP.ProgramTheory.Programs`.
+Sections 4.0–4.2 of the book are formalized in the Lean modules
+`LaPToP.ProgramTheory.Specifications`, `LaPToP.ProgramTheory.Programs` and
+`LaPToP.ProgramTheory.Time`.
 :::
 
 :::definition "program_as_predicate" (parent := "program_theory_core") (lean := "LaPToP.ProgramTheory.Spec, LaPToP.ProgramTheory.Spec.ext, LaPToP.ProgramTheory.Spec.outputs, LaPToP.ProgramTheory.Spec.Satisfiable, LaPToP.ProgramTheory.Spec.Unsatisfiable, LaPToP.ProgramTheory.Spec.Deterministic, LaPToP.ProgramTheory.Spec.Nondeterministic, LaPToP.ProgramTheory.Spec.Implementable, LaPToP.ProgramTheory.Spec.satisfiable_iff, LaPToP.ProgramTheory.Spec.unsatisfiable_iff, LaPToP.ProgramTheory.Spec.deterministic_iff, LaPToP.ProgramTheory.Spec.nondeterministic_iff, LaPToP.ProgramTheory.Spec.implementable_iff")
@@ -239,4 +241,64 @@ are. Uses {uses "refinement_by_steps_parts_cases"}[], {uses "substitution_law"}[
 Each step by the Substitution Law (`assign_seq`) and the list facts
 $`\Sigma L[0;..\# L] = \Sigma L`, $`\Sigma L[\# L;..\# L] = 0`, and
 $`\Sigma L[n;..\# L] = L\,n + \Sigma L[n+1;..\# L]` for $`0 \le n < \# L`.
+:::
+
+:::definition "time_variable" (parent := "program_theory_core") (lean := "LaPToP.ProgramTheory.Time.TSt, LaPToP.ProgramTheory.Time.assignX, LaPToP.ProgramTheory.Time.assignT, LaPToP.ProgramTheory.Time.tick, LaPToP.ProgramTheory.Time.assignX_seq, LaPToP.ProgramTheory.Time.assignT_seq, LaPToP.ProgramTheory.Time.tick_seq, LaPToP.ProgramTheory.Time.ImplementableT, LaPToP.ProgramTheory.Time.implementableT_iff, LaPToP.ProgramTheory.Time.ImplementableT.implementable, LaPToP.ProgramTheory.Time.implementableT_ok, LaPToP.ProgramTheory.Time.implementableT_assignX, LaPToP.ProgramTheory.Time.implementableT_tick, LaPToP.ProgramTheory.Time.implementableT_cond, LaPToP.ProgramTheory.Time.implementableT_seq")
+"To talk about time, we just add a time variable. We do not change the theory;
+the time variable is treated just like any other variable, as part of the
+state." The state $`\sigma = t; x; y; \ldots` has a time variable $`t` (initial
+time) and $`t'` is the final time; "to allow for nontermination we take the
+domain of time to be a number system extended with $`\infty`". In Lean the
+book's example state is a structure with $`t : \mathit{xnat}` (as `ℕ∞`, cf.
+{uses "bunch_named_bunches"}[]) and one integer variable $`x`; since $`t` and
+$`x` have different types, assignments $`x := e` and $`t := e` are the relations
+`assignX`, `assignT` (in particular `tick` is $`t := t+1`), each obeying the
+Substitution Law of {uses "substitution_law"}[]. "Time cannot decrease, therefore
+a specification $`S` with time is implementable if and only if
+$`\forall\sigma\cdot\exists\sigma'\cdot S \land t' \ge t`": `ImplementableT`, which
+holds for $`\mathit{ok}`, $`x := e`, $`t := t+1` and is preserved by $`\mathbf{if}`
+and $`.`. Extends {uses "specification_notations"}[] and
+{uses "specification_implementability"}[].
+:::
+
+:::theorem "recursive_time" (parent := "program_theory_core") (tags := "programs, time, hehner-4.2") (effort := "medium") (lean := "LaPToP.ProgramTheory.Time.cast_toNat_pred_add_one, LaPToP.ProgramTheory.Time.Prec, LaPToP.ProgramTheory.Time.refine_Prec, LaPToP.ProgramTheory.Time.Prec', LaPToP.ProgramTheory.Time.refine_Prec', LaPToP.ProgramTheory.Time.Preal, LaPToP.ProgramTheory.Time.refine_Preal")
+The book's example $`P \Leftarrow \mathbf{if}\ x = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ x := x - 1.\ P`
+with time. *Recursive time* ("each recursive call costs time 1; all else is
+free"): $`P \Leftarrow \mathbf{if}\ x = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ x := x - 1.\ t := t + 1.\ P`
+is a theorem for $`P = \mathbf{if}\ x \ge 0\ \mathbf{then}\ x' = 0 \land t' = t + x\ \mathbf{else}\ t' = \infty`
+and for $`P = x' = 0 \land \mathbf{if}\ x \ge 0\ \mathbf{then}\ t' = t + x\ \mathbf{else}\ t' = \infty`.
+*Real time*, with the $`\mathbf{if}`, the assignment and the call each taking
+time 1: $`P \Leftarrow t := t+1.\ \mathbf{if}\ x = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ t := t+1.\ x := x-1.\ t := t+1.\ P`
+is a theorem for $`P = \mathbf{if}\ x \ge 0\ \mathbf{then}\ x' = 0 \land t' = t + 3 \times x + 1\ \mathbf{else}\ t' = \infty`
+— "when $`x` starts with a nonnegative value, execution of this program sets $`x`
+to 0, and takes time $`3 \times x + 1` to do so; when $`x` starts with a negative
+value, execution takes infinite time". (Both measures are taken in $`\mathit{xnat}`
+here.) As in {uses "list_summation"}[], the recursive call is not yet a program
+in the sense of {uses "program_definition"}[]. Uses {uses "time_variable"}[] and
+{uses "refinement_by_steps_parts_cases"}[].
+:::
+
+:::proof "recursive_time"
+Case split on $`x = 0`; the recursive case is the Substitution Law for
+$`x := x-1` and $`t := t+1` followed by a case split on $`x - 1 \ge 0`, with the
+$`\mathit{xnat}` identity $`(x-1) + 1 = x` for $`x \ge 1`.
+:::
+
+:::theorem "termination" (parent := "program_theory_core") (tags := "programs, time, hehner-4.2.2") (effort := "small") (lean := "LaPToP.ProgramTheory.Time.specA, LaPToP.ProgramTheory.Time.specB, LaPToP.ProgramTheory.Time.specC, LaPToP.ProgramTheory.Time.specD, LaPToP.ProgramTheory.Time.refine_a, LaPToP.ProgramTheory.Time.unsatisfiable_b, LaPToP.ProgramTheory.Time.not_implementableT_b, LaPToP.ProgramTheory.Time.implementableT_c, LaPToP.ProgramTheory.Time.refine_c, LaPToP.ProgramTheory.Time.implementableT_d, LaPToP.ProgramTheory.Time.refines_c_d, LaPToP.ProgramTheory.Time.not_refine_d")
+"Here are four specifications, each of which says that variable $`x` has final
+value 2": (a) $`x' = 2`; (b) $`x' = 2 \land t' < \infty`; (c) $`x' = 2 \land (t < \infty \Rightarrow t' < \infty)`;
+(d) $`x' = 2 \land t' \le t + 1`. (a) is refined by the infinite loop
+$`x' = 2 \Leftarrow t := t+1.\ x' = 2` — "an unkind refinement, but the customer has no
+ground for complaint". (b) is unimplementable: "(b) $`\land\ t' \ge t` is
+unsatisfiable for $`t = \infty`", so "the programmer has to reject (b)". (c) is
+implementable "but surprisingly, it can be refined with exactly the same
+construction as (a)": $`x' = 2 \land (t < \infty \Rightarrow t' < \infty) \Leftarrow t := t+1.\ x' = 2 \land (t < \infty \Rightarrow t' < \infty)`.
+(d) is implementable, stronger than (c), and "an infinite loop is no longer
+possible because $`x' = 2 \land t' \le t + 1 \Leftarrow t := t+1.\ x' = 2 \land t' \le t + 1`
+is not a theorem". Uses {uses "time_variable"}[] and {uses "refinement_laws"}[].
+:::
+
+:::proof "termination"
+Direct from the definitions; the non-theorem is refuted by the prestate
+$`t = 0, x = 0` and poststate $`t = 2, x = 2`.
 :::
