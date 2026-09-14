@@ -2,6 +2,7 @@ import Verso
 import VersoManual
 import VersoBlueprint
 import LaPToP.ProgramTheory.Specifications
+import LaPToP.ProgramTheory.Programs
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -12,8 +13,8 @@ open Informal
 :::group "program_theory_core"
 Programs as predicates on pre- and post-states; refinement as implication;
 sequential composition, conditionals, and assignment in Hehner's theory.
-Section 4.0 of the book is formalized in the Lean module
-`LaPToP.ProgramTheory.Specifications`.
+Sections 4.0–4.1 of the book are formalized in the Lean modules
+`LaPToP.ProgramTheory.Specifications` and `LaPToP.ProgramTheory.Programs`.
 :::
 
 :::definition "program_as_predicate" (parent := "program_theory_core") (lean := "LaPToP.ProgramTheory.Spec, LaPToP.ProgramTheory.Spec.ext, LaPToP.ProgramTheory.Spec.outputs, LaPToP.ProgramTheory.Spec.Satisfiable, LaPToP.ProgramTheory.Spec.Unsatisfiable, LaPToP.ProgramTheory.Spec.Deterministic, LaPToP.ProgramTheory.Spec.Nondeterministic, LaPToP.ProgramTheory.Spec.Implementable, LaPToP.ProgramTheory.Spec.satisfiable_iff, LaPToP.ProgramTheory.Spec.unsatisfiable_iff, LaPToP.ProgramTheory.Spec.deterministic_iff, LaPToP.ProgramTheory.Spec.nondeterministic_iff, LaPToP.ProgramTheory.Spec.implementable_iff")
@@ -166,4 +167,76 @@ Uses {uses "refinement_laws"}[], {uses "substitution_law"}[] and
 :::proof "refinement_examples"
 Unfold and decide by linear integer arithmetic; the counterexample for
 $`x \ge 0 \land y' = 0` is the prestate with $`x = -1`.
+:::
+
+:::definition "program_definition" (parent := "program_theory_core") (lean := "LaPToP.ProgramTheory.Spec.IsProgram, LaPToP.ProgramTheory.Spec.IsProgram.implementable, LaPToP.ProgramTheory.Spec.IsProgram.refine', LaPToP.ProgramTheory.Spec.IsProgram.top")
+"A program is a specification of computer behavior; ... a program is an
+implemented specification, that is, a specification for which an implementation
+has been provided, so that a computer can execute it." The programming notations
+of Chapter 4: (a) $`\mathit{ok}` is a program; (b) $`x := e` is a program for an
+implemented expression $`e` of the initial values; (c) $`\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ Q`
+is a program for implemented $`b` and programs $`P, Q`; (d) $`P.\ Q` is a program
+for programs $`P, Q`; (e) an implementable specification that is refined by a
+program is a program. In Lean, `Spec.IsProgram` is the inductive predicate with
+exactly these five rules; every program is implementable. Two notes: the
+"implemented expression" restriction on $`e` and $`b` is about the expression
+language and has no counterpart in this semantic model; and the implementability
+hypothesis of rule (e) is redundant, since a specification refined by an
+implementable one is implementable. Uses {uses "specification_notations"}[] and
+{uses "specification_implementability"}[].
+:::
+
+:::theorem "refinement_by_steps_parts_cases" (parent := "program_theory_core") (tags := "programs, refinement, hehner-4.1.0") (effort := "small") (lean := "LaPToP.ProgramTheory.Spec.refines_cond_mono, LaPToP.ProgramTheory.Spec.refines_seq_mono, LaPToP.ProgramTheory.Spec.refines_and_mono, LaPToP.ProgramTheory.Spec.steps_cond, LaPToP.ProgramTheory.Spec.steps_seq, LaPToP.ProgramTheory.Spec.steps_trans, LaPToP.ProgramTheory.Spec.cond_and_cond_refines, LaPToP.ProgramTheory.Spec.parts_cond, LaPToP.ProgramTheory.Spec.seq_and_seq_refines, LaPToP.ProgramTheory.Spec.parts_seq, LaPToP.ProgramTheory.Spec.parts_and, LaPToP.ProgramTheory.Spec.refines_cond_iff, LaPToP.ProgramTheory.Examples.refine₃_by_cases")
+The Refinement Laws of Section 4.1.0. *Refinement by Steps* (monotonicity,
+transitivity): if $`A \Leftarrow \mathbf{if}\ b\ \mathbf{then}\ C\ \mathbf{else}\ D`, $`C \Leftarrow E`
+and $`D \Leftarrow F` then $`A \Leftarrow \mathbf{if}\ b\ \mathbf{then}\ E\ \mathbf{else}\ F`; if
+$`A \Leftarrow B.\ C`, $`B \Leftarrow D`, $`C \Leftarrow E` then $`A \Leftarrow D.\ E`; if
+$`A \Leftarrow B`, $`B \Leftarrow C` then $`A \Leftarrow C`. *Refinement by Parts*
+(monotonicity, conflation): if $`A \Leftarrow \mathbf{if}\ b\ \mathbf{then}\ C\ \mathbf{else}\ D` and
+$`E \Leftarrow \mathbf{if}\ b\ \mathbf{then}\ F\ \mathbf{else}\ G` then
+$`A \land E \Leftarrow \mathbf{if}\ b\ \mathbf{then}\ C \land F\ \mathbf{else}\ D \land G`; if
+$`A \Leftarrow B.\ C` and $`D \Leftarrow E.\ F` then $`A \land D \Leftarrow (B \land E).\ (C \land F)`;
+if $`A \Leftarrow B` and $`C \Leftarrow D` then $`A \land C \Leftarrow B \land D`.
+*Refinement by Cases*: $`P \Leftarrow \mathbf{if}\ b\ \mathbf{then}\ Q\ \mathbf{else}\ R` is a theorem
+if and only if $`P \Leftarrow b \land Q` and $`P \Leftarrow \neg b \land R` are theorems —
+illustrated on $`x' \le x \Leftarrow \mathbf{if}\ x = 0\ \mathbf{then}\ x' = x\ \mathbf{else}\ x' < x`.
+The laws rest on monotonicity of $`\mathbf{if}`, $`.` and $`\land` with respect to
+refinement. Uses {uses "refinement_laws"}[] and {uses "specification_laws"}[].
+:::
+
+:::proof "refinement_by_steps_parts_cases"
+Monotonicity by unfolding; Steps is monotonicity followed by transitivity;
+Parts additionally uses that $`\mathbf{if}\ b\ \mathbf{then}\ C \land F\ \mathbf{else}\ D \land G`
+refines $`(\mathbf{if}\ b\ \mathbf{then}\ C\ \mathbf{else}\ D) \land (\mathbf{if}\ b\ \mathbf{then}\ F\ \mathbf{else}\ G)`
+and that $`(B \land E).\ (C \land F)` refines $`(B.\ C) \land (E.\ F)`; Cases by splitting
+the disjunction in $`\mathbf{if}`.
+:::
+
+:::theorem "list_summation" (parent := "program_theory_core") (tags := "programs, development, hehner-4.1.1") (effort := "medium") (lean := "LaPToP.ProgramTheory.ListSummation.SV, LaPToP.ProgramTheory.ListSummation.St, LaPToP.ProgramTheory.ListSummation.len, LaPToP.ProgramTheory.ListSummation.sumFrom, LaPToP.ProgramTheory.ListSummation.sumFrom_zero, LaPToP.ProgramTheory.ListSummation.sumFrom_len, LaPToP.ProgramTheory.ListSummation.sumFrom_succ, LaPToP.ProgramTheory.ListSummation.A, LaPToP.ProgramTheory.ListSummation.B, LaPToP.ProgramTheory.ListSummation.C, LaPToP.ProgramTheory.ListSummation.D, LaPToP.ProgramTheory.ListSummation.refine_A, LaPToP.ProgramTheory.ListSummation.refine_B, LaPToP.ProgramTheory.ListSummation.refine_C, LaPToP.ProgramTheory.ListSummation.refine_D, LaPToP.ProgramTheory.ListSummation.refine_B_expanded, LaPToP.ProgramTheory.ListSummation.refine_A_expanded, LaPToP.ProgramTheory.ListSummation.implementable_A, LaPToP.ProgramTheory.ListSummation.implementable_B")
+The book's first program development (Exercise 174): "write a program to find
+the sum of a list of numbers". With $`L` the list (a state constant), $`s` the
+accumulator and $`n` the number of items summed, the problem $`s' = \Sigma L`
+is refined in four steps:
+$`s' = \Sigma L \Leftarrow s := 0.\ n := 0.\ B` where
+$`B = (s' = s + \Sigma L[n;..\# L])`;
+$`B \Leftarrow \mathbf{if}\ n = \# L\ \mathbf{then}\ C\ \mathbf{else}\ D` (Case Creation) with
+$`C = (n = \# L \Rightarrow B)`, $`D = (n \neq \# L \Rightarrow B)`;
+$`C \Leftarrow \mathit{ok}`; and
+$`D \Leftarrow s := s + L\,n.\ n := n + 1.\ B`, "proved by two applications of the
+Substitution Law". Refinement by Steps then assembles the compiler's view
+$`B \Leftarrow \mathbf{if}\ n = \# L\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ (s := s + L\,n.\ n := n + 1.\ B)`
+and the whole development. The book's implicit bound $`0 \le n \le \# L` ("the
+notation $`n;..\# L` is defined only for $`n \le \# L`") is made explicit in $`B`,
+as the book itself suggests. The last refinement refers to $`B` again — a
+recursive call, which is not a program in the sense of {uses "program_definition"}[]
+until execution time and termination (Section 4.2) and recursion (Chapter 6) are
+treated; $`A` and $`B` are shown implementable so that rule (e) applies once they
+are. Uses {uses "refinement_by_steps_parts_cases"}[], {uses "substitution_law"}[],
+{uses "list_as_function"}[] and {uses "quantifier_numeric"}[].
+:::
+
+:::proof "list_summation"
+Each step by the Substitution Law (`assign_seq`) and the list facts
+$`\Sigma L[0;..\# L] = \Sigma L`, $`\Sigma L[\# L;..\# L] = 0`, and
+$`\Sigma L[n;..\# L] = L\,n + \Sigma L[n+1;..\# L]` for $`0 \le n < \# L`.
 :::
