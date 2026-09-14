@@ -2,6 +2,7 @@ import Verso
 import VersoManual
 import VersoBlueprint
 import LaPToP.BasicTheories.Binary
+import LaPToP.ProgramTheory.Specifications
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -134,7 +135,7 @@ Truth tables (`revert …; decide`); the generic Case Distributive laws are a
 case split on the condition followed by `rfl`.
 :::
 
-:::definition "state_as_variables" (parent := "prelude_core")
+:::definition "state_as_variables" (parent := "prelude_core") (lean := "LaPToP.ProgramTheory.Spec.State")
 A *state* assigns values to program variables. Informal specifications and
 programs are expressions over those variables; refining one specification into
 another is the central activity of the book.
