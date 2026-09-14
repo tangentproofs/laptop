@@ -2,6 +2,7 @@ import Verso
 import VersoManual
 import VersoBlueprint
 import LaPToP.DataStructures.Strings
+import LaPToP.DataStructures.Lists
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -12,8 +13,9 @@ open Informal
 :::group "data_structures_core"
 Data structures as they appear in LaPToP: lists/strings, functions as data,
 and related theories used when specifying programs that manipulate structure.
-The string material is Hehner's Section 2.2; its formal counterpart is the Lean
-module `LaPToP.DataStructures.Strings`.
+The string and list material is Hehner's Sections 2.2 and 2.3; the formal
+counterparts are the Lean modules `LaPToP.DataStructures.Strings` and
+`LaPToP.DataStructures.Lists`.
 :::
 
 :::definition "list_as_string" (parent := "data_structures_core") (lean := "LaPToP.DataStructures.Str, LaPToP.DataStructures.Str.nil, LaPToP.DataStructures.Str.item, LaPToP.DataStructures.Str.len")
@@ -133,6 +135,59 @@ interval, the length law uses the difference truncated at $`0`. Uses
 :::proof "string_interval_laws"
 The interval is `List.range` shifted by $`x`; the join law is `List.range_add`
 after splitting $`z - x = (y - x) + (z - y)`.
+:::
+
+:::definition "list_packaging" (parent := "data_structures_core") (lean := "LaPToP.DataStructures.HList, LaPToP.DataStructures.Str.pack, LaPToP.DataStructures.HList.contents, LaPToP.DataStructures.HList.length, LaPToP.DataStructures.HList.domain, LaPToP.DataStructures.HList.at, LaPToP.DataStructures.HList.comp, LaPToP.DataStructures.HList.join, LaPToP.DataStructures.HList.modify")
+"A list is a contained string." Although the string $`0; 1; 2` is not a single
+item, the list $`[0; 1; 2]` is. List formation $`[S]` packages a string
+(`Str.pack`); contents $`\sim L` unpackages it (`HList.contents`); $`\# L` is the
+length, $`\square L = 0,..\# L` the domain (a bunch of naturals), $`L\,n` the item
+at index $`n`, $`L\,M` composition ("$`L` composed with $`M`": the items of $`L`
+at the indexes listed in $`M`), $`L ;; M` join, and $`n \to i \mid L` ("$`n` maps
+to $`i` otherwise $`L`") the list like $`L` except that item $`n` is $`i`. Lists
+are ordered lexicographically, like strings. In Lean `HList α` is a one-field
+structure around a `Str α`, exactly as `HSet` packages a bunch in
+{uses "bunch_vs_set"}[]; the operations act on contents via
+{uses "string_syntax"}[].
+:::
+
+:::theorem "list_axioms" (parent := "data_structures_core") (tags := "data, lists, hehner-2.3") (effort := "small") (lean := "LaPToP.DataStructures.HList.pack_contents, LaPToP.DataStructures.HList.contents_pack, LaPToP.DataStructures.HList.length_pack, LaPToP.DataStructures.HList.domain_eq, LaPToP.DataStructures.HList.image_domain, LaPToP.DataStructures.HList.pack_join_pack, LaPToP.DataStructures.HList.at_pack, LaPToP.DataStructures.HList.pack_comp_pack, LaPToP.DataStructures.HList.modify_pack, LaPToP.DataStructures.HList.pack_inj, LaPToP.DataStructures.HList.pack_lt_pack, LaPToP.DataStructures.HList.image_pack_subset_image_pack, LaPToP.DataStructures.Str.pack_injective, LaPToP.DataStructures.HList.contents_example, LaPToP.DataStructures.HList.length_example, LaPToP.DataStructures.HList.at_example, LaPToP.DataStructures.HList.comp_example, LaPToP.DataStructures.HList.join_example, LaPToP.DataStructures.HList.modify_example, LaPToP.DataStructures.HList.modify_modify_example, LaPToP.DataStructures.HList.modify_swap_example")
+Hehner's List Theory axioms, for lists $`L`, strings $`S, T`, an index $`n` of
+$`S`, an item $`i`, and bunches of strings $`A, B`:
+$`[\sim L] = L` (list formation), $`\sim[S] = S` (contents),
+$`\#[S] = \leftrightarrow S` (length), $`\square L = 0,..\# L` (domain),
+$`[S] ;; [T] = [S; T]` (join), $`[S]\,n = S\,n` (indexing),
+$`[S]\,[T] = [S\,T]` (composition), $`n \to i \mid [S] = [S \triangleleft n \triangleright i]`
+(modification), $`[S] = [T] = (S = T)` (equation), $`[S] < [T] = (S < T)` (order),
+and $`[A] : [B] = A : B` (inclusion, with $`[A]` the bunch of lists $`[S]` for
+$`S : A`). The domain law is stated on the naturals, with a companion reading it
+in the integers as the bunch interval {uses "bunch_interval"}[]. The remaining
+axiom $`[S] \neq S` (structure) is not an equation in the typed model: a list and
+its contents have different Lean types, which is exactly the distinction it
+records. The book's worked examples ($`\sim[3;5;7;4]`, $`\#[3;5;7;4]`,
+$`[3;5;7;4]\,2`, $`[3;5;7;4]\,[2;1;2]`, $`[3;5;7;4];;[2;1;2]`,
+$`2 \to 22 \mid [10;..15]`, and the item swap) are checked by evaluation.
+Uses {uses "list_packaging"}[] and {uses "string_axioms_indexing"}[].
+:::
+
+:::proof "list_axioms"
+Every law is definitional (`rfl` / `Iff.rfl`) once the list operators are
+defined on contents; equation and inclusion follow from injectivity of
+packaging (`Set.image_subset_image_iff`).
+:::
+
+:::theorem "list_derived_laws" (parent := "data_structures_core") (tags := "data, lists, hehner-2.3") (effort := "small") (lean := "LaPToP.DataStructures.HList.comp_at, LaPToP.DataStructures.HList.comp_assoc, LaPToP.DataStructures.HList.comp_join")
+Theorems Hehner derives from the axioms, for lists $`L, M, N` and natural $`n`:
+$`(L\,M)\,n = L\,(M\,n)` (composition), $`(L\,M)\,N = L\,(M\,N)` (associativity),
+and $`L\,(M ;; N) = L\,M ;; L\,N` (distributivity). The first two are stated for
+$`n` an index of $`M`, respectively $`N` a list of indexes of $`M`, because the
+book leaves out-of-range indexing unspecified. Uses {uses "list_axioms"}[] and
+{uses "string_axioms_indexing"}[].
+:::
+
+:::proof "list_derived_laws"
+Unpack to contents and apply the string indexing laws
+(`Str.at_map_of_lt`, `Str.sub_sub`, `Str.sub_append`).
 :::
 
 :::definition "function_as_data" (parent := "data_structures_core")
