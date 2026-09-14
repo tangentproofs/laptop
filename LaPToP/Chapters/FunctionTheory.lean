@@ -2,6 +2,7 @@ import Verso
 import VersoManual
 import VersoBlueprint
 import LaPToP.FunctionTheory.Functions
+import LaPToP.FunctionTheory.Quantifiers
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -12,8 +13,9 @@ open Informal
 :::group "function_theory_core"
 Functions with an explicit domain, selective union, predicates and relations,
 and the quantifiers built on them: Hehner's Chapter 3, the prerequisite for the
-specifications and refinements of Program Theory. The formal counterpart is the
-Lean module `LaPToP.FunctionTheory.Functions`.
+specifications and refinements of Program Theory. The formal counterparts are the
+Lean modules `LaPToP.FunctionTheory.Functions` and
+`LaPToP.FunctionTheory.Quantifiers`.
 :::
 
 :::definition "function_notation" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn, LaPToP.FunctionTheory.Fn.lam, LaPToP.FunctionTheory.Fn.domain, LaPToP.FunctionTheory.Fn.size, LaPToP.FunctionTheory.Fn.apply, LaPToP.FunctionTheory.Fn.arrow, LaPToP.FunctionTheory.Fn.ext")
@@ -107,4 +109,118 @@ Uses {uses "quantifier_forall_exists"}[] and {uses "binary_laws_basic"}[].
 Specialization instantiates the universal at $`x`; Generalization exhibits
 $`x`. For One-Point, the antecedent/conjunct $`v = x` pins the variable, and
 the equality is decided in `Bool`.
+:::
+
+:::definition "quantifier_numeric" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn.values, LaPToP.FunctionTheory.Fn.values_lam, LaPToP.FunctionTheory.Fn.sup, LaPToP.FunctionTheory.Fn.inf, LaPToP.FunctionTheory.Fn.sum, LaPToP.FunctionTheory.Fn.prod, LaPToP.FunctionTheory.Fn.sup_eq_max")
+"Any two-operand symmetric associative operator can be used to define a
+quantifier": $`+`, $`\times`, $`\uparrow`, $`\downarrow` give $`\Sigma`, $`\Pi`,
+$`\Uparrow`, $`\Downarrow`. For a numeric function $`f`, $`\Uparrow f` and
+$`\Downarrow f` are the least upper bound and greatest lower bound of the
+results of $`f` on its domain (its *range*, `Fn.values`), taken in the extended
+reals of {uses "number_domain"}[], which form a complete linear order;
+$`\uparrow`/$`\downarrow` are $`\sqcup`/$`\sqcap` ($`\max`/$`\min`).
+$`\Sigma f` and $`\Pi f` are Mathlib's finite sum and product over the domain.
+These are faithful only for finite domains — Mathlib's `∑ᶠ` is
+$`0` when the support is infinite, whereas the book's
+$`\Sigma n : \mathit{nat}+1 \cdot 1/2^n = 1` is a convergent series; the laws
+below that split a domain carry finiteness hypotheses, and nothing here claims
+anything about infinite sums. Uses {uses "function_notation"}[].
+:::
+
+:::theorem "quantifier_numeric_axioms" (parent := "function_theory_core") (tags := "function, quantifier, hehner-3.1") (effort := "small") (lean := "LaPToP.FunctionTheory.Fn.sup_null, LaPToP.FunctionTheory.Fn.inf_null, LaPToP.FunctionTheory.Fn.sup_elem, LaPToP.FunctionTheory.Fn.inf_elem, LaPToP.FunctionTheory.Fn.sup_union, LaPToP.FunctionTheory.Fn.inf_union, LaPToP.FunctionTheory.Fn.sup_sols, LaPToP.FunctionTheory.Fn.inf_sols, LaPToP.FunctionTheory.Fn.sum_null, LaPToP.FunctionTheory.Fn.sum_elem, LaPToP.FunctionTheory.Fn.sum_union_add_sum_inter, LaPToP.FunctionTheory.Fn.sum_sols, LaPToP.FunctionTheory.Fn.prod_null, LaPToP.FunctionTheory.Fn.prod_elem, LaPToP.FunctionTheory.Fn.prod_union_mul_prod_inter, LaPToP.FunctionTheory.Fn.prod_sols, LaPToP.FunctionTheory.Fn.size_eq_sum_one")
+The axioms of Section 3.1 for the numeric quantifiers, for bunches $`A, B, D`,
+an element $`x`, a number body $`n` and a binary $`b`:
+$`\Sigma v : \mathit{null} \cdot n = 0`, $`\Sigma v : x \cdot n = \langle v : x \cdot n \rangle\,x`,
+$`(\Sigma v : A, B \cdot n) + (\Sigma v : A \mathbin{\lq} B \cdot n) = (\Sigma v : A \cdot n) + (\Sigma v : B \cdot n)`;
+$`\Pi` likewise with $`1` and $`\times`;
+$`\Downarrow v : \mathit{null} \cdot n = \infty`, $`\Downarrow v : x \cdot n = \langle v : x \cdot n \rangle\,x`,
+$`\Downarrow v : A, B \cdot n = (\Downarrow v : A \cdot n) \downarrow (\Downarrow v : B \cdot n)`;
+$`\Uparrow` likewise with $`-\infty` and $`\uparrow`; and the $`\S`-domain laws
+$`\Sigma v : (\S v : D \cdot b) \cdot n = \Sigma v : D \cdot \mathbf{if}\ b\ \mathbf{then}\ n\ \mathbf{else}\ 0`
+(and $`1`, $`\infty`, $`-\infty` for $`\Pi`, $`\Downarrow`, $`\Uparrow`). Also
+Cardinality $`{\rm c\llap{/}}A = \Sigma(A \to 1)` for finite $`A`. The $`\Sigma`/$`\Pi`
+splitting laws are stated for finite $`A, B`. Uses {uses "quantifier_numeric"}[],
+{uses "solution_quantifier"}[] and {uses "bunch_axioms_size"}[].
+:::
+
+:::proof "quantifier_numeric_axioms"
+$`\Uparrow`/$`\Downarrow`: `sSup`/`sInf` of the empty set, a singleton, a union
+(`sSup_union`); the $`\S`-domain law by antisymmetry of $`\le`. $`\Sigma`/$`\Pi`:
+`finsum_mem_empty`, `finsum_mem_singleton`, `finsum_mem_union_inter`, and
+restriction to the support for the $`\S`-domain law.
+:::
+
+:::theorem "quantifier_laws_numeric" (parent := "function_theory_core") (tags := "function, quantifier, hehner-11.3.8") (effort := "small") (lean := "LaPToP.FunctionTheory.Fn.inf_le_apply, LaPToP.FunctionTheory.Fn.apply_le_sup, LaPToP.FunctionTheory.Fn.neg_sSup, LaPToP.FunctionTheory.Fn.neg_sup, LaPToP.FunctionTheory.Fn.neg_inf, LaPToP.FunctionTheory.Fn.sup_le_iff, LaPToP.FunctionTheory.Fn.le_inf_iff, LaPToP.FunctionTheory.Fn.inf_lt_iff, LaPToP.FunctionTheory.Fn.lt_sup_iff, LaPToP.FunctionTheory.Fn.forall_lt_of_sup_lt, LaPToP.FunctionTheory.Fn.forall_lt_of_lt_inf, LaPToP.FunctionTheory.Fn.inf_le_of_exists, LaPToP.FunctionTheory.Fn.le_sup_of_exists, LaPToP.FunctionTheory.Fn.inf_int, LaPToP.FunctionTheory.Fn.sup_int, LaPToP.FunctionTheory.Fn.le_iff_forall_le_imp, LaPToP.FunctionTheory.Fn.le_iff_forall_lt_imp, LaPToP.FunctionTheory.Fn.le_iff_forall_le_imp', LaPToP.FunctionTheory.Fn.le_iff_forall_lt_imp', LaPToP.FunctionTheory.Fn.sup_image, LaPToP.FunctionTheory.Fn.inf_image")
+Laws of §11.3.8 for $`\Uparrow`, $`\Downarrow`: Specialize and Generalize
+$`\Downarrow f \le f\,x \le \Uparrow f` for $`x : \square f`; Duality
+$`-\Uparrow v \cdot n = \Downarrow v \cdot -n`, $`-\Downarrow v \cdot n = \Uparrow v \cdot -n`;
+Bounding $`n \ge (\Uparrow v : D \cdot m) = (\forall v : D \cdot n \ge m)`,
+$`n \le (\Downarrow v : D \cdot m) = (\forall v : D \cdot n \le m)`,
+$`n > (\Downarrow v : D \cdot m) = (\exists v : D \cdot n > m)`,
+$`n < (\Uparrow v : D \cdot m) = (\exists v : D \cdot n < m)`, and the four one-directional
+forms (the book's proviso $`D \neq \mathit{null}` is not needed for these);
+Extreme $`(\Downarrow n : \mathit{int} \cdot n) = -\infty`, $`(\Uparrow n : \mathit{int} \cdot n) = \infty`;
+Connection $`n \le m = \forall k \cdot k \le n \Rightarrow k \le m` and its three variants;
+Change of Variable $`\Uparrow r : f\,D \cdot b = \Uparrow d : D \cdot \langle r : f\,D \cdot b \rangle (f\,d)`
+and dually. The distributive laws of $`+ - \times \uparrow \downarrow` over
+$`\Uparrow \Downarrow` are deferred. Uses {uses "quantifier_numeric"}[] and
+{uses "number_laws_order"}[].
+:::
+
+:::proof "quantifier_laws_numeric"
+`le_sSup`/`sInf_le`, `sSup_le_iff`/`le_sInf_iff`, `lt_sSup_iff`/`sInf_lt_iff`;
+Duality by antisymmetry using $`a \le -b = b \le -a`; Extreme by `sInf_eq_bot`/
+`sSup_eq_top` with $`\lfloor r \rfloor - 1` and $`\lceil r \rceil + 1` as witnesses.
+:::
+
+:::theorem "quantifier_laws_logical" (parent := "function_theory_core") (tags := "function, quantifier, hehner-11.3.8") (effort := "small") (lean := "LaPToP.FunctionTheory.Fn.all_lam, LaPToP.FunctionTheory.Fn.ex_lam, LaPToP.FunctionTheory.Fn.all_top, LaPToP.FunctionTheory.Fn.not_ex_bot, LaPToP.FunctionTheory.Fn.all_const, LaPToP.FunctionTheory.Fn.ex_const, LaPToP.FunctionTheory.Fn.not_all, LaPToP.FunctionTheory.Fn.not_ex, LaPToP.FunctionTheory.Fn.and_all, LaPToP.FunctionTheory.Fn.and_ex, LaPToP.FunctionTheory.Fn.or_all, LaPToP.FunctionTheory.Fn.or_ex, LaPToP.FunctionTheory.Fn.imp_all, LaPToP.FunctionTheory.Fn.imp_ex, LaPToP.FunctionTheory.Fn.ex_imp, LaPToP.FunctionTheory.Fn.all_imp, LaPToP.FunctionTheory.Fn.apply_and_ex, LaPToP.FunctionTheory.Fn.apply_or_all, LaPToP.FunctionTheory.Fn.apply_and_all, LaPToP.FunctionTheory.Fn.apply_or_ex, LaPToP.FunctionTheory.Fn.all_and, LaPToP.FunctionTheory.Fn.ex_and, LaPToP.FunctionTheory.Fn.all_or, LaPToP.FunctionTheory.Fn.ex_or, LaPToP.FunctionTheory.Fn.all_imp_all, LaPToP.FunctionTheory.Fn.all_imp_ex, LaPToP.FunctionTheory.Fn.all_beq_all, LaPToP.FunctionTheory.Fn.all_beq_ex, LaPToP.FunctionTheory.Fn.forall_forall_comm, LaPToP.FunctionTheory.Fn.exists_exists_comm, LaPToP.FunctionTheory.Fn.exists_forall_imp, LaPToP.FunctionTheory.Fn.forall_exists_iff_exists_fun, LaPToP.FunctionTheory.Fn.all_image, LaPToP.FunctionTheory.Fn.ex_image")
+Laws of §11.3.8 for $`\forall`, $`\exists`: Identity $`\forall v \cdot \top`, $`\neg\exists v \cdot \bot`;
+Idempotent $`\forall v : D \cdot b = b`, $`\exists v : D \cdot b = b` for $`D \neq \mathit{null}` and $`v` not in $`b`;
+Duality $`\neg\forall v \cdot b = \exists v \cdot \neg b`, $`\neg\exists v \cdot b = \forall v \cdot \neg b`;
+Distributive $`a \land \forall v : D \cdot b = \forall v : D \cdot a \land b` and the five
+companions with $`\land \lor \Rightarrow` over $`\forall \exists`; Antidistributive
+$`a \Leftarrow \exists v : D \cdot b = \forall v : D \cdot a \Leftarrow b`,
+$`a \Leftarrow \forall v : D \cdot b = \exists v : D \cdot a \Leftarrow b`
+(the book's proviso $`D \neq \mathit{null}` is carried exactly where it is needed);
+Absorption (four laws, for $`x : D`); Splitting (eight laws, e.g.
+$`\forall v \cdot a \land b = (\forall v \cdot a) \land (\forall v \cdot b)`,
+$`\exists v \cdot a \land b \Rightarrow (\exists v \cdot a) \land (\exists v \cdot b)`);
+Commutative $`\forall v \cdot \forall w \cdot b = \forall w \cdot \forall v \cdot b` and for $`\exists`;
+Semicommutative $`\exists v \cdot \forall w \cdot b \Rightarrow \forall w \cdot \exists v \cdot b` and
+$`\forall x \cdot \exists y \cdot p\,x\,y = \exists f \cdot \forall x \cdot p\,x\,(f\,x)`; Change of Variable.
+Since $`\forall p` is a proposition here, nested quantifications are written as
+iterated bounded quantifiers. Uses {uses "quantifier_forall_exists"}[] and
+{uses "binary_laws_algebra"}[].
+:::
+
+:::proof "quantifier_laws_logical"
+Unfold $`\forall\langle v : D \cdot b \rangle` to $`\forall v \in D,\ b\,v = \top` and reason
+propositionally; the nonempty domain supplies a witness where needed; the choice
+function of the last Semicommutative law is `Classical.choose`.
+:::
+
+:::theorem "quantifier_laws_solution" (parent := "function_theory_core") (tags := "function, quantifier, hehner-11.3.8") (effort := "small") (lean := "LaPToP.FunctionTheory.Fn.sols_lam, LaPToP.FunctionTheory.Fn.all_sols, LaPToP.FunctionTheory.Fn.ex_sols, LaPToP.FunctionTheory.Fn.sols_sols, LaPToP.FunctionTheory.Fn.sols_inter, LaPToP.FunctionTheory.Fn.subset_iff_all, LaPToP.FunctionTheory.Fn.subset_iff_forall_exists, LaPToP.FunctionTheory.Fn.image_subset_image_iff_forall_exists, LaPToP.FunctionTheory.Fn.sols_top, LaPToP.FunctionTheory.Fn.sols_bot, LaPToP.FunctionTheory.Fn.sols_subset_sols, LaPToP.FunctionTheory.Fn.sols_union_sols, LaPToP.FunctionTheory.Fn.sols_inter_sols, LaPToP.FunctionTheory.Fn.all_iff_sols_eq_domain, LaPToP.FunctionTheory.Fn.ex_iff_sols_ne_null, LaPToP.FunctionTheory.Fn.all_of_subset, LaPToP.FunctionTheory.Fn.ex_of_subset, LaPToP.FunctionTheory.Fn.all_mem_imp, LaPToP.FunctionTheory.Fn.ex_mem_and")
+Laws of §11.3.8 for the solution quantifier and for domains: the $`\S`-domain laws
+$`\forall v : (\S v : D \cdot b) \cdot c = \forall v : D \cdot b \Rightarrow c`,
+$`\exists v : (\S v : D \cdot b) \cdot c = \exists v : D \cdot b \land c`,
+$`\S v : (\S v : D \cdot b) \cdot c = \S v : D \cdot b \land c`,
+$`\S v : A \mathbin{\lq} B \cdot b = (\S v : A \cdot b) \mathbin{\lq} (\S v : B \cdot b)`;
+Solution $`\S v : D \cdot \top = D`, $`\S v : D \cdot \bot = \mathit{null}`,
+$`(\S v \cdot b) : (\S v \cdot c) = \forall v \cdot b \Rightarrow c`,
+$`(\S v \cdot b), (\S v \cdot c) = \S v \cdot b \lor c`, $`(\S v \cdot b) \mathbin{\lq} (\S v \cdot c) = \S v \cdot b \land c`,
+$`\forall f = ((\S f) = (\square f))`, $`\exists f = ((\S f) \neq \mathit{null})`;
+Inclusion $`A : B = \forall x : A \cdot x : B`; Bunch-Element Conversion
+$`A : B = \forall a : A \cdot \exists b : B \cdot a = b` and
+$`f\,A : g\,B = \forall a : A \cdot \exists b : B \cdot f\,a = g\,b`; Domain Change
+$`A : B \Rightarrow (\forall v : A \cdot b) \Leftarrow (\forall v : B \cdot b)`,
+$`A : B \Rightarrow (\exists v : A \cdot b) \Rightarrow (\exists v : B \cdot b)`,
+$`\forall v : A \cdot v : B \Rightarrow p = \forall v : A \mathbin{\lq} B \cdot p`,
+$`\exists v : A \cdot v : B \land p = \exists v : A \mathbin{\lq} B \cdot p`.
+Uses {uses "solution_quantifier"}[], {uses "quantifier_forall_exists"}[] and
+{uses "bunch_axioms_inclusion"}[].
+:::
+
+:::proof "quantifier_laws_solution"
+Unfold $`\S\langle v : D \cdot b \rangle` to $`\{v \mid v \in D \land b\,v = \top\}` and
+reason by extensionality and propositional logic.
 :::
