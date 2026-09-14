@@ -3,6 +3,7 @@ import VersoManual
 import VersoBlueprint
 import LaPToP.BasicTheories.Bunch
 import LaPToP.BasicTheories.Numbers
+import LaPToP.BasicTheories.NumberLaws
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -16,6 +17,8 @@ underpins later program reasoning in LaPToP. The bunch and set material is
 Hehner's Sections 2.0 and 2.1; the formal counterpart lives in the Lean module
 `LaPToP.BasicTheories.Bunch` (axioms and laws) and
 `LaPToP.BasicTheories.Numbers` (named bunches, the interval, distribution).
+The number laws of Section 1.1 (reference §11.3.2) are in
+`LaPToP.BasicTheories.NumberLaws`.
 :::
 
 :::definition "bunch_vs_set" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Bunch, LaPToP.BasicTheories.HSet")
@@ -238,7 +241,77 @@ Every law is definitional (`rfl` / `Iff.rfl`) once the set operators are defined
 on contents; injectivity of packaging is structure eta.
 :::
 
-:::theorem "nat_add_zero" (parent := "basic_theories_core") (tags := "basic, arithmetic") (effort := "small")
+:::definition "number_domain" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Number, LaPToP.BasicTheories.Number.Finite, LaPToP.BasicTheories.Number.Finite.exists_coe, LaPToP.BasicTheories.Number.finite_coe")
+Hehner's numbers are the extended reals $`\mathit{xreal} = -\infty, \mathit{real}, \infty`;
+Number Theory (Section 1.1) is "the theory of numbers as you learned it in
+school", with $`\infty` and $`-\infty` added and their laws stated under
+provisos such as $`-\infty < x < \infty`. In Lean a number is Mathlib's `EReal`
+(`Number`), $`\bot = -\infty`, $`\top = \infty`, and the proviso is the
+predicate `Number.Finite`. Mathlib fixes values the book leaves unspecified
+($`\infty + -\infty = -\infty`, $`\infty \times 0 = 0`, $`x / 0 = 0`,
+$`1/\infty = 0`); the laws below are stated under the book's provisos, and the
+few laws the book states unconditionally that fail at those points carry the
+hypothesis excluding them. The named bunches $`\mathit{xnat}`, $`\mathit{xint}`
+of {uses "bunch_named_bunches"}[] are the corresponding sub-bunches.
+:::
+
+:::theorem "number_laws_additive" (parent := "basic_theories_core") (tags := "basic, number, hehner-11.3.2") (effort := "small") (lean := "LaPToP.BasicTheories.Number.add_zero, LaPToP.BasicTheories.Number.add_comm, LaPToP.BasicTheories.Number.add_assoc, LaPToP.BasicTheories.Number.add_left_cancel_iff, LaPToP.BasicTheories.Number.top_add, LaPToP.BasicTheories.Number.bot_add, LaPToP.BasicTheories.Number.neg_eq_zero_sub, LaPToP.BasicTheories.Number.neg_neg, LaPToP.BasicTheories.Number.neg_add, LaPToP.BasicTheories.Number.neg_sub, LaPToP.BasicTheories.Number.neg_mul, LaPToP.BasicTheories.Number.neg_mul_eq_mul_neg, LaPToP.BasicTheories.Number.neg_div, LaPToP.BasicTheories.Number.neg_div_eq_div_neg, LaPToP.BasicTheories.Number.sub_zero, LaPToP.BasicTheories.Number.sub_eq_add_neg, LaPToP.BasicTheories.Number.add_sub, LaPToP.BasicTheories.Number.sub_add, LaPToP.BasicTheories.Number.sub_left_cancel_iff, LaPToP.BasicTheories.Number.sub_self, LaPToP.BasicTheories.Number.top_sub, LaPToP.BasicTheories.Number.bot_sub")
+Addition, negation and subtraction laws (reference §11.3.2):
+$`x + 0 = x`, $`x + y = y + x`, $`x + (y + z) = (x + y) + z`;
+$`-\infty < x < \infty \Rightarrow (x + y = x + z) = (y = z)` (Cancellation);
+$`-\infty < x \Rightarrow \infty + x = \infty`, $`x < \infty \Rightarrow -\infty + x = -\infty` (Absorption);
+$`-x = 0 - x`, $`- -x = x`, $`-(x + y) = -x + -y`, $`-(x - y) = y - x`,
+$`-x \times y = -(x \times y) = x \times -y`, $`-x / y = -(x / y) = x / -y`;
+$`x - 0 = x`, $`x - y = x + -y`, $`x + (y - z) = (x + y) - z`, $`x - (y + z) = (x - y) - z`;
+$`-\infty < x < \infty \Rightarrow (x - y = x - z) = (y = z)`, $`-\infty < x < \infty \Rightarrow x - x = 0`;
+$`x < \infty \Rightarrow \infty - x = \infty`, $`-\infty < x \Rightarrow -\infty - x = -\infty`.
+The three laws involving $`-(y + z)` or $`-(y - z)` exclude the unspecified
+case $`\{y, z\} = \{\infty, -\infty\}`, where Mathlib's model disagrees with
+the book. Uses {uses "number_domain"}[].
+:::
+
+:::proof "number_laws_additive"
+Mathlib's `EReal` lemmas; the cancellation laws reduce a finite $`x` to a real
+number and subtract it.
+:::
+
+:::theorem "number_laws_multiplicative" (parent := "basic_theories_core") (tags := "basic, number, hehner-11.3.2") (effort := "small") (lean := "LaPToP.BasicTheories.Number.mul_zero, LaPToP.BasicTheories.Number.mul_one, LaPToP.BasicTheories.Number.mul_comm, LaPToP.BasicTheories.Number.mul_add, LaPToP.BasicTheories.Number.mul_assoc, LaPToP.BasicTheories.Number.mul_left_cancel_iff, LaPToP.BasicTheories.Number.mul_top, LaPToP.BasicTheories.Number.mul_bot, LaPToP.BasicTheories.Number.div_one, LaPToP.BasicTheories.Number.zero_div, LaPToP.BasicTheories.Number.div_self, LaPToP.BasicTheories.Number.mul_div, LaPToP.BasicTheories.Number.mul_div_eq_div_mul, LaPToP.BasicTheories.Number.div_mul_eq_div_div, LaPToP.BasicTheories.Number.div_div, LaPToP.BasicTheories.Number.div_mul_cancel, LaPToP.BasicTheories.Number.div_top, LaPToP.BasicTheories.Number.div_bot, LaPToP.BasicTheories.Number.pow_zero, LaPToP.BasicTheories.Number.pow_one")
+Multiplication, division and exponentiation laws (reference §11.3.2):
+$`-\infty < x < \infty \Rightarrow x \times 0 = 0`, $`x \times 1 = x`, $`x \times y = y \times x`,
+$`x \times (y + z) = x \times y + x \times z`, $`x \times (y \times z) = (x \times y) \times z`;
+$`-\infty < x < \infty \land x \neq 0 \Rightarrow (x \times y = x \times z) = (y = z)`;
+$`0 < x \Rightarrow x \times \infty = \infty`, $`0 < x \Rightarrow x \times -\infty = -\infty`;
+$`x / 1 = x`, $`x \neq 0 \Rightarrow 0 / x = 0`, $`-\infty < x < \infty \land x \neq 0 \Rightarrow x / x = 1`;
+$`x \times (y / z) = (x \times y) / z = (x / z) \times y = x / (z / y)`, $`(x / y) / z = x / (y \times z)`;
+$`-\infty < y < \infty \land y \neq 0 \Rightarrow (x / y) \times y = x`;
+$`-\infty < x < \infty \Rightarrow x / \infty = 0 = x / -\infty` (Annihilation);
+$`-\infty < x < \infty \Rightarrow x^0 = 1`, $`x^1 = x`.
+Distributivity is stated for finite $`x, y, z` and $`(x/z) \times y = x/(z/y)` for
+finite $`y`: the book states them for all numbers, but they fail in Mathlib's
+model at $`\infty + -\infty` and $`1/\infty`. Uses {uses "number_domain"}[].
+:::
+
+:::proof "number_laws_multiplicative"
+`EReal` is a commutative monoid with zero and a `DivInvMonoid`; the finite
+cases reduce to real arithmetic through the coercion.
+:::
+
+:::theorem "number_laws_order" (parent := "basic_theories_core") (tags := "basic, number, hehner-11.3.2") (effort := "small") (lean := "LaPToP.BasicTheories.Number.direction, LaPToP.BasicTheories.Number.lt_iff_neg_lt_neg, LaPToP.BasicTheories.Number.add_lt_add_iff_left, LaPToP.BasicTheories.Number.coe_mul_lt_coe_mul_iff, LaPToP.BasicTheories.Number.mul_lt_mul_iff_left, LaPToP.BasicTheories.Number.trichotomy, LaPToP.BasicTheories.Number.extremes, LaPToP.BasicTheories.Number.max_top, LaPToP.BasicTheories.Number.min_bot")
+Order laws (reference §11.3.2): $`-\infty < 0 < 1 < \infty` (Direction),
+$`(x < y) = (-y < -x)` (Reflection),
+$`-\infty < x < \infty \Rightarrow (x + y < x + z) = (y < z)` (Cancellation, Translation),
+$`0 < x < \infty \Rightarrow (x \times y < x \times z) = (y < z)` (Cancellation, Scale),
+$`x < y \lor x = y \lor x > y` (Trichotomy), $`-\infty \le x \le \infty` (Extremes),
+$`x \uparrow \infty = \infty` and $`x \downarrow -\infty = -\infty` (Base), where
+$`\uparrow`/$`\downarrow` are maximum/minimum. Uses {uses "number_domain"}[].
+:::
+
+:::proof "number_laws_order"
+`EReal` is a complete linear order; Translation and Scale reduce a finite
+$`x` to a positive real and case-split $`y, z` over $`-\infty`, real, $`\infty`.
+:::
+
+:::theorem "nat_add_zero" (parent := "basic_theories_core") (tags := "basic, arithmetic") (effort := "small") (lean := "LaPToP.BasicTheories.Number.add_zero")
 For every natural number $`n`, adding zero on the right leaves it unchanged:
 $`n + 0 = n`.
 A trivial arithmetic checkpoint before connecting to {uses "bunch_vs_set"}[].
