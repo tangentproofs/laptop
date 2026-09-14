@@ -2,6 +2,7 @@ import Verso
 import VersoManual
 import VersoBlueprint
 import LaPToP.BasicTheories.Bunch
+import LaPToP.BasicTheories.Numbers
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -13,7 +14,8 @@ open Informal
 Basic theories: numbers, bunches, sets, and the calculation style that
 underpins later program reasoning in LaPToP. The bunch and set material is
 Hehner's Sections 2.0 and 2.1; the formal counterpart lives in the Lean module
-`LaPToP.BasicTheories.Bunch`.
+`LaPToP.BasicTheories.Bunch` (axioms and laws) and
+`LaPToP.BasicTheories.Numbers` (named bunches, the interval, distribution).
 :::
 
 :::definition "bunch_vs_set" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Bunch, LaPToP.BasicTheories.HSet")
@@ -123,6 +125,91 @@ Uses {uses "bunch_axioms_algebra"}[] and {uses "bunch_axioms_inclusion"}[].
 In Lean these are proved directly from Mathlib's lattice lemmas rather than by
 calculation from the axiom nodes; the dependency edges record the book's
 derivation.
+:::
+
+:::definition "bunch_named_bunches" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Bunch.bin, LaPToP.BasicTheories.Bunch.nat, LaPToP.BasicTheories.Bunch.int, LaPToP.BasicTheories.XInt, LaPToP.BasicTheories.Bunch.xnat, LaPToP.BasicTheories.Bunch.xint, LaPToP.BasicTheories.Bunch.toXInt")
+Hehner's useful bunches: $`\mathit{bin} = \top, \bot`, $`\mathit{nat} = 0, 1, 2, \ldots`,
+$`\mathit{int} = \ldots, -1, 0, 1, \ldots`, and the extended versions
+$`\mathit{xnat} = \mathit{nat}, \infty` and $`\mathit{xint} = -\infty, \mathit{int}, \infty`.
+In the typed model $`\mathit{nat}` and $`\mathit{int}` are bunches of Lean integers
+($`\mathit{nat}` is $`\{n \mid 0 \le n\}`), and the extended integers are
+`XInt := WithBot (WithTop ℤ)` with $`\bot = -\infty`, $`\top = \infty`, so
+$`\mathit{xnat}` and $`\mathit{xint}` are bunches of `XInt`; `toXInt` embeds
+$`\mathit{int}` into them. Builds on {uses "bunch_primitives"}[].
+:::
+
+:::theorem "bunch_named_bunch_laws" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.bin_eq, LaPToP.BasicTheories.Bunch.int_eq, LaPToP.BasicTheories.Bunch.xnat_eq, LaPToP.BasicTheories.Bunch.xint_eq")
+The book's defining equations for the named bunches:
+$`\mathit{bin} = \top, \bot`, $`\mathit{int} = \mathit{nat}, -\mathit{nat}`,
+$`\mathit{xnat} = \mathit{nat}, \infty`, $`\mathit{xint} = -\infty, \mathit{int}, \infty`.
+Here $`-\mathit{nat}` is pointwise negation (see {uses "bunch_operator_distribution"}[]),
+and the extended equations go through the embedding of
+{uses "bunch_named_bunches"}[].
+:::
+
+:::proof "bunch_named_bunch_laws"
+Extensionality; the extended cases split on $`-\infty`, a finite integer, or
+$`\infty` and reduce to the finite statement by cast lemmas.
+:::
+
+:::theorem "bunch_nat_axioms" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.nat_construction, LaPToP.BasicTheories.Bunch.nat_induction")
+The two axioms defining $`\mathit{nat}`:
+$`0, \mathit{nat}+1 : \mathit{nat}` (construction) and
+$`0, B+1 : B \Rightarrow \mathit{nat} : B` (induction).
+"Construction says that 0, 1, 2, and so on, are in nat. Induction says that
+nothing else is in nat by saying that of all the bunches B satisfying the
+construction axiom, nat is the smallest." Here $`B + 1` is the pointwise sum
+$`B + \{1\}` of {uses "bunch_operator_distribution"}[], applied to
+{uses "bunch_named_bunches"}[].
+:::
+
+:::proof "bunch_nat_axioms"
+Construction is immediate from $`0 \le n \Rightarrow 0 \le n+1`. Induction
+unpacks the hypothesis into a base case and a successor step and applies
+integer induction from $`0` upward (`Int.leInduction`).
+:::
+
+:::definition "bunch_interval" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Bunch.interval")
+The interval $`x,..y` ("$`x` to $`y`", not "$`x` through $`y`") for
+$`x \le y`, with axiom $`i : x,..y = i : \mathit{xint} \land x \le i < y`. The
+asymmetric notation is a reminder that the left end is included and the right
+end excluded. In Lean the bounds are integers and the interval is `Set.Ico x y`;
+it is a bunch in the sense of {uses "bunch_vs_set"}[].
+:::
+
+:::theorem "bunch_interval_laws" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.mem_interval, LaPToP.BasicTheories.Bunch.interval_zero_three, LaPToP.BasicTheories.Bunch.interval_five_five, LaPToP.BasicTheories.Bunch.interval_self, LaPToP.BasicTheories.Bunch.interval_succ, LaPToP.BasicTheories.Bunch.size_interval, LaPToP.BasicTheories.Bunch.size_interval_of_le, LaPToP.BasicTheories.Bunch.nat_eq_iUnion_interval")
+The defining axiom $`i : x,..y = x \le i < y` and the book's examples:
+$`0,..3 = 0, 1, 2`, $`5,..5 = \mathit{null}` (indeed $`x,..x = \mathit{null}`),
+$`x,..x+1 = x`, and $`{\rm c\llap{/}}(x,..y) = y - x`. With integer bounds,
+$`0,..\infty = \mathit{nat}` becomes: $`\mathit{nat}` is the union of the
+intervals $`0,..y`. The size law is stated with the truncated difference
+$`(y-x)_{\ge 0}`, which equals $`y - x` under the book's proviso $`x \le y`.
+Uses {uses "bunch_interval"}[], {uses "bunch_primitives"}[] and
+{uses "bunch_named_bunches"}[].
+:::
+
+:::proof "bunch_interval_laws"
+Membership is definitional; the examples are extensionality plus linear
+integer arithmetic; the size law is `Set.encard` of a finite integer interval
+(`Int.card_Ico`).
+:::
+
+:::theorem "bunch_operator_distribution" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.neg_null, LaPToP.BasicTheories.Bunch.neg_union, LaPToP.BasicTheories.Bunch.add_null, LaPToP.BasicTheories.Bunch.null_add, LaPToP.BasicTheories.Bunch.union_add_union, LaPToP.BasicTheories.Bunch.add_elem")
+"Other operators can be applied to bunches with the understanding that they
+apply to the elements of the bunch. In other words, they distribute over bunch
+union." The book's examples:
+$`-\mathit{null} = \mathit{null}`, $`-(A, B) = -A, -B`,
+$`A + \mathit{null} = \mathit{null} = \mathit{null} + A`, and
+$`(A, B) + (C, D) = A+C, A+D, B+C, B+D`.
+In Lean these are Mathlib's pointwise operations on sets (`Set.neg`,
+`Set.add`), which have exactly this meaning; an elementary bunch adds like its
+element, $`A + x = \{a + x \mid a : A\}`. Uses {uses "bunch_axioms_algebra"}[]
+and {uses "bunch_primitives"}[].
+:::
+
+:::proof "bunch_operator_distribution"
+Pointwise-set lemmas from Mathlib (`Set.union_add`, `Set.add_union`,
+`Set.add_empty`, `Set.add_singleton`) and extensionality for negation.
 :::
 
 :::definition "set_packaging" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Bunch.pack, LaPToP.BasicTheories.HSet.contents, LaPToP.BasicTheories.Bunch.power, LaPToP.BasicTheories.HSet.card")
