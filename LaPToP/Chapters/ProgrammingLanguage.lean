@@ -3,6 +3,7 @@ import VersoManual
 import VersoBlueprint
 import LaPToP.ProgramTheory.WhileLoop
 import LaPToP.ProgramTheory.ForLoop
+import LaPToP.ProgramTheory.Scope
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -15,7 +16,8 @@ Hehner's Chapter 5: the programming notations of "several languages" —
 control structures, scope, data structures, subprograms — explained as
 refinement notations or as specifications in the theory of Chapter 4. The
 while-loop of Section 5.2.0 is formalized in `LaPToP.ProgramTheory.WhileLoop`
-and the for-loop of Section 5.2.3 in `LaPToP.ProgramTheory.ForLoop`.
+the for-loop of Section 5.2.3 in `LaPToP.ProgramTheory.ForLoop`, and variable
+declaration and suspension (Section 5.0) in `LaPToP.ProgramTheory.Scope`.
 :::
 
 :::definition "while_loop" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.WhileRefines, LaPToP.ProgramTheory.Spec.whileRefines_iff, LaPToP.ProgramTheory.Spec.whileRefines_iff_cases, LaPToP.ProgramTheory.Spec.WhileRefines.mono, LaPToP.ProgramTheory.Spec.whileRefines_false")
@@ -132,4 +134,50 @@ antecedent $`\# L = N` for a constant $`N`. The body is the list modification of
 The book's calculation: after the Substitution Law, $`\#(i \to L\,i + 1 \mid L) = \# L`;
 divide the domain $`0,..i+1` into $`0,..i` and $`i`; for $`n : 0,..i` and for
 $`n : i+1,..\# L` the modified list agrees with $`L`, and at $`i` it is $`L\,i + 1`.
+:::
+
+:::definition "variable_declaration" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.newVar, LaPToP.ProgramTheory.Spec.newVarInit, LaPToP.ProgramTheory.Spec.assignLocal, LaPToP.ProgramTheory.Spec.liftNonlocal, LaPToP.ProgramTheory.Spec.assignLocal_seq, LaPToP.ProgramTheory.Spec.implementable_newVar, LaPToP.ProgramTheory.Spec.not_implementable_newVar, LaPToP.ProgramTheory.Spec.newVar_liftNonlocal, LaPToP.ProgramTheory.Spec.newVarInit_eq, LaPToP.ProgramTheory.Spec.newVar_newVar, LaPToP.ProgramTheory.Spec.newVar_mono, LaPToP.ProgramTheory.Spec.assignNonlocal, LaPToP.ProgramTheory.Spec.assignNonlocal_seq, LaPToP.ProgramTheory.ScopeExamples.YZ, LaPToP.ProgramTheory.ScopeExamples.St, LaPToP.ProgramTheory.ScopeExamples.example₁, LaPToP.ProgramTheory.ScopeExamples.example₂, LaPToP.ProgramTheory.ScopeExamples.example₃")
+"We can express a variable declaration together with the specification to
+which it applies as a binary expression in the initial and final state:
+$`\mathbf{new}\ x : T \cdot P = \exists x, x' : T \cdot P`. Specification $`P` is an
+expression in the initial and final values of all nonlocal (already declared)
+variables plus the newly declared local variable. Specification
+$`\mathbf{new}\ x : T \cdot P` is an expression in the nonlocal variables only. For a
+variable declaration to be implementable, its type must be nonempty." In Lean
+the state inside the scope is the product $`\sigma \times T` of the nonlocal state
+and the local variable, and `Spec.newVar P` is literally $`\exists x, x' : T \cdot P`;
+a nonlocal specification is lifted into the scope leaving the local variable
+unchanged, and assignments inside the scope are to the local or to a nonlocal
+variable. Proved: implementability for nonempty $`T` (and unimplementability
+for empty $`T`), that declaring an unused variable changes nothing, the
+initializing declaration $`\mathbf{new}\ x : T := e \cdot P = \exists x : e \cdot \exists x' : T \cdot P`
+as a declaration followed by a local assignment, nesting
+$`\mathbf{new}\ x, y : T \cdot P = \exists x, x', y, y' : T \cdot P`, monotonicity, and the book's
+examples in nonlocal integer variables $`y, z`:
+$`\mathbf{new}\ x : \mathit{int} \cdot x := 2.\ y := x + z = (y' = 2 + z \land z' = z)`,
+$`\mathbf{new}\ x : \mathit{int} \cdot y := x = (z' = z)` ("the initial value of the local
+variable is an arbitrary value of its type"), and
+$`\mathbf{new}\ x : \mathit{int} \cdot y := x - x = (y' = 0 \land z' = z)`. Uses
+{uses "specification_notations"}[], {uses "quantifier_forall_exists"}[] and
+{uses "substitution_law"}[].
+:::
+
+:::definition "variable_suspension" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.frame, LaPToP.ProgramTheory.Spec.frame_empty_top, LaPToP.ProgramTheory.Spec.frame_singleton_eq, LaPToP.ProgramTheory.Spec.frame_univ, LaPToP.ProgramTheory.Spec.frame_ok, LaPToP.ProgramTheory.Spec.frame_frame, LaPToP.ProgramTheory.Spec.refines_frame, LaPToP.ProgramTheory.Spec.frame_mono, LaPToP.ProgramTheory.Spec.frame_cond, LaPToP.ProgramTheory.Spec.frame_seq, LaPToP.ProgramTheory.Spec.frame_assign, LaPToP.ProgramTheory.ScopeExamples.assign_sum_eq_frame_newVar")
+"We may wish, temporarily, to narrow our focus to a part of the state space.
+... The frame notation is the formal way of saying “and all other variables
+(even the ones we cannot say because they are covered by local declarations) are
+unchanged”. If the state variables not included in the frame are $`w` and $`z`,
+then $`\mathbf{frame}\ x, y \cdot P = P \land w' = w \land z' = z`." On states of
+{uses "state_as_variables"}[], `Spec.frame xs P` conjoins $`P` with $`v' = v` for
+every variable $`v` outside the frame. The book's remark that "if we had defined
+$`\mathbf{frame}` first, we could have defined $`\mathit{ok}` and assignment formally
+at the high level" — $`\mathit{ok} = \mathbf{frame} \cdot \top`, $`x := e = \mathbf{frame}\ x \cdot x' = e` —
+is proved, together with: the full frame is no restriction, $`\mathbf{frame}\ xs \cdot \mathit{ok} = \mathit{ok}`,
+nested frames intersect, a frame strengthens and is monotonic, a frame
+distributes over $`\mathbf{if}`, a sequence of framed specifications refines the
+framed sequence, and a framed variable may be assigned freely. The book's
+example $`s := \Sigma L = \mathbf{frame}\ s \cdot \mathbf{new}\ n : \mathit{nat} \cdot s' = \Sigma L`
+("first we reduce the state space to $`s`; ... next we introduce local variable
+$`n`") is checked on the state of {uses "list_summation"}[]. Uses
+{uses "variable_declaration"}[] and {uses "assignment_spec"}[].
 :::
