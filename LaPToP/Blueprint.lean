@@ -10,6 +10,7 @@ import LaPToP.Chapters.DataStructures
 import LaPToP.Chapters.ProgramTheory
 import LaPToP.Chapters.ProgrammingLanguage
 import LaPToP.Chapters.RecursionConcurrency
+import LaPToP.Chapters.TheoryDesign
 import LaPToP.Chapters.Collatz
 
 open Verso.Genre
@@ -30,6 +31,7 @@ the generated graph and summary show an in-progress goal.
 {include 0 LaPToP.Chapters.ProgramTheory}
 {include 0 LaPToP.Chapters.ProgrammingLanguage}
 {include 0 LaPToP.Chapters.RecursionConcurrency}
+{include 0 LaPToP.Chapters.TheoryDesign}
 {include 0 LaPToP.Chapters.Collatz}
 
 {blueprint_graph}
