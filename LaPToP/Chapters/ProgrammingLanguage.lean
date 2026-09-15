@@ -4,6 +4,7 @@ import VersoBlueprint
 import LaPToP.ProgramTheory.WhileLoop
 import LaPToP.ProgramTheory.ForLoop
 import LaPToP.ProgramTheory.Scope
+import LaPToP.ProgramTheory.Assertions
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -17,7 +18,8 @@ control structures, scope, data structures, subprograms — explained as
 refinement notations or as specifications in the theory of Chapter 4. The
 while-loop of Section 5.2.0 is formalized in `LaPToP.ProgramTheory.WhileLoop`
 the for-loop of Section 5.2.3 in `LaPToP.ProgramTheory.ForLoop`, and variable
-declaration and suspension (Section 5.0) in `LaPToP.ProgramTheory.Scope`.
+declaration and suspension (Section 5.0) in `LaPToP.ProgramTheory.Scope`,
+assertions and backtracking (Section 5.4) in `LaPToP.ProgramTheory.Assertions`.
 :::
 
 :::definition "while_loop" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.WhileRefines, LaPToP.ProgramTheory.Spec.whileRefines_iff, LaPToP.ProgramTheory.Spec.whileRefines_iff_cases, LaPToP.ProgramTheory.Spec.WhileRefines.mono, LaPToP.ProgramTheory.Spec.whileRefines_false")
@@ -180,4 +182,47 @@ example $`s := \Sigma L = \mathbf{frame}\ s \cdot \mathbf{new}\ n : \mathit{nat}
 ("first we reduce the state space to $`s`; ... next we introduce local variable
 $`n`") is checked on the state of {uses "list_summation"}[]. Uses
 {uses "variable_declaration"}[] and {uses "assignment_spec"}[].
+:::
+
+:::definition "assertions" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Assertions.AT, LaPToP.ProgramTheory.Assertions.assignX, LaPToP.ProgramTheory.Assertions.assignY, LaPToP.ProgramTheory.Assertions.assignX_seq, LaPToP.ProgramTheory.Assertions.assert, LaPToP.ProgramTheory.Assertions.assert_of_holds, LaPToP.ProgramTheory.Assertions.assert_of_not, LaPToP.ProgramTheory.Assertions.assert_true, LaPToP.ProgramTheory.Assertions.assert_refines_ensure, LaPToP.ProgramTheory.Assertions.implementable_assert, LaPToP.ProgramTheory.Assertions.implementable_assert', LaPToP.ProgramTheory.Assertions.assert_seq_of_not, LaPToP.ProgramTheory.Assertions.assert_seq_of_holds")
+"As a safety check, some programming languages include the notation
+$`\mathbf{assert}\ b` where $`b` is binary, to mean “$`b` is true”. ... It is
+executed by checking that $`b` is true; if it is, execution continues normally,
+but if not, an error message is printed and execution is suspended. ...
+$`\mathbf{assert}\ b = \mathbf{if}\ b\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ \mathbf{screen}!\ \text{“error”}.\ \mathbf{wait\ until}\ \infty`.
+If $`b` is true, $`\mathbf{assert}\ b` is the same as $`\mathit{ok}`. If $`b` is false, an
+error message is printed, and execution cannot proceed in finite time to any
+following actions." Output ($`\mathbf{screen}!`) is a Chapter 9 notation with no
+counterpart here, and $`\mathbf{wait\ until}\ \infty` is $`t := \infty`; so the
+else-branch is formalized as what the theory of Chapter 4 observes — the final
+time is $`\infty` — on a state with a time variable, and the printed message is
+not modelled. Proved: $`\mathbf{assert}\ b = \mathit{ok}` when $`b` holds and $`t' = \infty`
+otherwise, $`\mathbf{assert}\ \top = \mathit{ok}` ("all assertions are redundant" in a
+correct program), implementability with nondecreasing time, and that a false
+assertion followed by $`P` starts $`P` at time $`\infty`. Uses
+{uses "specification_notations"}[] and {uses "time_variable"}[].
+:::
+
+:::theorem "backtracking" (parent := "programming_language_core") (tags := "programs, backtracking, hehner-5.4.0") (effort := "small") (lean := "LaPToP.ProgramTheory.Spec.ensure, LaPToP.ProgramTheory.Spec.ensure_eq_cond, LaPToP.ProgramTheory.Spec.ensure_of_holds, LaPToP.ProgramTheory.Spec.ensure_true, LaPToP.ProgramTheory.Spec.implementable_ensure_iff, LaPToP.ProgramTheory.Spec.seq_ensure, LaPToP.ProgramTheory.Spec.or_seq_ensure, LaPToP.ProgramTheory.Spec.or_refines_left, LaPToP.ProgramTheory.Spec.or_refines_right, LaPToP.ProgramTheory.Assertions.choice, LaPToP.ProgramTheory.Assertions.choice_ensure, LaPToP.ProgramTheory.Assertions.implementable_choice")
+"If $`P` and $`Q` are implementable specifications, so is $`P \lor Q`. ... We
+could save this programming step by making disjunction a programming connective,
+perhaps using the notation $`\mathbf{or}`. ... We introduce the notation
+$`\mathbf{ensure}\ b` where $`b` is binary, to mean “make $`b` true without changing
+anything”: $`\mathbf{ensure}\ b = \mathbf{if}\ b\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ b \land \mathit{ok} = b \land \mathit{ok}`.
+... When $`b` is false ... this is unimplementable (unless $`b` is identically
+$`\top`). However, in combination with other constructs, the whole may be
+implementable":
+$`x := 0\ \mathbf{or}\ x := 1.\ \mathbf{ensure}\ x = 1 = (x' = 1 \land y' = y) = x := 1`.
+Proved: both forms of $`\mathbf{ensure}`, $`\mathbf{ensure}\ \top = \mathit{ok}`,
+$`\mathbf{ensure}\ b` is implementable iff $`b` holds in every state, $`\mathbf{ensure}`
+refines $`\mathbf{assert}`, $`P.\ \mathbf{ensure}\ b` filters the results of $`P` by $`b`,
+$`(P\ \mathbf{or}\ Q).\ \mathbf{ensure}\ b = (P.\ \mathbf{ensure}\ b)\ \mathbf{or}\ (Q.\ \mathbf{ensure}\ b)`
+(the choice is made to satisfy the later $`\mathbf{ensure}`), $`P \lor Q \Leftarrow P`,
+$`P \lor Q \Leftarrow Q`, and the book's example. Uses {uses "assertions"}[],
+{uses "specification_implementability"}[] and {uses "substitution_law"}[].
+:::
+
+:::proof "backtracking"
+The example: $`P.\ \mathbf{ensure}\ b` is $`P \land b'`; the disjunct $`x := 0` is
+excluded by $`x' = 1`, leaving $`x := 1`.
 :::
