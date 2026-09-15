@@ -3,6 +3,7 @@ import VersoManual
 import VersoBlueprint
 import LaPToP.RecursiveDefinition.Nat
 import LaPToP.RecursiveDefinition.Programs
+import LaPToP.RecursiveDefinition.DataConstruction
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -14,7 +15,8 @@ open Informal
 Recursive programs, time bounds, and concurrent composition as developed in
 later chapters of *A Practical Theory of Programming*. Recursive data
 definition (Section 6.0) is formalized in `LaPToP.RecursiveDefinition.Nat` and
-recursive program definition (Section 6.1) in `LaPToP.RecursiveDefinition.Programs`.
+`LaPToP.RecursiveDefinition.DataConstruction`, and recursive program
+definition (Section 6.1) in `LaPToP.RecursiveDefinition.Programs`.
 :::
 
 :::definition "recursive_program" (parent := "recursion_concurrency_core") (lean := "LaPToP.RecursiveDefinition.IsFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint.unique")
@@ -94,6 +96,64 @@ $`\mathit{nat}` is the least fixed point of its (monotonic) constructor
 $`B \mapsto 0, B+1`: "we could have defined nat ... as the least fixed-point of
 its constructor". Uses {uses "recursive_program"}[],
 {uses "nat_induction_predicate"}[] and {uses "bunch_operator_distribution"}[].
+:::
+
+:::definition "recursive_data_construction" (parent := "recursion_concurrency_core") (lean := "LaPToP.RecursiveDefinition.chain, LaPToP.RecursiveDefinition.chain_succ, LaPToP.RecursiveDefinition.limit, LaPToP.RecursiveDefinition.chain_mono, LaPToP.RecursiveDefinition.chain_subset_of_prefixed, LaPToP.RecursiveDefinition.limit_subset_of_fixedPoint, LaPToP.RecursiveDefinition.isLeastFixedPoint_of_test, LaPToP.RecursiveDefinition.limit_subset_apply")
+"Recursive construction is a procedure for constructing solutions from
+constructors. It usually works, but not always. We seek a solution of
+$`\mathit{name} :: (\text{expression involving } \mathit{name})` or
+$`\mathit{name} = (\text{expression involving } \mathit{name})`." The steps:
+0. construct $`\mathit{name}_0 = \mathit{null}`, $`\mathit{name}_{n+1} = (\text{expression involving } \mathit{name}_n)`;
+1. find an expression for $`\mathit{name}_n` not involving $`\mathit{name}`;
+2. form $`\mathit{name}_\infty` by replacing $`n` with $`\infty`;
+3. test that $`\mathit{name}_\infty` is a solution;
+4. for the smallest solution, test $`B = (\text{expression involving } B) \Rightarrow \mathit{name}_\infty : B`.
+For a *monotone* constructor the general facts are proved: the sequence is
+increasing, its union (the honest reading of step 2) is included in every
+fixed point — so step 4 is automatic — and if the union passes the test of
+step 3 it is the least fixed point; the union is always a post-fixed point.
+The book's caveat stands: "the bunch $`\mathit{name}_\infty` is usually a solution,
+but not always, so we must test it" — when the test fails the procedure yields
+nothing, and the property ("continuity") that would guarantee success is
+"left to other books". Uses {uses "least_fixed_points"}[].
+:::
+
+:::theorem "pow_least_fixed_point" (parent := "recursion_concurrency_core") (tags := "recursion, data, hehner-6.0.2") (effort := "small") (lean := "LaPToP.RecursiveDefinition.powConstructor, LaPToP.RecursiveDefinition.powConstructor_mono, LaPToP.RecursiveDefinition.powN, LaPToP.RecursiveDefinition.powN_zero, LaPToP.RecursiveDefinition.powN_one, LaPToP.RecursiveDefinition.powN_two, LaPToP.RecursiveDefinition.powN_three, LaPToP.RecursiveDefinition.powN_eq, LaPToP.RecursiveDefinition.powInf, LaPToP.RecursiveDefinition.powInf_eq_limit, LaPToP.RecursiveDefinition.powConstructor_powInf, LaPToP.RecursiveDefinition.powInf_subset_of_fixedPoint, LaPToP.RecursiveDefinition.powInf_isLeastFixedPoint, LaPToP.RecursiveDefinition.pow_eq_powInf, LaPToP.RecursiveDefinition.limit_powConstructor_isLeastFixedPoint")
+The book's illustration: $`\mathit{pow} = 1, 2 \times \mathit{pow}` and
+$`B = 1, 2 \times B \Rightarrow \mathit{pow} : B`. Step 0: $`\mathit{pow}_0 = \mathit{null}`,
+$`\mathit{pow}_1 = 1`, $`\mathit{pow}_2 = 1, 2`, $`\mathit{pow}_3 = 1, 2, 4`. Step 1: "perhaps
+now we can guess $`\mathit{pow}_n = 2^{0,..n}`. We could prove this by nat
+induction, but it is not really necessary" (it is proved here). Step 2:
+$`\mathit{pow}_\infty = 2^{0,..\infty} = 2^{\mathit{nat}}`, the union of the $`\mathit{pow}_n`.
+Step 3: $`2^{\mathit{nat}} = 1, 2 \times 2^{\mathit{nat}}` "$`\Leftarrow \mathit{nat} = 0, \mathit{nat}+1`,
+nat fixed-point construction". Step 4: $`2^{\mathit{nat}} : B \Leftarrow B = 1, 2 \times B`,
+"use the predicate form of nat induction". "Since $`2^{\mathit{nat}}` is the least
+fixed-point of the pow constructor, we conclude $`\mathit{pow} = 2^{\mathit{nat}}`" — any
+bunch satisfying both axioms equals it, by uniqueness of least fixed points;
+the same conclusion follows from the general procedure. Uses
+{uses "recursive_data_construction"}[], {uses "nat_induction_predicate"}[] and
+{uses "bunch_operator_distribution"}[] ($`2 \times B` distributes over union).
+:::
+
+:::proof "pow_least_fixed_point"
+The closed form by induction on $`n`; the tests by case analysis on the
+exponent ($`2^0 = 1`, $`2^{k+1} = 2 \times 2^k`); leastness by induction on the
+exponent inside a fixed point.
+:::
+
+:::theorem "inconsistent_axiom_bad" (parent := "recursion_concurrency_core") (tags := "recursion, data, hehner-6.0.2") (effort := "small") (lean := "LaPToP.RecursiveDefinition.badConstructor, LaPToP.RecursiveDefinition.zero_mem_iff_not_mem, LaPToP.RecursiveDefinition.not_exists_bad, LaPToP.RecursiveDefinition.badConstructor_antitone, LaPToP.RecursiveDefinition.badN, LaPToP.RecursiveDefinition.badN_zero, LaPToP.RecursiveDefinition.badN_one, LaPToP.RecursiveDefinition.badN_two, LaPToP.RecursiveDefinition.badN_add_two, LaPToP.RecursiveDefinition.badN_not_mono")
+"Whenever we add axioms, we must be careful to remain consistent with the
+theory we already have. A badly chosen axiom can cause inconsistency. ...
+Suppose we make $`\mathit{bad} = \S n : \mathit{nat} \cdot \neg\, n : \mathit{bad}` an axiom. Thus
+$`\mathit{bad}` is defined as the bunch of all naturals that are not in $`\mathit{bad}`.
+From this axiom we find $`0 : \mathit{bad} = \neg\, 0 : \mathit{bad}` is a theorem ... also an
+antitheorem. To avoid the inconsistency, we must withdraw this axiom." Proved:
+no bunch satisfies the axiom. "Sometimes recursive construction does not
+produce any answer": the sequence $`\mathit{bad}_0 = \mathit{null}`, $`\mathit{bad}_1 = \mathit{nat}`,
+$`\mathit{bad}_2 = \mathit{null}`, "and so on, alternating between $`\mathit{null}` and
+$`\mathit{nat}`. We cannot say what $`\mathit{bad}_\infty` is" — the constructor is
+antitone, not monotone, and the sequence is not increasing. Uses
+{uses "recursive_data_construction"}[] and {uses "solution_quantifier"}[].
 :::
 
 :::theorem "recursive_program_zap" (parent := "recursion_concurrency_core") (tags := "recursion, programs, hehner-6.1") (effort := "medium") (lean := "LaPToP.RecursiveDefinition.ZS, LaPToP.RecursiveDefinition.Zap.assignX, LaPToP.RecursiveDefinition.Zap.assignY, LaPToP.RecursiveDefinition.Zap.tick, LaPToP.RecursiveDefinition.Zap.assignX_seq, LaPToP.RecursiveDefinition.Zap.tick_seq, LaPToP.RecursiveDefinition.Zap.timeNondecreasing, LaPToP.RecursiveDefinition.Zap.ImplementableT, LaPToP.RecursiveDefinition.Zap.zapC, LaPToP.RecursiveDefinition.Zap.step, LaPToP.RecursiveDefinition.Zap.zapC_apply, LaPToP.RecursiveDefinition.Zap.XY, LaPToP.RecursiveDefinition.Zap.T, LaPToP.RecursiveDefinition.Zap.T_step, LaPToP.RecursiveDefinition.Zap.solA, LaPToP.RecursiveDefinition.Zap.solB, LaPToP.RecursiveDefinition.Zap.solC, LaPToP.RecursiveDefinition.Zap.solD, LaPToP.RecursiveDefinition.Zap.solE, LaPToP.RecursiveDefinition.Zap.solF, LaPToP.RecursiveDefinition.Zap.base_iff, LaPToP.RecursiveDefinition.Zap.zapC_solA, LaPToP.RecursiveDefinition.Zap.zapC_solB, LaPToP.RecursiveDefinition.Zap.zapC_solC, LaPToP.RecursiveDefinition.Zap.zapC_solD, LaPToP.RecursiveDefinition.Zap.zapC_solE, LaPToP.RecursiveDefinition.Zap.zapC_solF, LaPToP.RecursiveDefinition.Zap.solA_refines_solB, LaPToP.RecursiveDefinition.Zap.solA_refines_solC, LaPToP.RecursiveDefinition.Zap.solB_refines_solD, LaPToP.RecursiveDefinition.Zap.solC_refines_solD, LaPToP.RecursiveDefinition.Zap.solC_refines_solE, LaPToP.RecursiveDefinition.Zap.solD_refines_solF, LaPToP.RecursiveDefinition.Zap.solE_refines_solF, LaPToP.RecursiveDefinition.Zap.not_solB_refines_solC, LaPToP.RecursiveDefinition.Zap.not_solC_refines_solB, LaPToP.RecursiveDefinition.Zap.not_solD_refines_solE, LaPToP.RecursiveDefinition.Zap.not_solE_refines_solD, LaPToP.RecursiveDefinition.Zap.implementableT_solA, LaPToP.RecursiveDefinition.Zap.implementableT_solB, LaPToP.RecursiveDefinition.Zap.implementableT_solC, LaPToP.RecursiveDefinition.Zap.implementableT_solD, LaPToP.RecursiveDefinition.Zap.not_implementableT_solE, LaPToP.RecursiveDefinition.Zap.not_implementable_solF, LaPToP.RecursiveDefinition.Zap.deterministic_solD, LaPToP.RecursiveDefinition.Zap.solA_refines_of_prefixed, LaPToP.RecursiveDefinition.Zap.refines_of_eq, LaPToP.RecursiveDefinition.Zap.solA_refines_of_fixedPoint, LaPToP.RecursiveDefinition.Zap.solA_weakest, LaPToP.RecursiveDefinition.Zap.zap_use_and_execute")
