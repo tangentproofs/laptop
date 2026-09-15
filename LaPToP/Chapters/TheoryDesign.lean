@@ -6,6 +6,7 @@ import LaPToP.TheoryDesign.SimpleStack
 import LaPToP.TheoryDesign.Queue
 import LaPToP.TheoryDesign.Tree
 import LaPToP.TheoryDesign.ProgramStack
+import LaPToP.TheoryDesign.DataTransformation
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -19,7 +20,8 @@ as case studies in theory design and implementation", a theory being "a
 contract between two parties, an implementer and a user". The data theories
 of Section 7.0 are formalized in `LaPToP.TheoryDesign.Stack`, `SimpleStack`,
 `Queue` and `Tree`; program-stack theory (Section 7.1) in
-`LaPToP.TheoryDesign.ProgramStack`.
+`LaPToP.TheoryDesign.ProgramStack`; data transformation (Section 7.2) in
+`LaPToP.TheoryDesign.DataTransformation`.
 :::
 
 :::definition "data_stack_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.DataStackTheory, LaPToP.TheoryDesign.DataStackTheory.construction, LaPToP.TheoryDesign.DataStackTheory.construction_pred, LaPToP.TheoryDesign.DataStackTheory.induction_bunch, LaPToP.TheoryDesign.DataStackTheory.eq_empty_or_push, LaPToP.TheoryDesign.DataStackTheory.push_inj_of_lifo, LaPToP.TheoryDesign.WeakStackTheory, LaPToP.TheoryDesign.DataStackTheory.toWeak, LaPToP.TheoryDesign.unitStack, LaPToP.TheoryDesign.unitStack_push_eq_empty")
@@ -201,4 +203,50 @@ last item as garbage" is not formalized. The axiom
 $`\mathbf{screen}!\ \text{“error”} \Leftarrow \mathit{mkempty}.\ \mathit{pop}` mentioned for robustness
 is a Chapter 9 notation, cf. {uses "assertions"}[]. Uses
 {uses "program_stack_theory"}[] and {uses "program_stack_implementation"}[].
+:::
+
+:::definition "data_transformation" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.Spec.IsTransformer, LaPToP.TheoryDesign.Spec.transform, LaPToP.TheoryDesign.Spec.transform_spec, LaPToP.TheoryDesign.Spec.transform_mono, LaPToP.TheoryDesign.Spec.implementable_transform, LaPToP.TheoryDesign.Caveat.S, LaPToP.TheoryDesign.Caveat.implementable_S, LaPToP.TheoryDesign.Caveat.not_implementable_transform")
+"Since a theory user has no access to the implementer's variables except
+through the theory, an implementer is free to change them in any way that
+provides the same theory to the user. ... We can replace the old implementer's
+variables by new implementer's variables using a data transformer, which is a
+binary expression $`D` relating $`\mathit{old}` and $`\mathit{new}` such that
+$`\forall\mathit{new}\cdot\exists\mathit{old}\cdot D`. Let $`D'` be the same as $`D` but with
+primes on all the variables. Then each specification $`S` in the theory is
+transformed to $`\forall\mathit{old}\cdot D \Rightarrow \exists\mathit{old}'\cdot D' \land S`. ... This
+says that whatever related initial state $`\mathit{old}` the user was imagining,
+there is a related final state $`\mathit{old}'` for the user to imagine as the
+result of $`S`, and so the fiction is maintained." States are products of the
+user's variables with the old or the new implementer's variables;
+`Spec.transform D S` is literally the transformed specification. Proved:
+transformation is monotonic with respect to refinement, and it preserves
+implementability when the transformer is a bijective correspondence between
+old and new states. Two honest caveats: totality
+$`\forall\mathit{new}\cdot\exists\mathit{old}\cdot D` alone does *not* preserve implementability
+— for the transformer $`w = \mathit{even}\ v` of Exercise 454(a) the implementable
+$`\mathbf{if}\ v = 0\ \mathbf{then}\ v' = 0\ \mathbf{else}\ v' = 1` transforms to an unimplementable
+specification, since from $`w = \top` the user may imagine $`v = 0` or $`v = 2` and
+no single $`w'` serves both — so the implementability of each transformed
+operation is to be checked, as the book does in its examples. Uses
+{uses "variable_declaration"}[], {uses "specification_notations"}[] and
+{uses "quantifier_forall_exists"}[].
+:::
+
+:::theorem "data_transformation_examples" (parent := "theory_design_core") (tags := "theory design, transformation, hehner-7.2") (effort := "small") (lean := "LaPToP.TheoryDesign.Exercise454.D, LaPToP.TheoryDesign.Exercise454.isTransformer, LaPToP.TheoryDesign.Exercise454.decide_even_succ, LaPToP.TheoryDesign.Exercise454.zero, LaPToP.TheoryDesign.Exercise454.increase, LaPToP.TheoryDesign.Exercise454.inquire, LaPToP.TheoryDesign.Exercise454.transform_zero, LaPToP.TheoryDesign.Exercise454.transform_increase, LaPToP.TheoryDesign.Exercise454.transform_inquire, LaPToP.TheoryDesign.Exercise455.D, LaPToP.TheoryDesign.Exercise455.isTransformer, LaPToP.TheoryDesign.Exercise455.set, LaPToP.TheoryDesign.Exercise455.flip, LaPToP.TheoryDesign.Exercise455.ask, LaPToP.TheoryDesign.Exercise455.transform_set, LaPToP.TheoryDesign.Exercise455.set_refines, LaPToP.TheoryDesign.Exercise455.transform_flip, LaPToP.TheoryDesign.Exercise455.flip_refines, LaPToP.TheoryDesign.Exercise455.transform_ask, LaPToP.TheoryDesign.Exercise455.ask_refines")
+Exercise 454(a): "the user's variable is $`u : \mathit{bin}` and the implementer's
+variable is $`v : \mathit{nat}`. The theory provides three operations,
+$`\mathit{zero} = v := 0`, $`\mathit{increase} = v := v + 1`, $`\mathit{inquire} = u := \mathit{even}\ v`.
+Since the only question asked of the implementer's variable is whether it is
+even, we decide to replace it by a new implementer's variable $`w : \mathit{bin}`
+according to the data transformer $`w = \mathit{even}\ v`." The book's calculations
+(One-Point and change-of-variable laws) give $`\mathit{zero} = w := \top`,
+$`\mathit{increase} = w := \neg w`, $`\mathit{inquire} = u := w`; all three equalities are
+proved. Exercise 455(a), "just to show that it works both ways": $`u : \mathit{bin}`,
+$`v : \mathit{bin}`, $`\mathit{set} = v := \top`, $`\mathit{flip} = v := \neg v`, $`\mathit{ask} = u := v`,
+transformer $`v = \mathit{even}\ w` with new $`w : \mathit{nat}`; the operations become
+$`\mathit{even}\ w' \land u' = u \Leftarrow w := 0`,
+$`\mathit{even}\ w' = \neg\mathit{even}\ w \land u' = u \Leftarrow w := w + 1`,
+$`\mathit{even}\ w' = \mathit{even}\ w = u' \Leftarrow u := \mathit{even}\ w`; the three transformed
+specifications are computed as equalities and the three refinements proved.
+Uses {uses "data_transformation"}[] and {uses "substitution_law"}[].
 :::
