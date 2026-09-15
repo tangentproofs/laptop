@@ -5,6 +5,7 @@ import LaPToP.TheoryDesign.Stack
 import LaPToP.TheoryDesign.SimpleStack
 import LaPToP.TheoryDesign.Queue
 import LaPToP.TheoryDesign.Tree
+import LaPToP.TheoryDesign.ProgramStack
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -17,7 +18,8 @@ Hehner's Chapter 7: "the stack, the queue, and the tree ... are presented here
 as case studies in theory design and implementation", a theory being "a
 contract between two parties, an implementer and a user". The data theories
 of Section 7.0 are formalized in `LaPToP.TheoryDesign.Stack`, `SimpleStack`,
-`Queue` and `Tree`.
+`Queue` and `Tree`; program-stack theory (Section 7.1) in
+`LaPToP.TheoryDesign.ProgramStack`.
 :::
 
 :::definition "data_stack_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.DataStackTheory, LaPToP.TheoryDesign.DataStackTheory.construction, LaPToP.TheoryDesign.DataStackTheory.construction_pred, LaPToP.TheoryDesign.DataStackTheory.induction_bunch, LaPToP.TheoryDesign.DataStackTheory.eq_empty_or_push, LaPToP.TheoryDesign.DataStackTheory.push_inj_of_lifo, LaPToP.TheoryDesign.WeakStackTheory, LaPToP.TheoryDesign.DataStackTheory.toWeak, LaPToP.TheoryDesign.unitStack, LaPToP.TheoryDesign.unitStack_push_eq_empty")
@@ -140,4 +142,63 @@ $`\mathit{tree} = \mathit{emptree}, \mathit{graft}\ \mathit{tree}\ X\ \mathit{tr
 {uses "recursive_data_construction"}[]) — with the book's example tree
 $`[[[\mathit{nil}]; 2; [[\mathit{nil}]; 5; [\mathit{nil}]]]; 3; [[\mathit{nil}]; 7; [\mathit{nil}]]]`. Uses
 {uses "data_stack_theory"}[].
+:::
+
+:::definition "program_stack_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.ProgramStackTheory, LaPToP.TheoryDesign.refinesOfEq, LaPToP.TheoryDesign.ProgramStackTheory.push_pop_seq, LaPToP.TheoryDesign.ProgramStackTheory.balanced, LaPToP.TheoryDesign.ProgramStackTheory.ok_refines_balanced, LaPToP.TheoryDesign.ProgramStackTheory.ok_refines_push_push_pop_pop, LaPToP.TheoryDesign.ProgramStackTheory.refines_balanced_seq, LaPToP.TheoryDesign.ProgramStackTheory.top_push_push_push_pop_pop, LaPToP.TheoryDesign.ProgramStackTheory.top_push_balanced")
+"Users and implementers of a data structure can freely see and change their
+own variables, but they cannot freely see or change each other's variables.
+... If we need only one stack ... we can obtain an economy of expression and
+of execution by leaving it implicit." "The simplest version of program-stack
+theory introduces three names: $`\mathit{push}` (a procedure with parameter of
+type $`X`), $`\mathit{pop}` (a program), and $`\mathit{top}` (of type $`X`). ... The
+following two axioms are sufficient: $`\mathit{top}' = x \Leftarrow \mathit{push}\ x`,
+$`\mathit{ok} \Leftarrow \mathit{push}\ x.\ \mathit{pop}`." A program theory is a structure
+over a state type with $`\mathit{push}` a parametrized specification, $`\mathit{pop}` a
+specification and $`\mathit{top}` a state variable, the axioms being refinements.
+"The second axiom says that a pop undoes a push. In fact, it says that any
+natural number of pushes are undone by the same number of pops:
+$`\mathit{ok} \Leftarrow \mathit{push}\ x.\ \mathit{pop} = \mathit{push}\ x.\ \mathit{ok}.\ \mathit{pop} \Leftarrow \mathit{push}\ x.\ \mathit{push}\ y.\ \mathit{pop}.\ \mathit{pop}`
+... We can prove things like $`\mathit{top}' = x \Leftarrow \mathit{push}\ x.\ \mathit{push}\ y.\ \mathit{push}\ z.\ \mathit{pop}.\ \mathit{pop}`,
+which say that when we push something onto the stack, we find it there later
+at the appropriate time." Both are proved, the first for any number of
+push–pop pairs. Uses {uses "simple_data_stack_theory"}[],
+{uses "specification_notations"}[] and {uses "refinement_by_steps_parts_cases"}[].
+:::
+
+:::theorem "program_stack_implementation" (parent := "theory_design_core") (tags := "theory design, stacks, hehner-7.1.1") (effort := "small") (lean := "LaPToP.TheoryDesign.PS, LaPToP.TheoryDesign.ListProgramStack.push, LaPToP.TheoryDesign.ListProgramStack.pop, LaPToP.TheoryDesign.ListProgramStack.top, LaPToP.TheoryDesign.ListProgramStack.top_push, LaPToP.TheoryDesign.ListProgramStack.push_pop, LaPToP.TheoryDesign.ListProgramStack.theory")
+"To implement program-stack theory, we introduce an implementer's variable
+$`s : [*X]` and define $`\mathit{push} = \langle x : X \cdot s := s ;; [x] \rangle`,
+$`\mathit{pop} = s := s\,[0;..\# s - 1]`, $`\mathit{top} = s\,(\# s - 1)`. And, of course, we must
+show that these definitions satisfy the axioms. We'll do the first axiom
+$`(\mathit{top}' = x \Leftarrow \mathit{push}\ x) = (s'(\# s' - 1) = x \Leftarrow s := s ;; [x]) = \top`,
+and leave the other as Exercise 429." Both axioms are proved (the second by
+$`(s ;; [x])[0;..\# s] = s`), so the list definitions form a
+`ProgramStackTheory`. The implementer's state consists of the variable $`s`
+alone; user variables, which the stack operations leave unchanged, would be
+added as a product (cf. {uses "variable_suspension"}[]). Uses
+{uses "program_stack_theory"}[] and {uses "list_axioms"}[].
+:::
+
+:::definition "fancy_and_weak_program_stack" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.FancyProgramStackTheory, LaPToP.TheoryDesign.FancyProgramStackTheory.top_push_not_isempty, LaPToP.TheoryDesign.ListProgramStack.mkempty, LaPToP.TheoryDesign.ListProgramStack.isempty, LaPToP.TheoryDesign.ListProgramStack.fancyTheory, LaPToP.TheoryDesign.WeakProgramStackTheory, LaPToP.TheoryDesign.WeakProgramStackTheory.balanced, LaPToP.TheoryDesign.WeakProgramStackTheory.balance_refines_balanced, LaPToP.TheoryDesign.WeakProgramStackTheory.top_balanced, LaPToP.TheoryDesign.ProgramStackTheory.toWeak")
+"A slightly fancier program-stack theory introduces two more names:
+$`\mathit{mkempty}` (a program to make the stack empty) and $`\mathit{isempty}` (a binary
+variable to say whether the stack is empty). Letting $`x : X`, the axioms are
+$`\mathit{top}' = x \land \neg\mathit{isempty}' \Leftarrow \mathit{push}\ x`, $`\mathit{ok} \Leftarrow \mathit{push}\ x.\ \mathit{pop}`,
+$`\mathit{isempty}' \Leftarrow \mathit{mkempty}`" — the list implementation satisfies them too.
+"The program-stack theory we presented first can be weakened and still retain
+its stack character. We must keep the axiom $`\mathit{top}' = x \Leftarrow \mathit{push}\ x`
+but we do not need the composition $`\mathit{push}\ x.\ \mathit{pop}` to leave all variables
+unchanged. We do require that any natural number of pushes followed by the same
+number of pops gives back the original top. The axioms are
+$`\mathit{top}' = \mathit{top} \Leftarrow \mathit{balance}`, $`\mathit{balance} \Leftarrow \mathit{ok}`,
+$`\mathit{balance} \Leftarrow \mathit{push}\ x.\ \mathit{balance}.\ \mathit{pop}`, where $`\mathit{balance}` is a
+specification that helps in writing the axioms, but is not an addition to the
+theory, and does not need to be implemented." Proved: $`\mathit{top}' = \mathit{top}` after
+any number of pushes followed by the same number of pops, and that the strong
+theory implies the weak one (with $`\mathit{balance} := \mathit{ok}`). The book's remark
+that the weak theory "allows an implementation in which popping ... marks the
+last item as garbage" is not formalized. The axiom
+$`\mathbf{screen}!\ \text{“error”} \Leftarrow \mathit{mkempty}.\ \mathit{pop}` mentioned for robustness
+is a Chapter 9 notation, cf. {uses "assertions"}[]. Uses
+{uses "program_stack_theory"}[] and {uses "program_stack_implementation"}[].
 :::
