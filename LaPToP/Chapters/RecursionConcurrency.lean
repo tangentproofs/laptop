@@ -4,6 +4,7 @@ import VersoBlueprint
 import LaPToP.RecursiveDefinition.Nat
 import LaPToP.RecursiveDefinition.Programs
 import LaPToP.RecursiveDefinition.DataConstruction
+import LaPToP.Concurrency.Composition
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -15,8 +16,9 @@ open Informal
 Recursive programs, time bounds, and concurrent composition as developed in
 later chapters of *A Practical Theory of Programming*. Recursive data
 definition (Section 6.0) is formalized in `LaPToP.RecursiveDefinition.Nat` and
-`LaPToP.RecursiveDefinition.DataConstruction`, and recursive program
-definition (Section 6.1) in `LaPToP.RecursiveDefinition.Programs`.
+`LaPToP.RecursiveDefinition.DataConstruction`, recursive program definition
+(Section 6.1) in `LaPToP.RecursiveDefinition.Programs`, and concurrent
+composition (Section 8.0) in `LaPToP.Concurrency.Composition`.
 :::
 
 :::definition "recursive_program" (parent := "recursion_concurrency_core") (lean := "LaPToP.RecursiveDefinition.IsFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint.unique")
@@ -243,9 +245,61 @@ theorem nat_repeat_zero (f : Nat → Nat) (n : Nat) :
     Nat.repeat f 0 n = n := rfl
 ```
 
-:::definition "concurrent_composition" (parent := "recursion_concurrency_core")
+:::definition "concurrent_composition" (parent := "recursion_concurrency_core") (lean := "LaPToP.Concurrency.par, LaPToP.Concurrency.parWith, LaPToP.Concurrency.par_eq_parWith, LaPToP.Concurrency.assignF, LaPToP.Concurrency.assignF_seq, LaPToP.Concurrency.parT, LaPToP.Concurrency.parT_comm, LaPToP.Concurrency.parT_time_nondecreasing, LaPToP.Concurrency.parT_finish")
 Concurrent composition combines independent (or weakly dependent) processes.
 LaPToP treats concurrency in the same refinement framework as sequential
 programs, once communication and timing are modeled. This node depends on
 {uses "recursive_program"}[] for looping clients of concurrent servers.
+
+"We define the concurrent composition of specifications $`P` and $`Q` so that
+$`P \parallel Q` is satisfied by a computer that behaves according to $`P` and,
+at the same time, concurrently, according to $`Q`. ... For concurrent
+composition $`P \parallel Q`, we require that $`P` and $`Q` have completely
+different state variables, and the state variables of the composition are
+those of both. If we ignore time and space, concurrent composition is
+conjunction: $`P \parallel Q = P \land Q`." The partition is made explicit by a
+product state: a process on $`\sigma_1` and a process on $`\sigma_2` compose to
+`Spec.par P Q` on $`\sigma_1 \times \sigma_2`; a process may mention the other's
+variables "but only as constants" — `Spec.parWith` lets each read the *initial*
+values of the other's variables. "The time variable is not subject to
+partitioning; it belongs to both processes. ... With time,
+$`P \parallel Q = \exists t_P, t_Q \cdot \langle t' \cdot P \rangle t_P \land \langle t' \cdot Q \rangle t_Q \land t' = t_P \uparrow t_Q`":
+`Spec.parT`, symmetric, time-nondecreasing when a process is, and finishing
+no earlier than either process. Uses {uses "specification_notations"}[] and
+{uses "time_variable"}[].
+:::
+
+:::theorem "concurrent_composition_examples" (parent := "recursion_concurrency_core") (tags := "concurrency, hehner-8.0") (effort := "small") (lean := "LaPToP.Concurrency.Examples.incr_par, LaPToP.Concurrency.Examples.swap_par, LaPToP.Concurrency.Examples.beq_par, LaPToP.Concurrency.Examples.incr_decr, LaPToP.Concurrency.Examples.seq_par, LaPToP.Concurrency.Examples.subst_example, LaPToP.Concurrency.Examples.two_stage")
+The book's examples, in integer variables: $`x := x+1 \parallel y := y+2 = (x' = x+1 \land y' = y+2)`
+("$`x` has to belong to the left process and $`y` to the right");
+$`x := y \parallel y := x = (x' = y \land y' = x)` — "variables $`x` and $`y` swap values,
+apparently without a temporary variable"; $`b := (x = x) \parallel x := x+1 = b := \top \parallel x := x+1`
+— "both occurrences of $`x` in the left process refer to the initial value of
+variable $`x`"; $`(x := x+1.\ x := x-1) \parallel y := x = \mathit{ok} \parallel y := x = y := x` —
+"the intermediate values of variables are local to the sequential
+composition; ... the occurrence of $`x` in the right process refers to the
+initial value"; the Substitution Law example
+$`(x := x+y \parallel y := x \times y).\ z' = x - y = (z' = (x+y) - (x \times y))`; and
+"synchronization is sequencing": $`(x := x+y \parallel y := x-y).\ (x := x \times y \parallel y := x/y)`
+computed by concurrent substitution. Uses {uses "concurrent_composition"}[]
+and {uses "substitution_law"}[].
+:::
+
+:::theorem "concurrent_composition_laws" (parent := "recursion_concurrency_core") (tags := "concurrency, laws, hehner-8.0.0") (effort := "small") (lean := "LaPToP.Concurrency.par_comm, LaPToP.Concurrency.assoc, LaPToP.Concurrency.par_assoc, LaPToP.Concurrency.par_or, LaPToP.Concurrency.par_cond, LaPToP.Concurrency.cond_par, LaPToP.Concurrency.par_assignF_seq, LaPToP.Concurrency.parWith_assignF_seq, LaPToP.Concurrency.par_mono, LaPToP.Concurrency.steps_par, LaPToP.Concurrency.parts_par")
+The laws of Section 8.0.0, for different state variables $`x, y`, expressions
+$`e, f, b` of the prestate, and specifications $`P, Q, R, S`:
+concurrent substitution $`(x := e \parallel y := f).\ P = (\text{substitute } e \text{ for } x \text{ and concurrently } f \text{ for } y \text{ in } P)`
+— "each substitution replaces all and only the original occurrences of its
+variable"; symmetry $`P \parallel Q = Q \parallel P` and associativity
+$`P \parallel (Q \parallel R) = (P \parallel Q) \parallel R` ("we can compose any number of
+processes without worrying how they are grouped"), each up to the evident
+reshuffling of the product state; distributivity $`P \parallel (Q \lor R) = (P \parallel Q) \lor (P \parallel R)`,
+$`P \parallel \mathbf{if}\ b\ \mathbf{then}\ Q\ \mathbf{else}\ R = \mathbf{if}\ b\ \mathbf{then}\ P \parallel Q\ \mathbf{else}\ P \parallel R`,
+$`\mathbf{if}\ b\ \mathbf{then}\ P \parallel Q\ \mathbf{else}\ R \parallel S = (\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ R) \parallel (\mathbf{if}\ b\ \mathbf{then}\ Q\ \mathbf{else}\ S)`
+(each process reading the other's initial variables to evaluate $`b`);
+"Refinement by Steps works for concurrent composition: if $`A \Leftarrow B \parallel C`,
+$`B \Leftarrow D`, $`C \Leftarrow E` then $`A \Leftarrow D \parallel E`; so does Refinement by Parts:
+if $`A \Leftarrow B \parallel C` and $`D \Leftarrow E \parallel F` then $`A \land D \Leftarrow (B \land E) \parallel (C \land F)`."
+Uses {uses "concurrent_composition"}[], {uses "specification_laws"}[] and
+{uses "refinement_by_steps_parts_cases"}[].
 :::
