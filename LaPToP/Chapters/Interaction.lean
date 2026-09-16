@@ -8,6 +8,8 @@ import LaPToP.Interaction.Merge
 import LaPToP.Interaction.ChannelDeclaration
 import LaPToP.Interaction.Deadlock
 import LaPToP.Interaction.PowerSeries
+import LaPToP.Interaction.MergeInterleave
+import LaPToP.Interaction.Thermostat
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -79,6 +81,49 @@ The example gives the appearance of lock-step synchrony only because we took
 each assignment time to be $`1`." The equality is proved for a finite initial
 time $`t` (the initial time $`\infty` is degenerate); $`y(t+3) = y(t+2)` comes from
 the "remain unchanged" clause of $`\parallel`. Uses {uses "interactive_variables"}[].
+:::
+
+:::definition "thermostat" (parent := "interaction_core") (lean := "LaPToP.Interaction.Thermostat.TSpec, LaPToP.Interaction.Thermostat.frameOk, LaPToP.Interaction.Thermostat.ignite, LaPToP.Interaction.Thermostat.sparkOff, LaPToP.Interaction.Thermostat.idle, LaPToP.Interaction.Thermostat.shutOff, LaPToP.Interaction.Thermostat.gasIsOffBody, LaPToP.Interaction.Thermostat.gasIsOnBody, LaPToP.Interaction.Thermostat.body, LaPToP.Interaction.Thermostat.thermostat, LaPToP.Interaction.Thermostat.gasIsOffBody_time, LaPToP.Interaction.Thermostat.gasIsOnBody_time, LaPToP.Interaction.Thermostat.gasIsOnBody_shutOff, LaPToP.Interaction.Thermostat.bot_fixedPoint")
+"Exercise 502: specify a thermostat for a gas burner. The thermostat operates
+concurrently with other processes $`\mathit{thermometer} \parallel \mathit{control} \parallel \mathit{thermostat} \parallel \mathit{burner}`.
+... The inputs to the thermostat are: real $`\mathit{temperature}`, which comes from
+the thermometer and indicates the actual temperature; real $`\mathit{desired}`, which
+comes from the control and indicates the desired temperature; binary
+$`\mathit{flame}`, which comes from a flame sensor in the burner and indicates whether
+there is a flame. These three variables must be interactive variables because
+their values may be changed at any time by another process and the thermostat
+must react to their current values. ... The outputs of the thermostat are:
+binary $`\mathit{gas}`; assigning it $`\top` turns the gas on and $`\bot` turns the gas off.
+binary $`\mathit{spark}`; assigning it $`\top` causes sparks for the purpose of igniting
+the gas. ... Heat is wanted when the actual temperature falls $`\varepsilon` below the
+desired temperature, and not wanted when the actual temperature rises $`\varepsilon`
+above the desired temperature ... To obtain heat, the spark should be applied
+to the gas for at least 1 second to give it a chance to ignite and to allow the
+flame to become stable. But a safety regulation states that the gas must not
+remain on and unlit for more than 3 seconds. Another regulation says that when
+the gas is shut off, it must not be turned on again for at least 20 seconds to
+allow any accumulated gas to clear. And finally, the gas burner must respond
+to its inputs within 1 second. Here is a specification:
+$`\mathit{thermostat} = (\mathit{gas} := \bot \parallel \mathit{spark} := \bot).\ \mathit{GasIsOff}`
+$`\mathit{GasIsOff} = \mathbf{if}\ \mathit{temperature} < \mathit{desired} - \varepsilon\ \mathbf{then}\ (\mathit{gas} := \top \parallel \mathit{spark} := \top \parallel t' \ge t+1) \land t' \le t+3.\ \mathit{spark} := \bot.\ \mathit{GasIsOn}\ \mathbf{else}\ ((\mathbf{frame}\ \mathit{gas}, \mathit{spark} \cdot \mathit{ok}) \parallel t' \ge t) \land t' \le t+1.\ \mathit{GasIsOff}`
+$`\mathit{GasIsOn} = \mathbf{if}\ \mathit{temperature} < \mathit{desired} + \varepsilon \land \mathit{flame}\ \mathbf{then}\ ((\mathbf{frame}\ \mathit{gas}, \mathit{spark} \cdot \mathit{ok}) \parallel t' \ge t) \land t' \le t+1.\ \mathit{GasIsOn}\ \mathbf{else}\ (\mathit{gas} := \bot \parallel (\mathbf{frame}\ \mathit{spark} \cdot \mathit{ok}) \parallel t' \ge t+20) \land t' \le t+21.\ \mathit{GasIsOff}`
+... One can always argue about whether a formal specification captures the
+intent of an informal specification. For example, if the gas is off, and heat
+becomes wanted, and the ignition sequence begins, and then heat is no longer
+wanted, this last input may not be noticed for up to 3 seconds. ... At least
+the formal specification is unambiguous." The five interactive variables are
+functions of time ({uses "interactive_variables"}[]); a specification is a
+relation on times. The compound $`(\mathit{gas} := \top \parallel \mathit{spark} := \top \parallel t' \ge t+1) \land t' \le t+3`
+is read as both outputs holding at the final time with $`t+1 \le t' \le t+3`, and
+$`\mathbf{frame}\ \mathit{gas}, \mathit{spark} \cdot \mathit{ok}` ({uses "variable_suspension"}[]) as both
+unchanged throughout. The book gives $`\mathit{spark} := \bot` and the initial
+assignments no duration; one time unit is used and recorded.
+$`\mathit{GasIsOff}` and $`\mathit{GasIsOn}` are the components of a fixed point of the pair
+of bodies ({uses "recursive_program_zap"}[]); proved from the bodies: a
+$`\mathit{GasIsOff}` step reaches its continuation within 4 seconds (ignition at most 3,
+then the spark off), a $`\mathit{GasIsOn}` step within 21, and after shutting off the
+gas is off for at least 20 seconds before the continuation; the equations have
+a solution ($`\bot, \bot`). Uses {uses "time_dependence"}[].
 :::
 
 :::definition "communication" (parent := "interaction_core") (lean := "LaPToP.Interaction.Scripts, LaPToP.Interaction.CS, LaPToP.Interaction.CSpec, LaPToP.Interaction.Channel.output, LaPToP.Interaction.Channel.input, LaPToP.Interaction.Channel.lastRead, LaPToP.Interaction.Channel.check, LaPToP.Interaction.Channel.input_seq, LaPToP.Interaction.Channel.output_seq, LaPToP.Interaction.Channel.Increasing, LaPToP.Interaction.Channel.increasing_ok, LaPToP.Interaction.Channel.increasing_input, LaPToP.Interaction.Channel.increasing_output, LaPToP.Interaction.Channel.increasing_seq, LaPToP.Interaction.Channel.increasing_cond")
@@ -230,7 +275,7 @@ Not stated: the "strongest implementable solution", whose $`r_c' = w_d' = \infty
 needs extended-natural cursors, while cursors are naturals here.
 :::
 
-:::theorem "merge" (parent := "interaction_core") (tags := "interaction, channels, merge, hehner-9.1.4") (effort := "medium") (lean := "LaPToP.Interaction.stepF, LaPToP.Interaction.guardedF, LaPToP.Interaction.stepF_seq, LaPToP.Interaction.guardedF_seq, LaPToP.Interaction.MS, LaPToP.Interaction.Merge.inputC, LaPToP.Interaction.Merge.inputD, LaPToP.Interaction.Merge.outputE, LaPToP.Interaction.Merge.lastC, LaPToP.Interaction.Merge.lastD, LaPToP.Interaction.Merge.checkC, LaPToP.Interaction.Merge.checkD, LaPToP.Interaction.Merge.waitC, LaPToP.Interaction.Merge.waitD, LaPToP.Interaction.Merge.tick, LaPToP.Interaction.Merge.mergeBody, LaPToP.Interaction.Merge.mergeBody_step, LaPToP.Interaction.Merge.timemergeBody, LaPToP.Interaction.Merge.implBody, LaPToP.Interaction.Merge.step_refines_c, LaPToP.Interaction.Merge.step_refines_d, LaPToP.Interaction.Merge.not_step_refines")
+:::theorem "merge" (parent := "interaction_core") (tags := "interaction, channels, merge, hehner-9.1.4") (effort := "medium") (lean := "LaPToP.Interaction.stepF, LaPToP.Interaction.guardedF, LaPToP.Interaction.stepF_seq, LaPToP.Interaction.guardedF_seq, LaPToP.Interaction.MS, LaPToP.Interaction.Merge.inputC, LaPToP.Interaction.Merge.inputD, LaPToP.Interaction.Merge.outputE, LaPToP.Interaction.Merge.lastC, LaPToP.Interaction.Merge.lastD, LaPToP.Interaction.Merge.checkC, LaPToP.Interaction.Merge.checkD, LaPToP.Interaction.Merge.waitC, LaPToP.Interaction.Merge.waitD, LaPToP.Interaction.Merge.tick, LaPToP.Interaction.Merge.mergeBody, LaPToP.Interaction.Merge.mergeBody_step, LaPToP.Interaction.Merge.timemergeBody, LaPToP.Interaction.Merge.implBody, LaPToP.Interaction.Merge.step_refines_c, LaPToP.Interaction.Merge.step_refines_d, LaPToP.Interaction.Merge.not_step_refines, LaPToP.Interaction.seg, LaPToP.Interaction.seg_self, LaPToP.Interaction.seg_cons, LaPToP.Interaction.Interleave, LaPToP.Interaction.Merge.Inv, LaPToP.Interaction.Merge.Inv.refl, LaPToP.Interaction.Merge.ReadC, LaPToP.Interaction.Merge.ReadD, LaPToP.Interaction.Merge.Idle, LaPToP.Interaction.Merge.Inv.readC, LaPToP.Interaction.Merge.Inv.readD, LaPToP.Interaction.Merge.Inv.idle, LaPToP.Interaction.Merge.readC_of_seq, LaPToP.Interaction.Merge.readD_of_seq, LaPToP.Interaction.Merge.readC_of_wait, LaPToP.Interaction.Merge.readD_of_wait, LaPToP.Interaction.Merge.idle_of_ok, LaPToP.Interaction.Merge.idle_of_tick, LaPToP.Interaction.Merge.mergeBody_inv, LaPToP.Interaction.Merge.timemergeBody_inv, LaPToP.Interaction.Merge.implBody_inv, LaPToP.Interaction.Merge.steps, LaPToP.Interaction.Merge.stepsInv, LaPToP.Interaction.Merge.stepsInv_merge, LaPToP.Interaction.Merge.stepsInv_timemerge, LaPToP.Interaction.Merge.stepsInv_impl, LaPToP.Interaction.Merge.implBody_c_arrived, LaPToP.Interaction.Merge.implBody_d_arrived")
 "Merging means reading repeatedly from two or more input channels and writing
 those inputs onto an output channel. The output is an interleaving of the
 messages from the input channels. The output must be all and only the
@@ -264,8 +309,16 @@ same reasoning" and gives no proof. An iteration of the implementation is
 both, with input on neither it reads nothing and lets time pass — and the
 two-input case is given as a counterexample to the step-wise refinement. The
 book's refinement is one of fixed points (a two-input iteration is two steps,
-a no-input iteration is the waiting hidden in $`t := t \uparrow (\mathcal{T}r+1)`) and is
-not formalized here. Uses {uses "backtracking"}[] (for $`\lor`).
+a no-input iteration is the waiting hidden in $`t := t \uparrow (\mathcal{T}r+1)`). What is
+proved instead is the merge requirement itself: over any number of steps of
+$`\mathit{merge}`, of $`\mathit{timemerge}`, or of iterations of the implementation, the
+messages output on $`e` form an interleaving — each channel's messages in
+order — of the messages read from $`c` and from $`d`, and the cursors do not
+decrease (the invariant $`\mathit{Inv}` and `stepsInv_impl`); and the implementation
+outputs a message only after it has arrived (`implBody_c_arrived`,
+`implBody_d_arrived`). The literal fixed-point refinement with the
+first-available criterion remains unproved. Uses {uses "backtracking"}[] (for
+$`\lor`) and {uses "string_syntax"}[] (segments of the scripts).
 :::
 
 :::definition "monitor" (parent := "interaction_core") (lean := "LaPToP.Interaction.MonS, LaPToP.Interaction.Monitor.checkIn0, LaPToP.Interaction.Monitor.checkIn1, LaPToP.Interaction.Monitor.checkReq0, LaPToP.Interaction.Monitor.checkReq1, LaPToP.Interaction.Monitor.m, LaPToP.Interaction.Monitor.act0, LaPToP.Interaction.Monitor.act1, LaPToP.Interaction.Monitor.act2, LaPToP.Interaction.Monitor.act3, LaPToP.Interaction.Monitor.tick, LaPToP.Interaction.Monitor.monitorBody, LaPToP.Interaction.Monitor.implBody, LaPToP.Interaction.Monitor.onlyIn0, LaPToP.Interaction.Monitor.onlyIn1, LaPToP.Interaction.Monitor.onlyReq0, LaPToP.Interaction.Monitor.onlyReq1, LaPToP.Interaction.Monitor.step_refines_in0, LaPToP.Interaction.Monitor.step_refines_in1, LaPToP.Interaction.Monitor.step_refines_req0, LaPToP.Interaction.Monitor.step_refines_req1")
