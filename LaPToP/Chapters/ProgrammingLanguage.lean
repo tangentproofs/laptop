@@ -5,6 +5,7 @@ import LaPToP.ProgramTheory.WhileLoop
 import LaPToP.ProgramTheory.ForLoop
 import LaPToP.ProgramTheory.Scope
 import LaPToP.ProgramTheory.Assertions
+import LaPToP.ProgramTheory.Subprograms
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -225,4 +226,65 @@ $`P \lor Q \Leftarrow Q`, and the book's example. Uses {uses "assertions"}[],
 :::proof "backtracking"
 The example: $`P.\ \mathbf{ensure}\ b` is $`P \land b'`; the disjunct $`x := 0` is
 excluded by $`x' = 1`, leaving $`x := 1`.
+:::
+
+:::definition "value_expression" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.value, LaPToP.ProgramTheory.Spec.ValueDetermined, LaPToP.ProgramTheory.Spec.valueDetermined_of_deterministic, LaPToP.ProgramTheory.Spec.value_spec, LaPToP.ProgramTheory.Spec.value_axiom, LaPToP.ProgramTheory.Spec.value_assign, LaPToP.ProgramTheory.Spec.value_impl, LaPToP.ProgramTheory.Spec.ValueExamples.xinc, LaPToP.ProgramTheory.Spec.ValueExamples.value_xinc, LaPToP.ProgramTheory.Spec.ValueExamples.assignY_value, LaPToP.ProgramTheory.Spec.ValueExamples.side_effect_ne")
+"Let $`P` be a specification and $`e` be an expression in unprimed variables.
+Then $`P\ \mathbf{value}\ e` expresses the value that would be obtained by executing
+$`P` and then evaluating $`e`. But $`P` is not executed, and all variables are
+unchanged. ... The value expression axiom is $`P.\ (P\ \mathbf{value}\ e) = e` except
+that $`(P\ \mathbf{value}\ e)` is not subject to double-priming in sequential
+composition, nor to substitution when using the Substitution Law. For example,
+$`\top = x := x+1.\ (x := x+1\ \mathbf{value}\ x) = x = ((x := x+1\ \mathbf{value}\ x) = x+1)`.
+... $`y := (x := x+1\ \mathbf{value}\ x) = y := x+1`. The expression $`P\ \mathbf{value}\ e` can be
+implemented as follows. Replace each nonlocal variable within $`P` and $`e` that
+is assigned within $`P` by a fresh local variable initialized to the value of the
+nonlocal variable. Then execute the modified $`P` and evaluate the modified
+$`e`. ... State changes resulting from the evaluation of an expression are called
+“side-effects”. With side-effects, mathematical reasoning is not possible. ...
+If a programming language allows side-effects, we have to turn them into main
+effects before using any theory. For example, $`x := (P\ \mathbf{value}\ e)` becomes
+$`(P.\ x := e)`." Model: $`P\ \mathbf{value}\ e` is a value $`e\,s'` for a final state $`s'` of
+$`P` from the initial state (chosen with Hilbert's $`\varepsilon`); the axiom holds
+under the explicit hypothesis that $`e` is determined on the outcomes of $`P` —
+which the book's axiom assumes silently and which holds for every
+deterministic program. Under it $`e' = (P\ \mathbf{value}\ e) \Leftarrow P`, a total
+deterministic program's value is $`e` of its new state, and the implementation
+by a local copy of the state is proved with {uses "variable_declaration"}[].
+The two examples are computed; "becomes" is a translation of a language with
+side effects, not an equality — $`y := (x := x+1\ \mathbf{value}\ x)` and
+$`x := x+1.\ y := x` are shown to be different specifications. Uses
+{uses "substitution_law"}[] and {uses "specification_laws"}[].
+:::
+
+:::definition "function_and_procedure" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Function.iterSeq_implementable, LaPToP.ProgramTheory.Function.bexpBody, LaPToP.ProgramTheory.Function.bexp, LaPToP.ProgramTheory.Function.bexpBody_implementable, LaPToP.ProgramTheory.Function.bexp_eq, LaPToP.ProgramTheory.Procedure.AB, LaPToP.ProgramTheory.Procedure.P, LaPToP.ProgramTheory.Procedure.P_apply, LaPToP.ProgramTheory.Procedure.body, LaPToP.ProgramTheory.Procedure.P_refines, LaPToP.ProgramTheory.Procedure.paramAsLocal, LaPToP.ProgramTheory.Procedure.procedure_eq_newVarInit, LaPToP.ProgramTheory.Procedure.Var, LaPToP.ProgramTheory.Procedure.body₁, LaPToP.ProgramTheory.Procedure.body₂, LaPToP.ProgramTheory.Procedure.body₁_a, LaPToP.ProgramTheory.Procedure.body₂_a, LaPToP.ProgramTheory.Procedure.body₁_x_eq_body₂_x, LaPToP.ProgramTheory.Procedure.body₁_a_ne_body₂_a")
+"In many popular programming languages, a function is a combination of
+assertion about the result, name of the function, parameters, scope control,
+and value expression. It's a “package deal”. ... In our notations,
+$`\mathit{bexp} = \langle n : \mathit{int} \cdot \mathbf{new}\ r : \mathit{int} := 1 \cdot \mathbf{for}\ i := 0;..n\ \mathbf{do}\ r := r \times 2\ \mathbf{od}.\ \mathbf{assert}\ r : \mathit{int}\ \mathbf{value}\ r \rangle`.
+We present these programming features separately so that they can be
+understood separately." The function is assembled from the separate parts —
+parameter, initialized local variable, the unrolled {uses "for_loop"}[] of
+{uses "binary_exponentiation"}[], and {uses "value_expression"}[] — and
+$`\mathit{bexp}\ n = 2^n` is proved (the assertion $`r : \mathit{int}` holds by typing
+and is omitted). "The procedure (or void function, or method) ... combines name
+declaration, parameterization, and local scope. ... we may want a procedure
+$`P` with parameter $`x` defined as $`P = \langle x : \mathit{int} \cdot a' < x < b' \rangle` ... We
+can use procedure $`P` before we refine its body: $`P\,(a+1) = a' < a+1 < b'`. The
+body is easily refined as $`a' < x < b' \Leftarrow a := x-1.\ b := x+1`. ... A procedure
+and argument can be translated to a local variable and initial value.
+$`\langle p : D \cdot B \rangle\ a = (\mathbf{new}\ p : D := a \cdot B)` if $`B` doesn't use $`p'` or
+$`p :=`. ... Another kind of parameter, called a variable parameter ... stands
+for a nonlocal variable to be supplied as argument.
+$`\langle \mathbf{new}\ x : \mathit{int} \cdot a := 3.\ b := 4.\ x := 5 \rangle\ a = a := 3.\ b := 4.\ a := 5 = a' = 5 \land b' = 4`
+... $`\langle \mathbf{new}\ x : \mathit{int} \cdot x := 5.\ b := 4.\ a := 3 \rangle\ a = a := 5.\ b := 4.\ a := 3 = a' = 3 \land b' = 4`
+but the result is different. Variable parameters prevent the use of
+specification, and they prevent any reasoning about the procedure by itself."
+All of these are proved: the application $`P\,(a+1)`, the refinement, the
+translation law (the parameter read as a constant inside the scope of the
+local variable), and, with a variable parameter modelled as a body that is a
+function of the variable name, the two results $`a' = 5 \land b' = 4` and
+$`a' = 3 \land b' = 4`, equal for a fresh argument $`x` but different for the argument
+$`a`. Uses {uses "function_notation"}[], {uses "variable_declaration"}[] and
+{uses "assertions"}[].
 :::
