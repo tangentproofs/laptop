@@ -5,6 +5,7 @@ import LaPToP.Interaction.InteractiveVariables
 import LaPToP.Interaction.Communication
 import LaPToP.Interaction.CommunicationTiming
 import LaPToP.Interaction.Merge
+import LaPToP.Interaction.ChannelDeclaration
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -288,4 +289,66 @@ variable $`x`, the minimum $`m`, the recursive-time increment), and, as for the
 merge, an iteration of the implementation is proved to be a monitor step
 whenever exactly one input channel has input available (four lemmas, one per
 channel); the same honesty note applies to the book's implementation.
+:::
+
+:::theorem "channel_declaration" (parent := "interaction_core") (tags := "interaction, channels, declaration, hehner-9.1.7") (effort := "medium") (lean := "LaPToP.Interaction.Channel.assignLast, LaPToP.Interaction.Channel.output_input_assign, LaPToP.Interaction.Channel.not_last_written, LaPToP.Interaction.newChannel, LaPToP.Interaction.liftChan, LaPToP.Interaction.newChannel_liftChan, LaPToP.Interaction.Channel.wait, LaPToP.Interaction.Channel.buffer, LaPToP.Interaction.Channel.newChannel_buffer, LaPToP.Interaction.Channel.outParIn, LaPToP.Interaction.Channel.outParInT, LaPToP.Interaction.Channel.not_last_written_par, LaPToP.Interaction.Channel.newChannel_outParIn, LaPToP.Interaction.Channel.newChannel_outParInT")
+"The next input on a channel is not necessarily the one that was last
+previously written on that channel. In one variable $`x` and one channel $`c`
+(ignoring time), $`c!\,2.\ c?.\ x := c = \mathcal{M}w = 2 \land w' = w+1 \land r' = r+1 \land x' = \mathcal{M}r`.
+We do not know that initially $`w = r`, so we cannot conclude that finally
+$`x' = 2`. That's because there may have been a previous write that hasn't been
+read yet. ... The same is true in a concurrent composition. ... In order to
+achieve useful communication between processes, we have to introduce a local
+channel. Channel declaration is similar to variable declaration; it defines a
+new channel within some local portion of a program or specification.
+$`\mathbf{new}\ c?!\,T \cdot S = \exists \mathcal{M}_c : \infty{*}T \cdot \exists \mathcal{T}_c : \infty{*}\mathit{xnat} \cdot \mathbf{new}\ r_c, w_c : \mathit{xnat} := 0 \cdot S = \exists \mathcal{M}_c \cdot \exists \mathcal{T}_c \cdot \exists r_c, r_c', w_c, w_c' : \mathit{xnat} \cdot r_c = w_c = 0 \land S`.
+This declaration introduces new channel $`c` for input and output whose
+communications are of type $`T`. ... A local channel can be used without
+concurrency as a queue, or buffer. For example,
+$`\mathbf{new}\ c?!\,\mathit{int} \cdot c!\,3.\ c!\,4.\ c?.\ x := c.\ c?.\ x := x+c` assigns $`7` to $`x`. Here is
+the proof, including time. ... $`= x' = 7 \land t' = t+1 \land (\text{other variables unchanged})`.
+Here are two processes with a communication between them. Ignoring time,
+$`\mathbf{new}\ c?!\,\mathit{int} \cdot c!\,2 \parallel (c?.\ x := c) = \ldots = x' = 2 \land (\text{other variables unchanged}) = x := 2`.
+Replacing $`2` by an arbitrary expression, we have a general theorem equating
+communication on a local channel with assignment. If we had included transit
+time, the result would have been $`x' = 2 \land t' = t+1 \land \ldots = x := 2 \parallel t := t+1`."
+The declaration quantifies the scripts and the final cursors and fixes the
+initial cursors at $`0` (the one-point law for $`r_c = w_c = 0` already applied);
+outside it the state is the time and $`x` of {uses "time_variable"}[], as for
+{uses "variable_declaration"}[]. Proved: the expansion of $`c!\,2.\ c?.\ x := c`
+and a counterexample to $`x' = 2` (an unread earlier output); a specification
+not mentioning the channel is unchanged by the declaration; the buffer
+example with the input waits of {uses "communication_timing"}[],
+$`x' = 7 \land t' = t+1`; and the general theorem
+$`\mathbf{new}\ c?!\,\mathit{int} \cdot c!\,e \parallel (c?.\ x := c) = x := e`, with $`t' = t+1` in the
+transit time measure. Model note: the concurrent composition
+$`c!\,e \parallel (c?.\ x := c)` is taken as the book's own expansion
+$`\mathcal{M}w = e \land w' = w+1 \land r' = r+1 \land x' = \mathcal{M}r` (cf. {uses "concurrent_composition"}[]);
+a general $`\parallel` on channel states is not defined. Uses {uses "communication"}[].
+:::
+
+:::definition "reaction_controller" (parent := "interaction_core") (lean := "LaPToP.Interaction.SyS, LaPToP.Interaction.Synchronizer.inputDD, LaPToP.Interaction.Synchronizer.inputReq, LaPToP.Interaction.Synchronizer.latest, LaPToP.Interaction.Synchronizer.outputRep, LaPToP.Interaction.Synchronizer.checkReq, LaPToP.Interaction.Synchronizer.inputReq_outputRep_comm, LaPToP.Interaction.Synchronizer.synchronizerBody, LaPToP.Interaction.Synchronizer.synchronizerBody_step")
+"Many kinds of reactions are controlled by a feedback loop ... The sensors send
+their data continuously to the digitizer. The digitizer is fast and uniform,
+sending digital data rapidly to the controller. The time required by the
+controller to compute its output messages varies according to the input
+messages ... When several inputs have piled up, the controller should not
+continue to read them and compute outputs in the hope of catching up. Instead,
+we want all but the latest input to be discarded. ... The solution is to place a
+synchronizer between the digitizer and controller. ... It repeatedly reads the
+data from the digitizer, always keeping only the latest. Whenever the
+controller requests some data, the synchronizer sends the latest. This is
+exactly the function of a monitor, and we could implement the synchronizer
+that way. But a synchronizer is simpler than a monitor in three respects:
+first, there is only one writing process (digitizer) and one reading process
+(controller); second, the writing process does not need an acknowledgement;
+and last, the writing process is uniformly faster than the reading process.
+Here is its definition.
+$`\mathit{synchronizer} = \mathit{digitaldata}?.\ \mathbf{if}\ \surd \mathit{request}\ \mathbf{then}\ \mathit{request}? \parallel \mathit{reply}!\,\mathit{digitaldata}\ \mathbf{else}\ \mathit{ok}.\ \mathit{synchronizer}`."
+Defined on a state with the channels $`\mathit{digitaldata}`, $`\mathit{request}`, $`\mathit{reply}`;
+the $`\parallel` of an input on one channel and an output on another is rendered
+as their sequential composition, which is proved to commute. One step of the
+synchronizer reads a datum and, if there is a request, replies with exactly
+that datum — "the latest". A simplification of the {uses "monitor"}[]; uses
+{uses "channel_declaration"}[].
 :::
