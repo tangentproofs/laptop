@@ -3,6 +3,7 @@ import VersoManual
 import VersoBlueprint
 import LaPToP.Interaction.InteractiveVariables
 import LaPToP.Interaction.Communication
+import LaPToP.Interaction.CommunicationTiming
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -166,4 +167,61 @@ calculated — the second with the recursive call $`S` as a specification, as in
 {uses "recursive_program_zap"}[] — and the two forms of the first
 specification are shown to agree. Uses {uses "communication"}[] and
 {uses "substitution_law"}[].
+:::
+
+:::theorem "communication_timing" (parent := "interaction_core") (tags := "interaction, channels, time, hehner-9.1.2") (effort := "small") (lean := "LaPToP.Interaction.Channel.assignT, LaPToP.Interaction.Channel.tick, LaPToP.Interaction.Channel.assignT_seq, LaPToP.Interaction.Channel.inputT, LaPToP.Interaction.Channel.checkT, LaPToP.Interaction.Channel.inputT_eq, LaPToP.Interaction.Channel.inputT_refines")
+"In the real time measure, we need to know how long output takes, how long
+communication transit takes, and how long input takes, and we place time
+increments appropriately. To be independent of these implementation details,
+we can use the transit time measure, in which we suppose that the acts of
+input and output take no time, and that communication transit takes 1 time
+unit. The message to be read next on channel $`c` is $`\mathcal{M}_c\,r_c`. This message
+was or is or will be sent at time $`\mathcal{T}_c\,r_c`. Its arrival time, according to
+the transit time measure, is $`\mathcal{T}_c\,r_c + 1`. So input becomes
+$`t := t \uparrow (\mathcal{T}_c\,r_c + 1).\ c?`. If the input has already arrived,
+$`\mathcal{T}_c\,r_c + 1 \le t`, and no time is spent waiting for input; otherwise execution
+of $`c?` is delayed until the input arrives. And the input check $`\surd c` becomes
+$`\surd c = \mathcal{T}_c\,r_c + 1 \le t`. ... Exercise 516(a): Let $`W` be “wait for input on
+channel $`c` and then read it”. Formally, $`W = t := t \uparrow (\mathcal{T}r + 1).\ c?`. Prove
+$`W \Leftarrow \mathbf{if}\ \surd c\ \mathbf{then}\ c?\ \mathbf{else}\ t := t+1.\ W` where time is an extended
+natural. The significance of this exercise is that input is often implemented
+in just this way, with a test to see if input is available, and a loop if it is
+not. Proof: $`\mathbf{if}\ \surd c\ \mathbf{then}\ c?\ \mathbf{else}\ t := t+1.\ W = \mathbf{if}\ \mathcal{T}r + 1 \le t\ \mathbf{then}\ c?\ \mathbf{else}\ t := t+1.\ t := t \uparrow (\mathcal{T}r + 1).\ c? = \mathbf{if}\ \mathcal{T}r + 1 \le t\ \mathbf{then}\ t := t.\ c?\ \mathbf{else}\ t := (t+1) \uparrow (\mathcal{T}r + 1).\ c?`
+— if $`\mathcal{T}r + 1 \le t`, then $`t = t \uparrow (\mathcal{T}r + 1)`; if $`\mathcal{T}r + 1 > t` then
+$`(t+1) \uparrow (\mathcal{T}r + 1) = \mathcal{T}r + 1 = t \uparrow (\mathcal{T}r + 1)` —
+$`= \mathbf{if}\ \mathcal{T}r + 1 \le t\ \mathbf{then}\ t := t \uparrow (\mathcal{T}r + 1).\ c?\ \mathbf{else}\ t := t \uparrow (\mathcal{T}r + 1).\ c? = W`."
+Transit-time input and the check are defined on the one-channel state of
+{uses "communication"}[], and Exercise 516(a) is proved by the book's two
+cases (as the busy-wait loop of {uses "time_dependence"}[]), using
+{uses "refinement_by_steps_parts_cases"}[].
+:::
+
+:::theorem "recursive_communication" (parent := "interaction_core") (tags := "interaction, channels, recursion, hehner-9.1.3") (effort := "medium") (lean := "LaPToP.Interaction.TwoChannels.tick, LaPToP.Interaction.TwoChannels.tick_seq, LaPToP.Interaction.TwoChannels.dblBody, LaPToP.Interaction.TwoChannels.dblW, LaPToP.Interaction.TwoChannels.dblSeq, LaPToP.Interaction.TwoChannels.dblBody_apply, LaPToP.Interaction.TwoChannels.dblW_fixedPoint, LaPToP.Interaction.TwoChannels.fixedPoint_refines_dblW, LaPToP.Interaction.TwoChannels.bot_fixedPoint, LaPToP.Interaction.TwoChannels.dblSeq_eq, LaPToP.Interaction.TwoChannels.dblW_iff_forall")
+"Define $`\mathit{dbl}` by the fixed-point construction (including recursive time
+but ignoring input waits) $`\mathit{dbl} = c?.\ d!\,2 \times c.\ t := t+1.\ \mathit{dbl}`. Regarding
+$`\mathit{dbl}` as the unknown, this equation has several solutions. The weakest is
+$`\forall n : \mathit{nat} \cdot \mathcal{M}_d\,(w_d+n) = 2 \times \mathcal{M}_c\,(r_c+n) \land \mathcal{T}_d\,(w_d+n) = t+n`. The
+strongest implementable solution is
+$`(\forall n : \mathit{nat} \cdot \mathcal{M}_d\,(w_d+n) = 2 \times \mathcal{M}_c\,(r_c+n) \land \mathcal{T}_d\,(w_d+n) = t+n) \land r_c' = w_d' = t' = \infty \land w_c' = w_c \land r_d' = r_d`.
+The strongest solution is $`\bot`. If this fixed-point construction is all we
+know about $`\mathit{dbl}`, then we cannot say that it is equal to a particular one of
+the solutions. But we can say this: it refines the weakest solution ... and it
+is refined by the right side of the fixed-point construction ... Thus we can
+use it to solve problems, and we can execute it. If we begin recursive
+construction with $`\mathit{dbl}_0 = \top` we find
+$`\mathit{dbl}_1 = c?.\ d!\,2 \times c.\ t := t+1.\ \mathit{dbl}_0 = \mathcal{M}_d\,w_d = 2 \times \mathcal{M}_c\,r_c \land \mathcal{T}_d\,w_d = t`,
+$`\mathit{dbl}_2 = \ldots = \mathcal{M}_d\,w_d = 2 \times \mathcal{M}_c\,r_c \land \mathcal{T}_d\,w_d = t \land \mathcal{M}_d\,(w_d+1) = 2 \times \mathcal{M}_c\,(r_c+1) \land \mathcal{T}_d\,(w_d+1) = t+1`
+and so on. The result of the construction
+$`\mathit{dbl}_\infty = \forall n : \mathit{nat} \cdot \mathcal{M}_d\,(w_d+n) = 2 \times \mathcal{M}_c\,(r_c+n) \land \mathcal{T}_d\,(w_d+n) = t+n` is
+the weakest solution of the $`\mathit{dbl}` fixed-point construction." Proved, on the
+two-channel state of {uses "input_output_examples"}[]: one unrolling of the
+construction in closed form; $`\mathit{dbl}_\infty` is a fixed point; every fixed point
+refines $`\mathit{dbl}_\infty` (by induction on $`n`, unrolling once per output), which is
+the sense in which "it refines the weakest solution"; $`\bot` is a fixed point;
+and the construction sequence in closed form,
+$`\mathit{dbl}_n = \forall k : 0,..n \cdot \mathcal{M}_d\,(w_d+k) = 2 \times \mathcal{M}_c\,(r_c+k) \land \mathcal{T}_d\,(w_d+k) = t+k`,
+whose intersection is $`\mathit{dbl}_\infty`, as in
+{uses "recursive_program_construction"}[] and {uses "least_fixed_points"}[].
+Not stated: the "strongest implementable solution", whose $`r_c' = w_d' = \infty`
+needs extended-natural cursors, while cursors are naturals here.
 :::
