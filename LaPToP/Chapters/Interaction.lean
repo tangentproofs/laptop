@@ -10,6 +10,7 @@ import LaPToP.Interaction.Deadlock
 import LaPToP.Interaction.PowerSeries
 import LaPToP.Interaction.MergeInterleave
 import LaPToP.Interaction.Thermostat
+import LaPToP.Interaction.GrowSlow
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -124,6 +125,46 @@ $`\mathit{GasIsOff}` step reaches its continuation within 4 seconds (ignition at
 then the spark off), a $`\mathit{GasIsOn}` step within 21, and after shutting off the
 gas is off for at least 20 seconds before the continuation; the equations have
 a solution ($`\bot, \bot`). Uses {uses "time_dependence"}[].
+:::
+
+:::theorem "interactive_space" (parent := "interaction_core") (tags := "interaction, space, time, hehner-9.0.1") (effort := "small") (lean := "LaPToP.Interaction.Exercise497.GSpec, LaPToP.Interaction.Exercise497.GrowSlow₀, LaPToP.Interaction.Exercise497.GrowSlow, LaPToP.Interaction.Exercise497.step, LaPToP.Interaction.Exercise497.body, LaPToP.Interaction.Exercise497.discharge_iff, LaPToP.Interaction.Exercise497.growSlow₀_not_refines, LaPToP.Interaction.Exercise497.growSlow_refines")
+"We make the space variable $`s` into an interactive variable in order to look
+at the space occupied during the course of a computation. As an example,
+Exercise 497 is contrived to be as simple as possible while including time
+and space calculations in an infinite computation. Suppose $`\mathit{alloc}`
+allocates 1 unit of memory space and takes time 1 to do so. Then the following
+computation slowly allocates memory.
+$`\mathit{GrowSlow} \Leftarrow \mathbf{if}\ t = 2 \times x\ \mathbf{then}\ \mathit{alloc} \parallel x := t\ \mathbf{else}\ t := t+1.\ \mathit{GrowSlow}`
+If the time is equal to $`2 \times x`, then one space is allocated, and concurrently
+$`x` becomes the time stamp of the allocation; otherwise the clock ticks. The
+process is repeated forever. Prove that if the space is initially less than the
+logarithm of the time, and $`x` is suitably initialized, then at all times the
+space is less than the logarithm of the time. It is not clear what
+initialization is suitable for $`x`, so leaving that aside for a moment, we
+define $`\mathit{GrowSlow}` to be the desired specification.
+$`\mathit{GrowSlow} = s < \log t \Rightarrow (\forall t'' \cdot t'' \ge t \Rightarrow s'' < \log t'')` where $`s` is an
+interactive variable, so $`s` is really $`s\,t` and $`s''` is really $`s\,t''`. ... we can
+take $`\mathit{alloc}` to be $`s := s+1`. There is no need for $`x` to be interactive, so
+let's make it a boundary variable. ... The body of the loop can be written as a
+disjunction. $`\mathbf{if}\ t = 2 \times x\ \mathbf{then}\ s := s+1 \parallel x := t\ \mathbf{else}\ t := t+1 = t = 2 \times x \land s' = s+1 \land x' = t \land t' = t+1 \lor t \neq 2 \times x \land s' = s \land x' = x \land t' = t+1`.
+... The next step should be discharge. We need
+$`s < \log t \land t = 2 \times x \Rightarrow s+1 < \log(t+1) = 2^s < t = 2 \times x \Rightarrow 2^{s+1} < t+1 = \ldots = 2^s < t = 2 \times x \Rightarrow 2^s \le x`.
+This is the missing initialization of $`x`. So we go back and redefine
+$`\mathit{GrowSlow}`. $`\mathit{GrowSlow} = s < \log t \land x \ge 2^s \Rightarrow (\forall t'' \cdot t'' \ge t \Rightarrow s'' < \log t'')`.
+Now we redo the proof. ... discharge, as calculated earlier ... when $`t'' = t`,
+then $`s'' = s` and since $`s < \log t`, the domain of $`t''` can be increased. ... The
+second case is easier than the first." Time is a natural number (the book:
+extended naturals), $`x` a boundary variable, $`s` an interactive variable as in
+{uses "interactive_variables"}[] — a function of time of which the
+specification is a function — and $`s < \log t` is rendered as $`2^s < t`, the
+book's own rewriting. The loop body is the book's disjunction with $`s' = s+1`
+read as $`s\,(t+1) = s\,t + 1`. Proved: the discharge calculation — under
+$`s < \log t \land t = 2 \times x`, $`s+1 < \log(t+1)` is exactly $`x \ge 2^s`; the first
+specification is *not* refined by its body (counterexample: $`t = 6`, $`x = 3`,
+$`s\,t = 2`, where the allocation reaches $`t = 7`, $`s = 3` and the recursive
+call's antecedent fails); and the redefined $`\mathit{GrowSlow}` is refined by its
+body, by the book's two cases. Uses {uses "space"}[] and
+{uses "refinement_by_steps_parts_cases"}[].
 :::
 
 :::definition "communication" (parent := "interaction_core") (lean := "LaPToP.Interaction.Scripts, LaPToP.Interaction.CS, LaPToP.Interaction.CSpec, LaPToP.Interaction.Channel.output, LaPToP.Interaction.Channel.input, LaPToP.Interaction.Channel.lastRead, LaPToP.Interaction.Channel.check, LaPToP.Interaction.Channel.input_seq, LaPToP.Interaction.Channel.output_seq, LaPToP.Interaction.Channel.Increasing, LaPToP.Interaction.Channel.increasing_ok, LaPToP.Interaction.Channel.increasing_input, LaPToP.Interaction.Channel.increasing_output, LaPToP.Interaction.Channel.increasing_seq, LaPToP.Interaction.Channel.increasing_cond")
