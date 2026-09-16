@@ -9,6 +9,7 @@ import LaPToP.ProgramTheory.Subprograms
 import LaPToP.ProgramTheory.ExitLoop
 import LaPToP.ProgramTheory.TwoDimSearch
 import LaPToP.ProgramTheory.TimeDependence
+import LaPToP.ProgramTheory.Arrays
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -24,6 +25,47 @@ while-loop of Section 5.2.0 is formalized in `LaPToP.ProgramTheory.WhileLoop`
 the for-loop of Section 5.2.3 in `LaPToP.ProgramTheory.ForLoop`, and variable
 declaration and suspension (Section 5.0) in `LaPToP.ProgramTheory.Scope`,
 assertions and backtracking (Section 5.4) in `LaPToP.ProgramTheory.Assertions`.
+:::
+
+:::definition "data_structures" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Arrays.AS, LaPToP.ProgramTheory.Arrays.assignElem, LaPToP.ProgramTheory.Arrays.assignA, LaPToP.ProgramTheory.Arrays.assignI, LaPToP.ProgramTheory.Arrays.assignA_seq, LaPToP.ProgramTheory.Arrays.assignI_seq, LaPToP.ProgramTheory.Arrays.assignElem_eq_assignA, LaPToP.ProgramTheory.Arrays.orElse_arrow_apply, LaPToP.ProgramTheory.Arrays.example₁, LaPToP.ProgramTheory.Arrays.example₁_naive, LaPToP.ProgramTheory.Arrays.example₂, LaPToP.ProgramTheory.Arrays.example₂_naive, LaPToP.ProgramTheory.Arrays.AS2, LaPToP.ProgramTheory.Arrays.assignElem2, LaPToP.ProgramTheory.Arrays.assignElem2_eq, LaPToP.ProgramTheory.Arrays.Person, LaPToP.ProgramTheory.Arrays.RS, LaPToP.ProgramTheory.Arrays.assignAge, LaPToP.ProgramTheory.Arrays.assignAge_eq")
+"In most popular programming languages there is the notion of indexed
+variable, usually called an “array” ... Let $`A` be an array name, let $`i` be
+any expression of the index type, and let $`e` be any expression of the element
+type. Then $`A\,i := e = A'\,i = e \land (\forall j \cdot j \neq i \Rightarrow A'\,j = A\,j) \land x' = x \land y' = y \land \ldots`
+This says that after the assignment, element $`i` of $`A` equals $`e`, all other
+elements of $`A` are unchanged, and all other variables are unchanged. ... The
+Substitution Law $`x := e.\ P = (\text{for } x \text{ substitute } e \text{ in } P)` is very useful,
+but unfortunately it does not work for array element assignment. For example,
+$`A\,2 := 3.\ i := 2.\ A\,i := 4.\ A\,i = A\,2` should equal $`\top`, because $`i = 2` just before
+the final binary expression, and $`A\,2 = A\,2` certainly equals $`\top`. If we try
+to apply the Substitution Law, we get ... $`= A\,2 := 3.\ 4 = A\,2`. Here is a second
+example of the failure of the Substitution Law for array elements.
+$`A\,2 := 2.\ A\,(A\,2) := 3.\ A\,2 = 2`. This should equal $`\bot` because $`A\,2 = 3` just before
+the final binary expression. But the Substitution Law says ... $`= A\,2 := 2.\ A\,2 = 2`.
+The Substitution Law works only when the assignment has a simple name to the
+left of $`:=`. Fortunately we can always rewrite an array element assignment in
+that form. $`A\,i := e = A' = i \to e \mid A \land x' = x \land y' = y \land \ldots = A := i \to e \mid A`. ...
+The only thing to remember about array element assignment is this: change
+$`A\,i := e` to $`A := i \to e \mid A` before applying any programming theory. A
+two-dimensional array element assignment $`A\,i\,j := e` must be changed to
+$`A := (i; j) \to e \mid A`, and similarly for more dimensions. In program theory, an
+array is a list variable, and array element assignment assigns the list
+variable to a new list that is like the old list but differs in one item."
+Records: "$`\mathit{person} = \text{“name”} \to \mathit{text} \mid \text{“age”} \to \mathit{nat}` ... a component (or
+field) is assigned the same way we make an array element assignment. ... Just
+as for array element assignment, the Substitution Law does not work for record
+components. And the solution is also the same; just rewrite it like this:
+$`p := \text{“age”} \to 18 \mid p`. No new theory is needed for records." An array is a
+function $`\mathbb{N} \to \mathbb{Z}` ({uses "list_as_function"}[]); element assignment is
+defined literally as the book's binary expression and proved equal to the
+whole-array assignment $`A := i \to e \mid A` with $`i \to e \mid A` the function updated at
+$`i`, which agrees with the {uses "selective_union"}[] of Function Theory. The
+two examples are made precise: the first program equals its three assignments
+(the final test holds) while the naive substitution gives $`\bot`; the second
+program is $`\bot` while the naive substitution is $`A\,2 := 2`. The corrected
+calculations go through the {uses "substitution_law"}[] for the whole-array
+form ({uses "assignment_spec"}[]). Two-dimensional arrays and record
+components are the same construction (one definitional lemma each).
 :::
 
 :::definition "while_loop" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.WhileRefines, LaPToP.ProgramTheory.Spec.whileRefines_iff, LaPToP.ProgramTheory.Spec.whileRefines_iff_cases, LaPToP.ProgramTheory.Spec.WhileRefines.mono, LaPToP.ProgramTheory.Spec.whileRefines_false")
