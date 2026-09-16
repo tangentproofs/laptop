@@ -4,6 +4,7 @@ import VersoBlueprint
 import LaPToP.ProgramTheory.Specifications
 import LaPToP.ProgramTheory.Programs
 import LaPToP.ProgramTheory.Time
+import LaPToP.ProgramTheory.Space
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -301,4 +302,52 @@ is not a theorem". Uses {uses "time_variable"}[] and {uses "refinement_laws"}[].
 :::proof "termination"
 Direct from the definitions; the non-theorem is refuted by the prestate
 $`t = 0, x = 0` and poststate $`t = 2, x = 2`.
+:::
+
+:::theorem "space" (parent := "program_theory_core") (tags := "programs, space, time, hehner-4.3") (effort := "medium") (lean := "LaPToP.ProgramTheory.Hanoi.HS, LaPToP.ProgramTheory.Hanoi.assignN, LaPToP.ProgramTheory.Hanoi.tick, LaPToP.ProgramTheory.Hanoi.assignS, LaPToP.ProgramTheory.Hanoi.assignM, LaPToP.ProgramTheory.Hanoi.assignN_seq, LaPToP.ProgramTheory.Hanoi.tick_seq, LaPToP.ProgramTheory.Hanoi.assignS_seq, LaPToP.ProgramTheory.Hanoi.assignM_seq, LaPToP.ProgramTheory.Hanoi.enat_add_one_sub_one, LaPToP.ProgramTheory.Hanoi.movePile, LaPToP.ProgramTheory.Hanoi.movePile_n, LaPToP.ProgramTheory.Hanoi.T, LaPToP.ProgramTheory.Hanoi.two_pow_succ_sub_one, LaPToP.ProgramTheory.Hanoi.time_refines, LaPToP.ProgramTheory.Hanoi.S, LaPToP.ProgramTheory.Hanoi.movePileSpace, LaPToP.ProgramTheory.Hanoi.space_refines, LaPToP.ProgramTheory.Hanoi.MS, LaPToP.ProgramTheory.Hanoi.MS_m_le, LaPToP.ProgramTheory.Hanoi.longLine, LaPToP.ProgramTheory.Hanoi.longLineSpec, LaPToP.ProgramTheory.Hanoi.longLine_refines, LaPToP.ProgramTheory.Hanoi.movePileMax, LaPToP.ProgramTheory.Hanoi.max_case_refines, LaPToP.ProgramTheory.Hanoi.maxSpace_refines")
+"Our example to illustrate space calculation is Exercise 293: the Towers of
+Hanoi. ... Our solution is $`\mathit{MovePile}\ \text{“A”}\ \text{“B”}\ \text{“C”}` where we refine
+$`\mathit{MovePile}` as follows.
+$`\mathit{MovePile}\ \mathit{from}\ \mathit{to}\ \mathit{using} \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ n := n-1.\ \mathit{MovePile}\ \mathit{from}\ \mathit{using}\ \mathit{to}.\ \mathit{MoveDisk}\ \mathit{from}\ \mathit{to}.\ \mathit{MovePile}\ \mathit{using}\ \mathit{to}\ \mathit{from}.\ n := n+1`
+... Our concern is just the time and space requirements, so we will ignore
+the disk positions and the parameters $`\mathit{from}`, $`\mathit{to}`, and $`\mathit{using}`. All we
+can prove at the moment is that if $`\mathit{MoveDisk}` satisfies $`n' = n`, so does
+$`\mathit{MovePile}`. To measure time, we add a time variable $`t`, and use it to count
+disk moves. We suppose that $`\mathit{MoveDisk}` takes time $`1` ... so we replace it by
+$`t := t+1`. We now prove that the execution time is $`2^n - 1` by replacing
+$`\mathit{MovePile}` with the specification $`t := t + 2^n - 1`. We prove
+$`t := t + 2^n - 1 \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ n := n-1.\ t := t + 2^n - 1.\ t := t+1.\ t := t + 2^n - 1.\ n := n+1`
+by cases. ... To talk about the memory space used by a computation, we just
+add a space variable $`s`. Like the time variable $`t`, $`s` is not part of the
+implementation, but only used in specifying and calculating space
+requirements. ... To allow for the possibility that execution endlessly
+consumes space, we take the domain of space to be the natural numbers extended
+with $`\infty`. Wherever space is being increased, we insert $`s := s + (\text{the increase})`
+... In our example, the recursive calls are not the last action in the
+refinement; they require that a return address be pushed onto a stack at the
+start of the call, and popped off at the end. Considering only space, ignoring
+time and disk movements, we can prove
+$`s' = s \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ n := n-1.\ s := s+1.\ s' = s.\ s := s-1.\ \mathit{ok}.\ s := s+1.\ s' = s.\ s := s-1.\ n := n+1`
+which says that the space occupied is the same at the end as at the start."
+Maximum space (Subsection 4.3.0): "Let $`m` be the maximum space occupied before
+the start of execution ..., and $`m'` be the maximum space occupied by the end
+of execution. Implementability requires $`m' \ge m`. Wherever space is being
+increased, we insert $`m := m \uparrow s` to keep $`m` current. In our example, we want
+to prove that the maximum space occupied is $`n`. However, in a larger context,
+it may happen that the starting space $`s` is not $`0`, so we specify $`m' = s+n`.
+At the start, $`s \le m`, since $`m` is the maximum value of $`s`. We assume $`m \le s+n`
+so that $`m` does not start larger than the maximum we are trying to prove. The
+refinement becomes
+$`s \le m \le s+n \Rightarrow (m := s+n) \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ n := n-1.\ s := s+1.\ m := m \uparrow s.\ s \le m \le s+n \Rightarrow (m := s+n).\ s := s-1.\ \mathit{ok}.\ s := s+1.\ m := m \uparrow s.\ s \le m \le s+n \Rightarrow (m := s+n).\ s := s-1.\ n := n+1`
+The proof of the refinement proceeds in the usual two cases. ... Before
+proving the last case, let's simplify the long line that occurs twice.
+$`s := s+1.\ m := m \uparrow s.\ s \le m \le s+n \Rightarrow (m := s+n).\ s := s-1 \ldots = m \le s+1+n \Rightarrow (m := s+1+n)`."
+The state has $`n`, the time, the space and the maximum space (the last three
+in $`\mathit{xnat}`); disk positions and tower parameters are ignored as the book does,
+and the recursive calls are the specifications being refined. Proved by the
+book's two cases: $`n' = n` for $`\mathit{MovePile}` when $`\mathit{MoveDisk}` satisfies it; the
+time $`2^n - 1`; no space leaks, $`s' = s`; the long line refines
+$`m \le s+1+n \Rightarrow (m := s+1+n)`; and the maximum-space refinement, together
+with "$`m' \ge m`" for the specification. Uses {uses "recursive_time"}[],
+{uses "refinement_by_steps_parts_cases"}[] and {uses "substitution_law"}[].
 :::
