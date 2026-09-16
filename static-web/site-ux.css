@@ -1,0 +1,132 @@
+/* Site UX enhancements (permalinks + drill-down TOC). Injected post-build. */
+
+/* Stable statement anchors: keep scroll target clear of sticky chrome. */
+.bp-stable-anchor {
+  display: block;
+  position: relative;
+  top: 0;
+  height: 0;
+  width: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  scroll-margin-top: 1.25rem;
+}
+
+/* Highlight the statement when its friendly hash is targeted. */
+.bp_wrapper:has(> .bp-stable-anchor:target),
+.bp_wrapper:has(> .bp-stable-anchor:target) {
+  outline: 2px solid color-mix(in srgb, currentColor 35%, transparent);
+  outline-offset: 4px;
+}
+
+/* Permalink control on blueprint statements (Verso-like, discoverable). */
+.bp-node-permalink.permalink-widget.inline {
+  opacity: 0.35;
+  width: auto;
+  margin-left: 0.4rem;
+  font-size: 0.75em;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.bp_heading:hover .bp-node-permalink.permalink-widget.inline,
+.bp_heading_title_row:hover .bp-node-permalink.permalink-widget.inline,
+.bp-node-permalink.permalink-widget.inline:focus-within,
+.bp-node-permalink.is-copied {
+  opacity: 1;
+}
+
+.bp-node-permalink > a,
+.bp-node-permalink > button {
+  color: inherit;
+  text-shadow: none;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.bp-node-permalink .bp-permalink-copied {
+  margin-left: 0.35rem;
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+/* Drill-down TOC */
+#toc .site-ux-toc {
+  list-style: none;
+  margin: 0.25rem 0 0.75rem;
+  padding: 0 0 0 0.15rem;
+  font-size: 0.92em;
+}
+
+#toc .site-ux-toc > li {
+  margin: 0.15rem 0;
+}
+
+#toc .site-ux-toc .site-ux-toc-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.15rem;
+  flex-wrap: nowrap;
+}
+
+#toc .site-ux-toc .site-ux-toc-row .num {
+  flex: 0 0 auto;
+  min-width: 1.4em;
+  opacity: 0.75;
+}
+
+#toc .site-ux-toc .site-ux-toc-row a {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#toc .site-ux-toc .site-ux-toc-chapter.current > .site-ux-toc-row > a,
+#toc .site-ux-toc .site-ux-toc-chapter.current > .site-ux-toc-row .num {
+  font-weight: 600;
+}
+
+#toc .site-ux-toc .site-ux-toc-nested {
+  list-style: none;
+  margin: 0.1rem 0 0.35rem 0.55rem;
+  padding: 0 0 0 0.45rem;
+  border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+
+#toc .site-ux-toc .site-ux-toc-group-title {
+  font-size: 0.92em;
+  opacity: 0.9;
+}
+
+#toc .site-ux-toc .site-ux-toc-entry {
+  margin: 0.08rem 0;
+  font-size: 0.9em;
+  line-height: 1.25;
+}
+
+#toc .site-ux-toc .site-ux-toc-entry a {
+  text-decoration: none;
+}
+
+#toc .site-ux-toc .site-ux-toc-entry a:hover {
+  text-decoration: underline;
+}
+
+/* Reuse Verso toggle affordance for nested chapters/groups. */
+#toc .site-ux-toc label.toggle-split-toc {
+  flex: 0 0 auto;
+}
+
+#toc .site-ux-toc-chapter:has(> .site-ux-toc-row .toggle-split-toc input[type="checkbox"]:not(:checked)) > .site-ux-toc-nested,
+#toc .site-ux-toc-group:has(> .site-ux-toc-row .toggle-split-toc input[type="checkbox"]:not(:checked)) > .site-ux-toc-nested {
+  display: none;
+}
+
+#toc .split-toc.site-ux-local-toc > ol.site-ux-toc {
+  margin-top: 0.35rem;
+}
