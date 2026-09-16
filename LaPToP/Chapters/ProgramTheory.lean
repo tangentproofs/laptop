@@ -5,6 +5,7 @@ import LaPToP.ProgramTheory.Specifications
 import LaPToP.ProgramTheory.Programs
 import LaPToP.ProgramTheory.Time
 import LaPToP.ProgramTheory.Space
+import LaPToP.ProgramTheory.Search
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -303,6 +304,72 @@ is not a theorem". Uses {uses "time_variable"}[] and {uses "refinement_laws"}[].
 :::proof "termination"
 Direct from the definitions; the non-theorem is refuted by the prestate
 $`t = 0, x = 0` and poststate $`t = 2, x = 2`.
+:::
+
+:::theorem "linear_search" (parent := "program_theory_core") (tags := "programs, search, time, hehner-4.2.4") (effort := "medium") (lean := "LaPToP.ProgramTheory.LinearSearch.LS, LaPToP.ProgramTheory.LinearSearch.assignH, LaPToP.ProgramTheory.LinearSearch.tick, LaPToP.ProgramTheory.LinearSearch.assignH_seq, LaPToP.ProgramTheory.LinearSearch.tick_seq, LaPToP.ProgramTheory.LinearSearch.notIn, LaPToP.ProgramTheory.LinearSearch.P, LaPToP.ProgramTheory.LinearSearch.Q, LaPToP.ProgramTheory.LinearSearch.Q', LaPToP.ProgramTheory.LinearSearch.refine₁, LaPToP.ProgramTheory.LinearSearch.refine₂, LaPToP.ProgramTheory.LinearSearch.refine₃, LaPToP.ProgramTheory.LinearSearch.T, LaPToP.ProgramTheory.LinearSearch.TQ, LaPToP.ProgramTheory.LinearSearch.TQ', LaPToP.ProgramTheory.LinearSearch.time₁, LaPToP.ProgramTheory.LinearSearch.time₂, LaPToP.ProgramTheory.LinearSearch.time₃, LaPToP.ProgramTheory.LinearSearch.PT, LaPToP.ProgramTheory.LinearSearch.QT, LaPToP.ProgramTheory.LinearSearch.combined₁, LaPToP.ProgramTheory.LinearSearch.combined₂, LaPToP.ProgramTheory.LinearSearch.nonempty_variant, LaPToP.ProgramTheory.LinearSearch.SS, LaPToP.ProgramTheory.LinearSearch.appendX, LaPToP.ProgramTheory.LinearSearch.assignHs, LaPToP.ProgramTheory.LinearSearch.Qs, LaPToP.ProgramTheory.LinearSearch.sentinel_loop, LaPToP.ProgramTheory.LinearSearch.Ps, LaPToP.ProgramTheory.LinearSearch.sentinel_top")
+"Exercise 186: Write a program to find the first occurrence of a given item in
+a given list. The execution time must be linear in the length of the list. Let
+the list be $`L` and the value we are looking for be $`x` (these are not state
+variables). Our program will assign natural variable $`h` (for “here”) the index
+of the first occurrence of $`x` in $`L` if $`x` is there. ... it will be convenient
+to indicate that $`x` is not in $`L` by assigning $`h` the length of $`L`. The
+specification is $`\lnot x : L\,(0,..h') \land (L\,h' = x \lor h' = \# L) \land t' \le t + \# L`. ...
+$`\lnot x : L\,(0,..h') \land (L\,h' = x \lor h' = \# L) \Leftarrow h := 0.\ h \le \# L \Rightarrow \lnot x : L\,(h,..h') \land (L\,h' = x \lor h' = \# L)`
+... We needed to generalize the starting index to describe the remaining
+problem as the search progresses. ... To test $`L\,h = x` we need to know $`h < \# L`,
+so we have to test $`h = \# L` first.
+$`h \le \# L \Rightarrow \ldots \Leftarrow \mathbf{if}\ h = \# L\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ h < \# L \Rightarrow \ldots`;
+$`h < \# L \Rightarrow \ldots \Leftarrow \mathbf{if}\ L\,h = x\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ h := h+1.\ h \le \# L \Rightarrow \ldots`.
+Now for the timing: $`t' \le t + \# L \Leftarrow h := 0.\ h \le \# L \Rightarrow t' \le t + \# L - h`; ...
+$`h < \# L \Rightarrow t' \le t + \# L - h \Leftarrow \mathbf{if}\ L\,h = x\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ h := h+1.\ t := t+1.\ h \le \# L \Rightarrow t' \le t + \# L - h`.
+Refinement by Parts says that if the same refinement structure can be used for
+two specifications, then it can be used for their conjunction. ... It is not
+really necessary to take such small steps in programming. We could have written
+the combined three-line refinement. But now, suppose we learn that the given
+list $`L` is known to be nonempty. ... $`h := 0.\ h < \# L \Rightarrow \ldots` and that's all. ...
+We can sometimes improve the execution time (real measure) by a technique
+called the sentinel. We need list $`L` to be a variable so we can join one value
+to the end of it. ... Then the search is sure to find $`x`, and we can skip the
+test $`h = \# L` each iteration. The program, ignoring time, becomes
+$`\lnot x : L\,(0,..h') \land (L\,h' = x \lor h' = \# L) \Leftarrow L := L;;[x].\ h := 0.\ Q`,
+$`Q \Leftarrow \mathbf{if}\ L\,h = x\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ h := h+1.\ Q` where
+$`Q = L\,(\# L - 1) = x \land h < \# L \Rightarrow L' = L \land \lnot x : L\,(h,..h') \land L\,h' = x`." A list is a
+function with a length; the recursive calls are the specifications being
+refined. Proved: the three refinements, the three timing refinements (time in
+$`\mathit{xnat}` as in {uses "recursive_time"}[]), the combined version of the
+conjunction (which {uses "refinement_by_steps_parts_cases"}[] justifies),
+the nonempty variant, and both lines of the sentinel version (with the list a
+variable). Uses {uses "bunch_interval"}[].
+:::
+
+:::theorem "binary_search" (parent := "program_theory_core") (tags := "programs, search, time, hehner-4.2.5") (effort := "medium") (lean := "LaPToP.ProgramTheory.BinarySearch.BS, LaPToP.ProgramTheory.BinarySearch.assignH, LaPToP.ProgramTheory.BinarySearch.assignI, LaPToP.ProgramTheory.BinarySearch.assignJ, LaPToP.ProgramTheory.BinarySearch.assignP, LaPToP.ProgramTheory.BinarySearch.tick, LaPToP.ProgramTheory.BinarySearch.assignH_seq, LaPToP.ProgramTheory.BinarySearch.assignI_seq, LaPToP.ProgramTheory.BinarySearch.assignJ_seq, LaPToP.ProgramTheory.BinarySearch.tick_seq, LaPToP.ProgramTheory.BinarySearch.occurs, LaPToP.ProgramTheory.BinarySearch.Sorted, LaPToP.ProgramTheory.BinarySearch.Prob, LaPToP.ProgramTheory.BinarySearch.R, LaPToP.ProgramTheory.BinarySearch.U, LaPToP.ProgramTheory.BinarySearch.V, LaPToP.ProgramTheory.BinarySearch.Mid, LaPToP.ProgramTheory.BinarySearch.refine₁, LaPToP.ProgramTheory.BinarySearch.refine₂, LaPToP.ProgramTheory.BinarySearch.occurs_right, LaPToP.ProgramTheory.BinarySearch.occurs_left, LaPToP.ProgramTheory.BinarySearch.refine₃, LaPToP.ProgramTheory.BinarySearch.refine₄, LaPToP.ProgramTheory.BinarySearch.T, LaPToP.ProgramTheory.BinarySearch.TU, LaPToP.ProgramTheory.BinarySearch.TV, LaPToP.ProgramTheory.BinarySearch.time₁, LaPToP.ProgramTheory.BinarySearch.time₂, LaPToP.ProgramTheory.BinarySearch.time₃")
+"Exercise 187: Write a program to find a given item in a given nonempty sorted
+list. The execution time must be logarithmic in the length of the list. The
+strategy is to identify which half of the list contains the item if it occurs,
+then which quarter, then which eighth, and so on. ... let's indicate whether $`x`
+is present in $`L` by assigning binary variable $`p` the value $`\top` if it is and
+$`\bot` if not. Ignoring time for the moment, the problem is
+$`x : L\,(\Box L) = p' \Rightarrow L\,h' = x`. As the search progresses, we narrow the segment
+of the list that we need to search. Let us introduce natural variables $`i` and
+$`j`, and let specification $`R` describe the search within the segment $`h,..j`.
+$`R = (x : L\,(h,..j) = p' \Rightarrow L\,h' = x)`. We can now solve the problem.
+$`(x : L\,(\Box L) = p' \Rightarrow L\,h' = x) \Leftarrow h := 0.\ j := \# L.\ h < j \Rightarrow R`;
+$`h < j \Rightarrow R \Leftarrow \mathbf{if}\ j - h = 1\ \mathbf{then}\ p := L\,h = x\ \mathbf{else}\ j - h \ge 2 \Rightarrow R`;
+$`j - h \ge 2 \Rightarrow R \Leftarrow j - h \ge 2 \Rightarrow h' = h < i' < j' = j.\ \mathbf{if}\ L\,i \le x\ \mathbf{then}\ h := i\ \mathbf{else}\ j := i.\ h < j \Rightarrow R`;
+$`j - h \ge 2 \Rightarrow h' = h < i' < j' = j \Leftarrow i := \mathit{div}\,(h+j)\,2`.
+... For recursive execution time, put $`t := t+1` before the final, recursive call.
+... $`T = t' \le t + \mathit{ceil}\,(\log(\# L))`, $`U = h < j \Rightarrow t' \le t + \mathit{ceil}\,(\log(j-h))`,
+$`V = j - h \ge 2 \Rightarrow t' \le t + \mathit{ceil}\,(\log(j-h))`. ... the first case of the second
+refinement is $`\ldots \Rightarrow (x = L\,h = L\,h = x \Rightarrow L\,h = x)`, Symmetry and Base and Reflexive
+Laws $`= \top`. ... If $`h < i` and $`L\,i \le x` and $`L` is sorted, then
+$`x : L\,(i,..j) = x : L\,(h,..j)`." Reading of $`R`: with Hehner's continuing operators, as
+its proof of the $`j - h = 1` case confirms, $`R` says that $`p'` is whether $`x` occurs in
+$`L\,(h,..j)` and, if it does, $`L\,h' = x`. Proved: the four correctness refinements
+(the third from the sortedness of $`L`, via the two segment lemmas the book
+states, for segments within the list), and the three timing refinements with
+$`\mathit{ceil}\,(\log \ldots)` as `Nat.clog 2`, using the halving lemma of
+{uses "findmax"}[]: $`1 + \mathit{ceil}\,(\log(\text{half})) \le \mathit{ceil}\,(\log(j-h))`. Uses
+{uses "linear_search"}[] and {uses "recursive_time"}[].
 :::
 
 :::theorem "space" (parent := "program_theory_core") (tags := "programs, space, time, hehner-4.3") (effort := "medium") (lean := "LaPToP.ProgramTheory.Hanoi.HS, LaPToP.ProgramTheory.Hanoi.assignN, LaPToP.ProgramTheory.Hanoi.tick, LaPToP.ProgramTheory.Hanoi.assignS, LaPToP.ProgramTheory.Hanoi.assignM, LaPToP.ProgramTheory.Hanoi.assignN_seq, LaPToP.ProgramTheory.Hanoi.tick_seq, LaPToP.ProgramTheory.Hanoi.assignS_seq, LaPToP.ProgramTheory.Hanoi.assignM_seq, LaPToP.ProgramTheory.Hanoi.enat_add_one_sub_one, LaPToP.ProgramTheory.Hanoi.movePile, LaPToP.ProgramTheory.Hanoi.movePile_n, LaPToP.ProgramTheory.Hanoi.T, LaPToP.ProgramTheory.Hanoi.two_pow_succ_sub_one, LaPToP.ProgramTheory.Hanoi.time_refines, LaPToP.ProgramTheory.Hanoi.S, LaPToP.ProgramTheory.Hanoi.movePileSpace, LaPToP.ProgramTheory.Hanoi.space_refines, LaPToP.ProgramTheory.Hanoi.MS, LaPToP.ProgramTheory.Hanoi.MS_m_le, LaPToP.ProgramTheory.Hanoi.longLine, LaPToP.ProgramTheory.Hanoi.longLineSpec, LaPToP.ProgramTheory.Hanoi.longLine_refines, LaPToP.ProgramTheory.Hanoi.movePileMax, LaPToP.ProgramTheory.Hanoi.max_case_refines, LaPToP.ProgramTheory.Hanoi.maxSpace_refines, LaPToP.ProgramTheory.Hanoi.AS, LaPToP.ProgramTheory.Hanoi.Avg.assignN, LaPToP.ProgramTheory.Hanoi.Avg.assignS, LaPToP.ProgramTheory.Hanoi.Avg.assignP, LaPToP.ProgramTheory.Hanoi.Avg.assignN_seq, LaPToP.ProgramTheory.Hanoi.Avg.assignS_seq, LaPToP.ProgramTheory.Hanoi.Avg.assignP_seq, LaPToP.ProgramTheory.Hanoi.Avg.incr, LaPToP.ProgramTheory.Hanoi.Avg.Pavg, LaPToP.ProgramTheory.Hanoi.Avg.avg_refines, LaPToP.ProgramTheory.Hanoi.Avg.average_space, LaPToP.ProgramTheory.Hanoi.FS, LaPToP.ProgramTheory.Hanoi.Full.assignN, LaPToP.ProgramTheory.Hanoi.Full.assignS, LaPToP.ProgramTheory.Hanoi.Full.assignM, LaPToP.ProgramTheory.Hanoi.Full.tick, LaPToP.ProgramTheory.Hanoi.Full.addP, LaPToP.ProgramTheory.Hanoi.Full.assignN_seq, LaPToP.ProgramTheory.Hanoi.Full.assignS_seq, LaPToP.ProgramTheory.Hanoi.Full.assignM_seq, LaPToP.ProgramTheory.Hanoi.Full.tick_seq, LaPToP.ProgramTheory.Hanoi.Full.addP_seq, LaPToP.ProgramTheory.Hanoi.Full.MovePile, LaPToP.ProgramTheory.Hanoi.Full.body, LaPToP.ProgramTheory.Hanoi.Full.movePile_refines")
