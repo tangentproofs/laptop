@@ -6,6 +6,7 @@ import LaPToP.Interaction.Communication
 import LaPToP.Interaction.CommunicationTiming
 import LaPToP.Interaction.Merge
 import LaPToP.Interaction.ChannelDeclaration
+import LaPToP.Interaction.Deadlock
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -351,4 +352,61 @@ as their sequential composition, which is proved to commute. One step of the
 synchronizer reads a datum and, if there is a request, replies with exactly
 that datum — "the latest". A simplification of the {uses "monitor"}[]; uses
 {uses "channel_declaration"}[].
+:::
+
+:::theorem "deadlock" (parent := "interaction_core") (tags := "interaction, channels, deadlock, hehner-9.1.8") (effort := "small") (lean := "LaPToP.Interaction.enat_eq_top_of_add_one_le, LaPToP.Interaction.enat_eq_top_of_eq_max_succ, LaPToP.Interaction.enat_eq_top_of_mutual_wait, LaPToP.Interaction.Channel.readThenWrite, LaPToP.Interaction.Channel.newChannel_readThenWrite, LaPToP.Interaction.DS, LaPToP.Interaction.newChannel2, LaPToP.Interaction.Deadlock.mutualWait, LaPToP.Interaction.Deadlock.newChannel2_mutualWait")
+"In the previous subsection we saw that a local channel can be used as a
+buffer. Let's see what happens if we try to read first and write after
+(Exercise 528(a)). Inserting the input wait into $`\mathbf{new}\ c?!\,\mathit{int} \cdot c?.\ c!\,5`
+we get $`\mathbf{new}\ c?!\,\mathit{int} \cdot t := t \uparrow (\mathcal{T}r + 1).\ c?.\ c!\,5 = \ldots = \exists \mathcal{M} \cdot \exists \mathcal{T} \cdot \mathcal{M}0 = 5 \land \mathcal{T}0 = t \uparrow (\mathcal{T}0 + 1) \land \ldots`
+Look at the conjunct $`\mathcal{T}0 = t \uparrow (\mathcal{T}0 + 1)`. It says $`\mathcal{T}0 = \infty`.
+$`= x' = x \land t' = \infty`. The theory tells us that execution takes forever because
+the wait for input is infinite. The word “deadlock” is usually used to mean
+that several processes are waiting on each other ... But it might also be
+used to mean that a single sequential computation is waiting on itself, as in
+the previous paragraph. Here's the more traditional example with two
+processes and two local channels (Exercise 528(b)).
+$`\mathbf{new}\ c, d?!\,\mathit{int} \cdot (c?.\ d!\,6) \parallel (d?.\ c!\,7)`. Inserting the input waits, we get
+$`\mathbf{new}\ c, d?!\,\mathit{int} \cdot (t := t \uparrow (\mathcal{T}_c\,r_c + 1).\ c?.\ d!\,6) \parallel (t := t \uparrow (\mathcal{T}_d\,r_d + 1).\ d?.\ c!\,7)`
+after a little work, we obtain
+$`= \exists \mathcal{M}_c, \mathcal{M}_d \cdot \exists \mathcal{T}_c, \mathcal{T}_d \cdot \exists r_c, r_c', w_c, w_c', r_d, r_d', w_d, w_d' \cdot \mathcal{M}_d 0 = 6 \land \mathcal{T}_d 0 = t \uparrow (\mathcal{T}_c 0 + 1) \land \mathcal{M}_c 0 = 7 \land \mathcal{T}_c 0 = t \uparrow (\mathcal{T}_d 0 + 1) \land r_c' = w_c' = r_d' = w_d' = 1 \land x' = x \land t' = t \uparrow (\mathcal{T}_c 0 + 1) \uparrow (\mathcal{T}_d 0 + 1)`.
+The conjuncts $`\mathcal{T}_d 0 = t \uparrow (\mathcal{T}_c 0 + 1)` and $`\mathcal{T}_c 0 = t \uparrow (\mathcal{T}_d 0 + 1)` imply
+$`\mathcal{T}_d 0 = \mathcal{T}_c 0 = \infty`. $`= x' = x \land t' = \infty`. To prove that a computation is free
+from deadlock, prove that all message times are finite." Both exercises are
+proved as equalities, on the {uses "channel_declaration"}[] (a two-channel
+declaration is defined the same way), with the input waits of
+{uses "communication_timing"}[]; the $`\mathit{xnat}` facts are $`a + 1 \le a \Rightarrow a = \infty`,
+hence $`a = t \uparrow (a+1) \Rightarrow a = \infty`, and the mutual-wait lemma. Model note:
+the concurrent composition of 528(b) is taken as the book's own expansion
+"after a little work" (cf. {uses "concurrent_composition"}[]), with $`r_c, w_d`
+belonging to the left process and $`r_d, w_c` to the right.
+:::
+
+:::definition "broadcast" (parent := "interaction_core") (lean := "LaPToP.Interaction.BS, LaPToP.Interaction.Broadcast.input, LaPToP.Interaction.Broadcast.lastRead, LaPToP.Interaction.Broadcast.output, LaPToP.Interaction.Broadcast.parReaders, LaPToP.Interaction.Broadcast.input_lastRead, LaPToP.Interaction.Broadcast.parReaders_input")
+"A channel consists of a message script, a time script, a read cursor, and a
+write cursor. Whenever a computation splits into concurrent processes, the
+state variables must be partitioned among the processes. The scripts are not
+state variables; they do not belong to any process. The cursors are state
+variables, so one of the processes can write to the channel, and one (perhaps
+the same one, perhaps a different one) can read from the channel. ... A
+communication channel must have only a single writing process, but it can
+have more than one reading process. This is called a broadcast. In the
+program structure $`P.\ (Q \parallel R \parallel S).\ T` we might want $`Q` to write, and both
+of $`R` and $`S` to read, all on the same channel. Broadcast is achieved by
+several read cursors, one for each reading process. Then all reading
+processes read the same messages, each at its own rate. There is no harm in
+two processes reading the same message, even at the same time. But there is a
+problem with broadcast: what is the final value of the read cursor for the
+concurrent composition? ... The solution is to say that the final time for the
+concurrent composition is the maximum of the final times of the processes.
+The same solution works for the read cursor. For each channel, the final
+value of the read cursor in a concurrent composition is the maximum of the
+final values of the read cursors of the processes." A broadcast channel has
+one write cursor and $`k` read cursors; the input of reader $`i` advances its own
+cursor, and $`c` in reader $`i` is the message it last read; the concurrent
+composition of two readers takes the maximum of the final read cursors and
+times. Proved: a reader reads the message at its own cursor, and two readers
+each reading once end with each cursor advanced once ("no harm in two
+processes reading the same message"). Uses {uses "communication"}[] and
+{uses "deadlock"}[].
 :::
