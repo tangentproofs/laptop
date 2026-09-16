@@ -6,6 +6,7 @@ import LaPToP.RecursiveDefinition.Programs
 import LaPToP.RecursiveDefinition.DataConstruction
 import LaPToP.Concurrency.Composition
 import LaPToP.Concurrency.ListConcurrency
+import LaPToP.Concurrency.Transformation
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -20,7 +21,8 @@ definition (Section 6.0) is formalized in `LaPToP.RecursiveDefinition.Nat` and
 `LaPToP.RecursiveDefinition.DataConstruction`, recursive program definition
 (Section 6.1) in `LaPToP.RecursiveDefinition.Programs`, and concurrent
 composition (Section 8.0) in `LaPToP.Concurrency.Composition` and
-`LaPToP.Concurrency.ListConcurrency`.
+`LaPToP.Concurrency.ListConcurrency`, and the sequential-to-concurrent
+transformation (Section 8.1) in `LaPToP.Concurrency.Transformation`.
 :::
 
 :::definition "recursive_program" (parent := "recursion_concurrency_core") (lean := "LaPToP.RecursiveDefinition.IsFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint.unique")
@@ -341,4 +343,63 @@ recursive calls taken as specifications (as in {uses "recursive_program_zap"}[])
 and the timing exactly, from $`\lceil \log n \rceil = 1 + \lceil \log \lfloor n/2 \rfloor \rceil \uparrow \lceil \log \lceil n/2 \rceil \rceil`
 for $`n \ge 2` (`Nat.clog`). Uses {uses "list_concurrency"}[],
 {uses "recursive_time"}[] and {uses "specification_laws"}[].
+:::
+
+:::theorem "sequential_to_concurrent" (parent := "recursion_concurrency_core") (tags := "concurrency, transformation, hehner-8.1") (effort := "small") (lean := "LaPToP.Concurrency.liftL, LaPToP.Concurrency.liftR, LaPToP.Concurrency.liftLWith, LaPToP.Concurrency.liftRWith, LaPToP.Concurrency.liftL_eq_liftLWith, LaPToP.Concurrency.liftR_eq_liftRWith, LaPToP.Concurrency.seq_liftL_liftR, LaPToP.Concurrency.seq_liftR_liftL, LaPToP.Concurrency.seq_liftRWith_liftL, LaPToP.Concurrency.seq_liftLWith_liftR, LaPToP.Concurrency.seq_liftLWith_par, LaPToP.Concurrency.seq_liftRWith_par, LaPToP.Concurrency.Examples.xy, LaPToP.Concurrency.Examples.xinc, LaPToP.Concurrency.Examples.zy, LaPToP.Concurrency.Examples.step₁, LaPToP.Concurrency.Examples.step₂, LaPToP.Concurrency.Examples.result")
+"The goal of this section is to transform programs without concurrency into
+programs with concurrency. A simple example illustrates the idea.
+$`x := y.\ x := x+1.\ z := y \;=\; x := y.\ (x := x+1 \parallel z := y) \;=\; (x := y.\ x := x+1) \parallel z := y`
+... The first two assignments cannot be executed concurrently, but the last two
+can, so we transform the program. ... Now we have the first and last
+assignments next to each other, in sequence; they too can be executed
+concurrently. Whenever two programs occur in sequence, and neither assigns to
+any variable assigned in the other, and no variable assigned in the first
+appears in the second, they can be placed in parallel; a copy must be made of
+the initial value of any variable appearing in the first and assigned in the
+second. Whenever two programs occur in sequence, and neither assigns to any
+variable appearing in the other, they can be placed in parallel without any
+copying of initial values. This transformation does not change the result of a
+computation, but it may decrease the time, and that is the reason for doing
+it." With the variables partitioned as a product (see
+{uses "concurrent_composition"}[]), a program that assigns only the left
+variables is a lifted left process, reading the right variables as constants
+or not at all; the two sentences are the equalities
+$`\mathit{liftL}\,P.\ \mathit{liftR}\,Q = P \parallel Q` (no copying) and
+$`\mathit{liftRWith}\,Q.\ \mathit{liftL}\,P = P \parallel Q` with $`Q` reading the
+initial value of the left variables — the copy is exactly the initial-value
+parameter of $`\parallel` in {uses "concurrent_composition_laws"}[]. A further
+law absorbs a preceding program into one process, which gives the second step
+of the example; the three programs all compute $`x' = y+1 \land y' = y \land z' = y`.
+Model note: "assigns to" and "appears in" are expressed by the shape of the
+lifting, not by syntactic inspection of named variables; the time remark is
+not formalized here. Uses {uses "specification_laws"}[].
+:::
+
+:::theorem "buffer" (parent := "recursion_concurrency_core") (tags := "concurrency, buffer, hehner-8.1.0") (effort := "small") (lean := "LaPToP.Concurrency.Buffer.BS, LaPToP.Concurrency.Buffer.produce, LaPToP.Concurrency.Buffer.consume, LaPToP.Concurrency.Buffer.consumeC, LaPToP.Concurrency.Buffer.copy, LaPToP.Concurrency.Buffer.consume_produce, LaPToP.Concurrency.Buffer.copy_consumeC_produce, LaPToP.Concurrency.Buffer.consume_produce_eq, LaPToP.Concurrency.Buffer.consume_produce_eq_copy_par, LaPToP.Concurrency.Buffer.controlBody, LaPToP.Concurrency.Buffer.newcontrolBody, LaPToP.Concurrency.Buffer.newcontrolBody_eq, LaPToP.Concurrency.Buffer.control_of_newcontrol")
+"Consider two programs, $`\mathit{produce}` and $`\mathit{consume}`, whose only common
+variable is $`b`. $`\mathit{produce}` assigns to $`b` and $`\mathit{consume}` uses the value of
+$`b`. ... $`\mathit{produce} = \cdots b := e \cdots`, $`\mathit{consume} = \cdots x := b \cdots`.
+These two programs are executed alternately, repeatedly, forever.
+$`\mathit{control} = \mathit{produce}.\ \mathit{consume}.\ \mathit{control}`. ... Variable $`b` is
+called a buffer. ... we cannot put them in parallel because the first assigns to
+$`b` and the second uses $`b`. So we unroll the loop once.
+$`\mathit{control} = \mathit{produce}.\ \mathit{newcontrol}`,
+$`\mathit{newcontrol} = \mathit{consume}.\ \mathit{produce}.\ \mathit{newcontrol}` and
+$`\mathit{newcontrol}` can be transformed to
+$`\mathit{newcontrol} = (\mathit{consume} \parallel \mathit{produce}).\ \mathit{newcontrol}`. In
+this transformed program, a compiler will have to capture a copy of the initial
+value of $`b` for $`\mathit{consume}` to use. Or, we could do this capture at source
+level, using variable $`c`: $`\mathit{consume} = \cdots x := c \cdots`,
+$`\mathit{newcontrol} = c := b.\ (\mathit{consume} \parallel \mathit{produce}).\ \mathit{newcontrol}`."
+The unrolled body $`\mathit{consume}.\ \mathit{produce}` is the concurrent composition by
+the copy law of {uses "sequential_to_concurrent"}[]; the source-level form
+computes the same $`b'`, $`x'` and differs only in the auxiliary $`c`. Since
+$`\mathit{control}` is a recursively defined specification
+({uses "recursive_program_zap"}[]), the unrolling is stated as: any fixed point
+$`\mathit{newcontrol}` of its equation gives the fixed point
+$`\mathit{produce}.\ \mathit{newcontrol}` of the equation for $`\mathit{control}`. The
+infinite buffer with write and read counters $`w`, $`r` (concurrent whenever
+$`w \neq r`) and the cyclic buffer of length $`n` are left informal, as the book
+says the pattern "is not expressible as a source program without additional
+interactive constructs (Chapter 9)".
 :::
