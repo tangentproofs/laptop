@@ -7,6 +7,7 @@ import LaPToP.ProgramTheory.Scope
 import LaPToP.ProgramTheory.Assertions
 import LaPToP.ProgramTheory.Subprograms
 import LaPToP.ProgramTheory.ExitLoop
+import LaPToP.ProgramTheory.TwoDimSearch
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -115,6 +116,47 @@ $`x' = x \uparrow n \Leftarrow \mathbf{do}\ \mathbf{exit\ when}\ x \ge n.\ x := 
 remark (refinement structures not expressible as exit-loops) is not
 formalized. Uses {uses "refinement_by_steps_parts_cases"}[] and
 {uses "specification_laws"}[].
+:::
+
+:::theorem "two_dimensional_search" (parent := "programming_language_core") (tags := "programs, search, time, hehner-5.2.2") (effort := "medium") (lean := "LaPToP.ProgramTheory.TwoDimSearch.S2, LaPToP.ProgramTheory.TwoDimSearch.assignI, LaPToP.ProgramTheory.TwoDimSearch.assignJ, LaPToP.ProgramTheory.TwoDimSearch.tick, LaPToP.ProgramTheory.TwoDimSearch.assignI_seq, LaPToP.ProgramTheory.TwoDimSearch.assignJ_seq, LaPToP.ProgramTheory.TwoDimSearch.tick_seq, LaPToP.ProgramTheory.TwoDimSearch.guard, LaPToP.ProgramTheory.TwoDimSearch.memRows, LaPToP.ProgramTheory.TwoDimSearch.memFrom, LaPToP.ProgramTheory.TwoDimSearch.found, LaPToP.ProgramTheory.TwoDimSearch.notFound, LaPToP.ProgramTheory.TwoDimSearch.P, LaPToP.ProgramTheory.TwoDimSearch.Q, LaPToP.ProgramTheory.TwoDimSearch.R, LaPToP.ProgramTheory.TwoDimSearch.not_memRows_self, LaPToP.ProgramTheory.TwoDimSearch.memFrom_zero, LaPToP.ProgramTheory.TwoDimSearch.memFrom_m, LaPToP.ProgramTheory.TwoDimSearch.memFrom_succ, LaPToP.ProgramTheory.TwoDimSearch.refine₁, LaPToP.ProgramTheory.TwoDimSearch.refine₂, LaPToP.ProgramTheory.TwoDimSearch.refine₃, LaPToP.ProgramTheory.TwoDimSearch.refine₄, LaPToP.ProgramTheory.TwoDimSearch.refine₅, LaPToP.ProgramTheory.TwoDimSearch.L0, LaPToP.ProgramTheory.TwoDimSearch.L1, LaPToP.ProgramTheory.TwoDimSearch.compiled₀, LaPToP.ProgramTheory.TwoDimSearch.compiled₁, LaPToP.ProgramTheory.TwoDimSearch.compiled₂, LaPToP.ProgramTheory.TwoDimSearch.within, LaPToP.ProgramTheory.TwoDimSearch.within_mono, LaPToP.ProgramTheory.TwoDimSearch.bookTR, LaPToP.ProgramTheory.TwoDimSearch.bookTQ, LaPToP.ProgramTheory.TwoDimSearch.book_timed_R_fails, LaPToP.ProgramTheory.TwoDimSearch.TR, LaPToP.ProgramTheory.TwoDimSearch.TR', LaPToP.ProgramTheory.TwoDimSearch.TQ, LaPToP.ProgramTheory.TwoDimSearch.TQ', LaPToP.ProgramTheory.TwoDimSearch.timed₁, LaPToP.ProgramTheory.TwoDimSearch.timed₂, LaPToP.ProgramTheory.TwoDimSearch.timed₃, LaPToP.ProgramTheory.TwoDimSearch.add_one_add_cast, LaPToP.ProgramTheory.TwoDimSearch.timed₄, LaPToP.ProgramTheory.TwoDimSearch.timed₅")
+"To illustrate the preceding subsection, we can do Exercise 191: Write a
+program to find a given item in a given 2-dimensional array. The execution
+time must be linear in the product of the dimensions. Let the array be $`A`,
+let its dimensions be $`n` by $`m`, and let the item we seek be $`x`. We will
+indicate the position of $`x` in $`A` by the final values of natural variables
+$`i` and $`j`. If $`x` occurs more than once, any of its positions will do. If it
+does not occur, we will indicate that by $`i' = n`. The problem, except for
+time, is $`P`: $`P = \mathbf{if}\ x : A\,(0,..n)\,(0,..m)\ \mathbf{then}\ x = A\,i'\,j'\ \mathbf{else}\ i' = n`
+... $`Q = \mathbf{if}\ x : A\,(i,..n)\,(0,..m)\ \mathbf{then}\ x = A\,i'\,j'\ \mathbf{else}\ i' = n`
+... $`R = \mathbf{if}\ x : A\,i\,(j,..m), A\,(i+1,..n)\,(0,..m)\ \mathbf{then}\ x = A\,i'\,j'\ \mathbf{else}\ i' = n`.
+We now solve the problem in five easy pieces.
+$`P \Leftarrow i := 0.\ i \le n \Rightarrow Q`;
+$`i \le n \Rightarrow Q \Leftarrow \mathbf{if}\ i = n\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ i < n \Rightarrow Q`;
+$`i < n \Rightarrow Q \Leftarrow j := 0.\ i < n \land j \le m \Rightarrow R`;
+$`i < n \land j \le m \Rightarrow R \Leftarrow \mathbf{if}\ j = m\ \mathbf{then}\ i := i+1.\ i \le n \Rightarrow Q\ \mathbf{else}\ i < n \land j < m \Rightarrow R`;
+$`i < n \land j < m \Rightarrow R \Leftarrow \mathbf{if}\ A\,i\,j = x\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ j := j+1.\ i < n \land j \le m \Rightarrow R`.
+... To a compiler, after two uses of Refinement by Steps, the program appears
+as $`P \Leftarrow i := 0.\ L0`, $`L0 \Leftarrow \mathbf{if}\ i = n\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ j := 0.\ L1`,
+$`L1 \Leftarrow \mathbf{if}\ j = m\ \mathbf{then}\ i := i+1.\ L0\ \mathbf{else}\ \mathbf{if}\ A\,i\,j = x\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ j := j+1.\ L1`.
+To add recursive time, ... we can get away with a single time increment placed
+just before the test $`j = m`. ... The time remaining is at most the area
+remaining to be searched." The array is a function, and the bunch membership
+$`x : A\,(i,..n)\,(0,..m)` is the predicate that some $`A\,a\,b = x` with
+$`i \le a < n`, $`b < m`. The five refinements are proved as stated and the
+compiler's three pieces derived by {uses "refinement_by_steps_parts_cases"}[].
+A correction, recorded: the book's timed refinements use the bounds
+$`t' \le t + n \times m`, $`i \le n \Rightarrow t' \le t + (n-i) \times m` and
+$`i < n \land j \le m \Rightarrow t' \le t + (n-i) \times m - j` both before and after the
+increment. With one increment per iteration of $`L1` each row costs $`m+1`
+increments (the tests $`j = 0, \ldots, m`), so the book's fourth timed refinement
+is false in both branches — for $`n = 1`, $`m = 0` the program takes one time unit
+where the bound allows none (`book_timed_R_fails`). The corrected bounds
+$`t' \le t + n \times (m+1)`, $`i \le n \Rightarrow t' \le t + (n-i) \times (m+1)`,
+$`i < n \land j \le m \Rightarrow t' \le t + (n-i) \times (m+1) - j` before the increment and
+$`\ldots - j - 1` after it are proved in the same five pieces, with the time in
+$`\mathit{xnat}` as in {uses "time_variable"}[]; the execution time is still linear
+in the product of the dimensions. This example "illustrates the preceding
+subsection", {uses "exit_loop"}[]. Uses {uses "specification_laws"}[].
 :::
 
 :::definition "for_loop" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.ForRefines, LaPToP.ProgramTheory.Spec.ForRefines.step, LaPToP.ProgramTheory.Spec.ForRefines.exit, LaPToP.ProgramTheory.Spec.forRefines_self, LaPToP.ProgramTheory.Spec.iterSeq, LaPToP.ProgramTheory.Spec.iterSeq_mono, LaPToP.ProgramTheory.Spec.ForRefines.unroll, LaPToP.ProgramTheory.Spec.forRefines_invariant")
