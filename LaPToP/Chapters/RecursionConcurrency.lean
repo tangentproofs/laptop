@@ -5,6 +5,7 @@ import LaPToP.RecursiveDefinition.Nat
 import LaPToP.RecursiveDefinition.Programs
 import LaPToP.RecursiveDefinition.DataConstruction
 import LaPToP.Concurrency.Composition
+import LaPToP.Concurrency.ListConcurrency
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -18,7 +19,8 @@ later chapters of *A Practical Theory of Programming*. Recursive data
 definition (Section 6.0) is formalized in `LaPToP.RecursiveDefinition.Nat` and
 `LaPToP.RecursiveDefinition.DataConstruction`, recursive program definition
 (Section 6.1) in `LaPToP.RecursiveDefinition.Programs`, and concurrent
-composition (Section 8.0) in `LaPToP.Concurrency.Composition`.
+composition (Section 8.0) in `LaPToP.Concurrency.Composition` and
+`LaPToP.Concurrency.ListConcurrency`.
 :::
 
 :::definition "recursive_program" (parent := "recursion_concurrency_core") (lean := "LaPToP.RecursiveDefinition.IsFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint.unique")
@@ -302,4 +304,41 @@ $`B \Leftarrow D`, $`C \Leftarrow E` then $`A \Leftarrow D \parallel E`; so does
 if $`A \Leftarrow B \parallel C` and $`D \Leftarrow E \parallel F` then $`A \land D \Leftarrow (B \land E) \parallel (C \land F)`."
 Uses {uses "concurrent_composition"}[], {uses "specification_laws"}[] and
 {uses "refinement_by_steps_parts_cases"}[].
+:::
+
+:::definition "list_concurrency" (parent := "recursion_concurrency_core") (lean := "LaPToP.Concurrency.LS, LaPToP.Concurrency.ListConc.assignItem, LaPToP.Concurrency.ListConc.tick, LaPToP.Concurrency.ListConc.tick_seq, LaPToP.Concurrency.ListConc.parSeg, LaPToP.Concurrency.ListConc.segSup, LaPToP.Concurrency.ListConc.segSup_singleton, LaPToP.Concurrency.ListConc.segSup_split, LaPToP.Concurrency.ListConc.segSup_congr")
+"We have defined concurrent composition by partitioning the variables. For
+finer-grained concurrency, we can extend this same idea to the individual items
+within list variables. ... $`L\,i := e = (L'\,i = e \land (\forall j \cdot j \neq i \Rightarrow L'\,j = L\,j) \land x' = x \land \ldots)`
+... For concurrent composition, we must specify the final values of only the
+items and variables in one side of the partition." The state is a list
+variable $`L` (an indexed sequence) with the time $`t`; segment concurrency
+composes a process owning the items $`i,..m` with one owning $`m,..j`: both
+start from the same state, the final list takes each process's values on its
+segment, items outside $`i,..j` are unchanged, and $`t' = t_P \uparrow t_Q`. The
+segment maximum $`\Uparrow L[i;..j]` is a supremum in $`\mathit{xint}`, $`-\infty` on an
+empty segment as in {uses "quantifier_numeric"}[]; it is the item on a
+one-item segment and splits as $`\Uparrow L[i;..j] = \Uparrow L[i;..m] \uparrow \Uparrow L[m;..j]`.
+Uses {uses "concurrent_composition"}[], {uses "list_axioms"}[] and
+{uses "time_variable"}[].
+:::
+
+:::theorem "findmax" (parent := "recursion_concurrency_core") (tags := "concurrency, lists, time, hehner-8.0.1") (effort := "medium") (lean := "LaPToP.Concurrency.ListConc.clog_two_split, LaPToP.Concurrency.ListConc.coe_max_enat, LaPToP.Concurrency.ListConc.max_add_add_left_enat, LaPToP.Concurrency.ListConc.findmax, LaPToP.Concurrency.ListConc.findmax_zero, LaPToP.Concurrency.ListConc.mid, LaPToP.Concurrency.ListConc.findmax_refines")
+Exercise 172, "find the maximum item in a list": "our specification will be
+$`L'\,0 = \Uparrow L \land t' = t + \lceil \log(\# L) \rceil`. ... The first step is to
+generalize from the maximum of a nonempty list to the maximum of a nonempty
+segment: $`\mathit{findmax} = \langle i, j \cdot i < j \Rightarrow L'\,i = \Uparrow L[i;..j] \land t' = t + \lceil \log(j - i) \rceil \rangle`.
+Our specification is $`\mathit{findmax}\ 0\ (\# L)`. We refine as follows:
+$`\mathit{findmax}\ i\ j \Leftarrow \mathbf{if}\ j - i = 1\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ t := t+1.\ (\mathit{findmax}\ i\ m \parallel \mathit{findmax}\ m\ j).\ L\,i := L\,i \uparrow L\,m`
+with $`m = \mathit{div}\,(i+j)\,2`. If $`j - i = 1` the segment contains one item; to
+place the maximum item (the only item) at index $`i` requires no change. In the
+other case ... we divide the segment into two halves, placing the maximum of
+each half at the beginning of the half. In the concurrent composition, the two
+processes change disjoint segments of the list. We finish by placing the
+maximum of the two maximums at the start of the whole segment. The recursive
+execution time is $`\lceil \log(j - i) \rceil`." The refinement is proved with the
+recursive calls taken as specifications (as in {uses "recursive_program_zap"}[]),
+and the timing exactly, from $`\lceil \log n \rceil = 1 + \lceil \log \lfloor n/2 \rfloor \rceil \uparrow \lceil \log \lceil n/2 \rceil \rceil`
+for $`n \ge 2` (`Nat.clog`). Uses {uses "list_concurrency"}[],
+{uses "recursive_time"}[] and {uses "specification_laws"}[].
 :::
