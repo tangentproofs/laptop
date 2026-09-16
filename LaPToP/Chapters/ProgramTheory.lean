@@ -304,7 +304,7 @@ Direct from the definitions; the non-theorem is refuted by the prestate
 $`t = 0, x = 0` and poststate $`t = 2, x = 2`.
 :::
 
-:::theorem "space" (parent := "program_theory_core") (tags := "programs, space, time, hehner-4.3") (effort := "medium") (lean := "LaPToP.ProgramTheory.Hanoi.HS, LaPToP.ProgramTheory.Hanoi.assignN, LaPToP.ProgramTheory.Hanoi.tick, LaPToP.ProgramTheory.Hanoi.assignS, LaPToP.ProgramTheory.Hanoi.assignM, LaPToP.ProgramTheory.Hanoi.assignN_seq, LaPToP.ProgramTheory.Hanoi.tick_seq, LaPToP.ProgramTheory.Hanoi.assignS_seq, LaPToP.ProgramTheory.Hanoi.assignM_seq, LaPToP.ProgramTheory.Hanoi.enat_add_one_sub_one, LaPToP.ProgramTheory.Hanoi.movePile, LaPToP.ProgramTheory.Hanoi.movePile_n, LaPToP.ProgramTheory.Hanoi.T, LaPToP.ProgramTheory.Hanoi.two_pow_succ_sub_one, LaPToP.ProgramTheory.Hanoi.time_refines, LaPToP.ProgramTheory.Hanoi.S, LaPToP.ProgramTheory.Hanoi.movePileSpace, LaPToP.ProgramTheory.Hanoi.space_refines, LaPToP.ProgramTheory.Hanoi.MS, LaPToP.ProgramTheory.Hanoi.MS_m_le, LaPToP.ProgramTheory.Hanoi.longLine, LaPToP.ProgramTheory.Hanoi.longLineSpec, LaPToP.ProgramTheory.Hanoi.longLine_refines, LaPToP.ProgramTheory.Hanoi.movePileMax, LaPToP.ProgramTheory.Hanoi.max_case_refines, LaPToP.ProgramTheory.Hanoi.maxSpace_refines")
+:::theorem "space" (parent := "program_theory_core") (tags := "programs, space, time, hehner-4.3") (effort := "medium") (lean := "LaPToP.ProgramTheory.Hanoi.HS, LaPToP.ProgramTheory.Hanoi.assignN, LaPToP.ProgramTheory.Hanoi.tick, LaPToP.ProgramTheory.Hanoi.assignS, LaPToP.ProgramTheory.Hanoi.assignM, LaPToP.ProgramTheory.Hanoi.assignN_seq, LaPToP.ProgramTheory.Hanoi.tick_seq, LaPToP.ProgramTheory.Hanoi.assignS_seq, LaPToP.ProgramTheory.Hanoi.assignM_seq, LaPToP.ProgramTheory.Hanoi.enat_add_one_sub_one, LaPToP.ProgramTheory.Hanoi.movePile, LaPToP.ProgramTheory.Hanoi.movePile_n, LaPToP.ProgramTheory.Hanoi.T, LaPToP.ProgramTheory.Hanoi.two_pow_succ_sub_one, LaPToP.ProgramTheory.Hanoi.time_refines, LaPToP.ProgramTheory.Hanoi.S, LaPToP.ProgramTheory.Hanoi.movePileSpace, LaPToP.ProgramTheory.Hanoi.space_refines, LaPToP.ProgramTheory.Hanoi.MS, LaPToP.ProgramTheory.Hanoi.MS_m_le, LaPToP.ProgramTheory.Hanoi.longLine, LaPToP.ProgramTheory.Hanoi.longLineSpec, LaPToP.ProgramTheory.Hanoi.longLine_refines, LaPToP.ProgramTheory.Hanoi.movePileMax, LaPToP.ProgramTheory.Hanoi.max_case_refines, LaPToP.ProgramTheory.Hanoi.maxSpace_refines, LaPToP.ProgramTheory.Hanoi.AS, LaPToP.ProgramTheory.Hanoi.Avg.assignN, LaPToP.ProgramTheory.Hanoi.Avg.assignS, LaPToP.ProgramTheory.Hanoi.Avg.assignP, LaPToP.ProgramTheory.Hanoi.Avg.assignN_seq, LaPToP.ProgramTheory.Hanoi.Avg.assignS_seq, LaPToP.ProgramTheory.Hanoi.Avg.assignP_seq, LaPToP.ProgramTheory.Hanoi.Avg.incr, LaPToP.ProgramTheory.Hanoi.Avg.Pavg, LaPToP.ProgramTheory.Hanoi.Avg.avg_refines, LaPToP.ProgramTheory.Hanoi.Avg.average_space, LaPToP.ProgramTheory.Hanoi.FS, LaPToP.ProgramTheory.Hanoi.Full.assignN, LaPToP.ProgramTheory.Hanoi.Full.assignS, LaPToP.ProgramTheory.Hanoi.Full.assignM, LaPToP.ProgramTheory.Hanoi.Full.tick, LaPToP.ProgramTheory.Hanoi.Full.addP, LaPToP.ProgramTheory.Hanoi.Full.assignN_seq, LaPToP.ProgramTheory.Hanoi.Full.assignS_seq, LaPToP.ProgramTheory.Hanoi.Full.assignM_seq, LaPToP.ProgramTheory.Hanoi.Full.tick_seq, LaPToP.ProgramTheory.Hanoi.Full.addP_seq, LaPToP.ProgramTheory.Hanoi.Full.MovePile, LaPToP.ProgramTheory.Hanoi.Full.body, LaPToP.ProgramTheory.Hanoi.Full.movePile_refines")
 "Our example to illustrate space calculation is Exercise 293: the Towers of
 Hanoi. ... Our solution is $`\mathit{MovePile}\ \text{“A”}\ \text{“B”}\ \text{“C”}` where we refine
 $`\mathit{MovePile}` as follows.
@@ -342,12 +342,34 @@ $`s \le m \le s+n \Rightarrow (m := s+n) \Leftarrow \mathbf{if}\ n = 0\ \mathbf{
 The proof of the refinement proceeds in the usual two cases. ... Before
 proving the last case, let's simplify the long line that occurs twice.
 $`s := s+1.\ m := m \uparrow s.\ s \le m \le s+n \Rightarrow (m := s+n).\ s := s-1 \ldots = m \le s+1+n \Rightarrow (m := s+1+n)`."
+Average space (Subsection 4.3.1): "To find the average space occupied during
+a computation, we find the cumulative space-time product, and then divide by
+the execution time. Let $`p` be the cumulative space-time product at the start
+of execution, and $`p'` be the cumulative space-time product at the end of
+execution. We still need variable $`s`, but we no longer need variables $`t` and
+$`m`. An increase in $`p` occurs where there would be an increase in $`t`, and the
+increase is $`s` times the increase in $`t`. In the example, where $`t` was
+increased by $`1`, $`p` is increased by $`s \times 1`. We prove
+$`p := p + s \times (2^n - 1) + (n-2) \times 2^n + 2 \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ n := n-1.\ s := s+1.\ p := p + s \times (2^n - 1) + (n-2) \times 2^n + 2.\ s := s-1.\ p := p + s \times 1.\ s := s+1.\ p := p + s \times (2^n - 1) + (n-2) \times 2^n + 2.\ s := s-1.\ n := n+1`
+... The additional amount $`(n-2) \times 2^n + 2` is due to our computation. The
+average space due to our computation is this additional amount divided by the
+execution time. Thus the average space occupied by our computation is
+$`n + n/(2^n - 1) - 2`. ... Putting together all the proofs for the Towers of
+Hanoi problem, we have
+$`\mathit{MovePile} \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ n := n-1.\ s := s+1.\ m := m \uparrow s.\ \mathit{MovePile}.\ s := s-1.\ t := t+1.\ p := p+s.\ \mathit{ok}.\ s := s+1.\ m := m \uparrow s.\ \mathit{MovePile}.\ s := s-1.\ n := n+1`
+where $`\mathit{MovePile}` is the specification
+$`n' = n \land t' = t + 2^n - 1 \land s' = s \land (s \le m \le s+n \Rightarrow m' = s+n) \land p' = p + s \times (2^n - 1) + (n-2) \times 2^n + 2`."
 The state has $`n`, the time, the space and the maximum space (the last three
 in $`\mathit{xnat}`); disk positions and tower parameters are ignored as the book does,
 and the recursive calls are the specifications being refined. Proved by the
 book's two cases: $`n' = n` for $`\mathit{MovePile}` when $`\mathit{MoveDisk}` satisfies it; the
 time $`2^n - 1`; no space leaks, $`s' = s`; the long line refines
-$`m \le s+1+n \Rightarrow (m := s+1+n)`; and the maximum-space refinement, together
-with "$`m' \ge m`" for the specification. Uses {uses "recursive_time"}[],
+$`m \le s+1+n \Rightarrow (m := s+1+n)`; the maximum-space refinement, together with
+"$`m' \ge m`" for the specification; the average-space refinement ("use
+substitution law 10 times") on a state with integer space and product, since
+$`(n-2) \times 2^n` is signed; the identity
+$`(n-2) \times 2^n + 2 = (2^n - 1) \times (n + n/(2^n - 1) - 2)`; and the combined
+five-conjunct $`\mathit{MovePile}` refinement, on a state with finite space and
+$`\mathit{xnat}` time and maximum. Uses {uses "recursive_time"}[],
 {uses "refinement_by_steps_parts_cases"}[] and {uses "substitution_law"}[].
 :::
