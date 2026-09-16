@@ -7,6 +7,7 @@ import LaPToP.Interaction.CommunicationTiming
 import LaPToP.Interaction.Merge
 import LaPToP.Interaction.ChannelDeclaration
 import LaPToP.Interaction.Deadlock
+import LaPToP.Interaction.PowerSeries
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -409,4 +410,55 @@ times. Proved: a reader reads the message at its own cursor, and two readers
 each reading once end with each cursor advanced once ("no harm in two
 processes reading the same message"). Uses {uses "communication"}[] and
 {uses "deadlock"}[].
+:::
+
+:::theorem "power_series_multiplication" (parent := "interaction_core") (tags := "interaction, channels, recursion, hehner-9.1.10") (effort := "large") (lean := "LaPToP.Interaction.PowerSeries.conv, LaPToP.Interaction.PowerSeries.conv_zero, LaPToP.Interaction.PowerSeries.conv_one, LaPToP.Interaction.PowerSeries.conv_succ_succ, LaPToP.Interaction.PowerSeries.P, LaPToP.Interaction.PowerSeries.Loop, LaPToP.Interaction.PowerSeries.loop_step, LaPToP.Interaction.PowerSeries.main_step, LaPToP.Interaction.PowerSeries.QS, LaPToP.Interaction.PowerSeries.inputA, LaPToP.Interaction.PowerSeries.inputB, LaPToP.Interaction.PowerSeries.inputD, LaPToP.Interaction.PowerSeries.outputC, LaPToP.Interaction.PowerSeries.inputs, LaPToP.Interaction.PowerSeries.inputA_inputB_comm, LaPToP.Interaction.PowerSeries.inputB_inputD_comm, LaPToP.Interaction.PowerSeries.LoopSpec, LaPToP.Interaction.PowerSeries.loop_refines")
+"To end, we present an example that combines communicating processes, local
+channel declaration, and dynamic process generation, in one beautiful little
+program. ... Exercise 527 is multiplication of power series: Write a program
+to read from channel $`a` an infinite sequence of coefficients $`a_0\,a_1\,a_2\,a_3 \ldots`
+of a power series $`a_0 + a_1 \times x + a_2 \times x^2 + a_3 \times x^3 + \ldots` and
+concurrently to read from channel $`b` an infinite sequence of coefficients
+$`b_0\,b_1\,b_2\,b_3 \ldots` ... and concurrently to write on channel $`c` the infinite
+sequence of coefficients $`c_0\,c_1\,c_2\,c_3 \ldots` of the power series ... equal to
+the product of the two input series. Assume that all inputs are already
+available; there are no input delays. Produce the outputs one per time unit.
+The question provides us with a notation for the coefficients:
+$`a_n = \mathcal{M}_a\,(r_a+n)`, $`b_n = \mathcal{M}_b\,(r_b+n)`, and $`c_n = \mathcal{M}_c\,(w_c+n)`. ...
+$`C = A \times B \land \forall n \cdot \mathcal{T}_c\,(w_c+n) = t+n` ... from which we see
+$`c_n = \Sigma i : 0,..n+1 \cdot a_i \times b_{n-i}`. ...
+$`A \times B = a_0 \times b_0 + (a_0 \times b_1 + a_1 \times b_0) \times x + (a_0 \times B_2 + A_1 \times B_1 + A_2 \times b_0) \times x^2`.
+... We need a channel parameter, for which we invent the notation
+$`\langle c?!\,T \cdot S \rangle`. ... $`P = \langle c?!\,\mathit{rat} \cdot C = A \times B \rangle`. We refine $`P\,c` as
+follows.
+$`P\,c \Leftarrow (a? \parallel b?).\ c!\,a \times b.\ \mathbf{new}\ a_0 : \mathit{rat} := a \cdot \mathbf{new}\ b_0 : \mathit{rat} := b \cdot \mathbf{new}\ d?!\,\mathit{rat} \cdot P\,d \parallel ((a? \parallel b?).\ c!\,a_0 \times b + a \times b_0.\ C = a_0 \times B + D + A \times b_0)`
+$`C = a_0 \times B + D + A \times b_0 \Leftarrow (a? \parallel b? \parallel d?).\ c!\,a_0 \times b + d + a \times b_0.\ C = a_0 \times B + D + A \times b_0`
+That is the whole program: 4 lines! ... Both $`P\,d` and its concurrent process
+will be reading from channels $`a` and $`b` using separate read cursors. ... The
+proof is completely straightforward. Here it is in detail. We start with the
+right side of the first refinement, leaving out time. ... Make all
+substitutions indicated by assignment
+$`= \mathcal{M}_c\,w_c = \mathcal{M}_a\,r_a \times \mathcal{M}_b\,r_b \land \exists a_0, \ldots \cdot (\forall n \cdot d_n = \Sigma i : 0,..n+1 \cdot \mathcal{M}_a\,(r_a+1+i) \times \mathcal{M}_b\,(r_b+1+n-i)) \land \mathcal{M}_c\,(w_c+1) = \mathcal{M}_a\,r_a \times \mathcal{M}_b\,(r_b+1) + \mathcal{M}_a\,(r_a+1) \times \mathcal{M}_b\,r_b \land (\forall n \cdot \mathcal{M}_c\,(w_c+2+n) = \mathcal{M}_a\,r_a \times \mathcal{M}_b\,(r_b+2+n) + d_n + \mathcal{M}_a\,(r_a+2+n) \times \mathcal{M}_b\,r_b)`
+Use the first universal quantification to replace $`d_n` in the second. ... Now
+put the three conjuncts together
+$`= \forall n \cdot \mathcal{M}_c\,(w_c+n) = \Sigma i : 0,..n+1 \cdot \mathcal{M}_a\,(r_a+i) \times \mathcal{M}_b\,(r_b+n-i) = P\,c`.
+We still have to prove the loop refinement. ... Make all substitutions
+indicated by assignment
+$`= \mathcal{M}_c\,w_c = a_0 \times \mathcal{M}_b\,r_b + \mathcal{M}_d\,r_d + \mathcal{M}_a\,r_a \times b_0 \land \forall n \cdot \mathcal{M}_c\,(w_c+1+n) = a_0 \times \mathcal{M}_b\,(r_b+1+n) + \mathcal{M}_d\,(r_d+1+n) + \mathcal{M}_a\,(r_a+1+n) \times b_0`
+Put the two conjuncts together $`= C = a_0 \times B + D + A \times b_0`." Coefficients are
+rationals. The mathematical heart is the convolution identity
+$`c_{n+2} = a_0 \times b_{n+2} + (A_1 \times B_1)_n + a_{n+2} \times b_0` with $`c_0 = a_0 \times b_0` and
+$`c_1 = a_0 \times b_1 + a_1 \times b_0` ({uses "quantifier_numeric"}[]). The loop
+refinement is proved at the program level, on a state with the cursors
+$`r_a, r_b, r_d, w_c`, with the recursive call as a specification
+({uses "recursive_communication"}[]) and the inputs on distinct channels
+composed sequentially (they commute). The first refinement — which uses the
+local channel $`d` ({uses "channel_declaration"}[]), local constants, and the
+process $`P\,d` reading $`a` and $`b` with separate read cursors
+({uses "broadcast"}[]) concurrently with the main process
+({uses "concurrent_composition"}[]) — is proved at the level of the book's
+displayed line after "make all substitutions indicated by assignment": those
+conjuncts imply $`P\,c`. The substitution step with process generation is not
+modelled as a program, and the remarks on placing time increments are not
+formalized.
 :::
