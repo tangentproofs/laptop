@@ -10,6 +10,7 @@ import LaPToP.TheoryDesign.ProgramQueue
 import LaPToP.TheoryDesign.DataTransformation
 import LaPToP.TheoryDesign.SecuritySwitch
 import LaPToP.TheoryDesign.TakeANumber
+import LaPToP.TheoryDesign.LimitedQueue
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -383,4 +384,49 @@ $`\mathit{take}` under that typing (stated as hypotheses $`\mathit{even}\ i`, $`
 "we can take a number from either machine without disturbing the other. The
 price of the distribution is that we have lost all fairness between the two
 machines." Uses {uses "set_packaging"}[], {uses "bunch_interval"}[] and {uses "specification_laws"}[].
+:::
+
+:::theorem "limited_queue" (parent := "theory_design_core") (tags := "theory design, transformation, queues, hehner-7.2.3") (effort := "medium") (lean := "LaPToP.TheoryDesign.LimitedQueue.U, LaPToP.TheoryDesign.LimitedQueue.O, LaPToP.TheoryDesign.LimitedQueue.N₀, LaPToP.TheoryDesign.LimitedQueue.N, LaPToP.TheoryDesign.LimitedQueue.Inside, LaPToP.TheoryDesign.LimitedQueue.Outside, LaPToP.TheoryDesign.LimitedQueue.D₀, LaPToP.TheoryDesign.LimitedQueue.D, LaPToP.TheoryDesign.LimitedQueue.isTransformer_D₀, LaPToP.TheoryDesign.LimitedQueue.isTransformer_D, LaPToP.TheoryDesign.LimitedQueue.mkemptyq, LaPToP.TheoryDesign.LimitedQueue.assignC, LaPToP.TheoryDesign.LimitedQueue.assignC_isemptyq, LaPToP.TheoryDesign.LimitedQueue.assignC_isfullq, LaPToP.TheoryDesign.LimitedQueue.not_implementable_isemptyq₀, LaPToP.TheoryDesign.LimitedQueue.mkemptyqT, LaPToP.TheoryDesign.LimitedQueue.isemptyqT, LaPToP.TheoryDesign.LimitedQueue.isfullqT, LaPToP.TheoryDesign.LimitedQueue.mkemptyq_refines, LaPToP.TheoryDesign.LimitedQueue.isemptyq_refines, LaPToP.TheoryDesign.LimitedQueue.isfullq_refines, LaPToP.TheoryDesign.LimitedQueue.implementable_isemptyqT")
+"Exercise 464 transforms a limited queue to achieve a time bound that is not
+met by the original implementation. A limited queue is a queue with a limited
+number of places for items. Let the limit be $`n : \mathit{nat}+1`, and let
+$`Q : [n{*}X]` and $`p : 0,..n+1` be implementer's variables. Then the original
+implementation is as follows. $`\mathit{mkemptyq} = p := 0`, $`\mathit{isemptyq} = p = 0`,
+$`\mathit{isfullq} = p = n`, $`\mathit{join}\ x = Q\,p := x.\ p := p+1`,
+$`\mathit{leave} = \mathbf{for}\ i := 1;..p\ \mathbf{do}\ Q\,(i-1) := Q\,i\ \mathbf{od}.\ p := p-1`,
+$`\mathit{front} = Q\,0`. ... Unfortunately, removing the front item from the queue
+takes time $`p-1` to shift all remaining items down one index. We want to
+transform the queue so that all operations are instant. Variables $`Q` and $`p`
+will be replaced by $`R : [n{*}X]` and $`f, b : 0,..n+1` with $`f` and $`b` indicating
+the current front and back. ... Here is the data transformer $`D`.
+$`Q[0;..p] = R[f;..b] \lor Q[0;..p] = R[(f;..n); (0;..b)]`. The conjuncts
+$`0 \le p \le n \land 0 \le f \le b \le n \land p = b - f` are implicit in the left disjunct, and
+the conjuncts $`0 \le p \le n \land 0 \le f \le n \land 0 \le b \le n \land p = n - f + b` are implicit
+in the right disjunct. Now we transform. First $`\mathit{mkemptyq}`. ...
+$`\Leftarrow f := 0.\ b := 0`. Next we transform $`\mathit{isemptyq}`. ... we suppose $`c` is a
+binary user's variable, and transform $`c := \mathit{isemptyq}`. ... Suspiciously, we
+have $`\lnot c'` in every case. That's because $`f = b` is missing! So the transformed
+operation is unimplementable. That's the transformer's way of telling us that
+the new variables do not hold enough information to answer whether the queue
+is empty. The problem occurs when $`f = b` because that could be either an empty
+queue or a full queue. A solution is to add a new variable $`m : \mathit{bin}` to say
+whether we have the “inside” mode or “outside” mode. We revise the transformer
+$`D` as follows: $`m \land Q[0;..p] = R[f;..b] \lor \lnot m \land Q[0;..p] = R[(f;..n); (0;..b)]`.
+Now we have to retransform $`\mathit{mkemptyq}`. ... $`\Leftarrow m := \top.\ f := 0.\ b := 0`. Next we
+retransform $`c := \mathit{isemptyq}`. ... $`= c := \mathbf{if}\ m\ \mathbf{then}\ f = b\ \mathbf{else}\ b = 0 \land f = n`.
+... Next we transform $`c := \mathit{isfullq}`. ... $`\Leftarrow c := \mathbf{if}\ m\ \mathbf{then}\ f = 0 \land b = n\ \mathbf{else}\ f = b`."
+Lists of length $`n` are functions of which only the indexes below $`n` matter,
+and the implicit conjuncts are made explicit in the transformers (the
+"outside" items are $`R\,((f+k) \bmod n)`). The transformer property
+$`\forall \mathit{new} \cdot \exists \mathit{old} \cdot D` is proved under the book's typing
+$`f, b : 0,..n+1` (and, for the revised $`D`, the implicit conjunct of the chosen
+mode). "$`f = b` is missing!" is a theorem: the transformed $`c := \mathit{isemptyq}` under
+the first transformer is unimplementable, because from $`f = b` the imagined
+queue may be empty (inside) or full (outside). With the mode bit the book's
+three programs are proved to refine the transformed $`\mathit{mkemptyq}`,
+$`c := \mathit{isemptyq}` and $`c := \mathit{isfullq}`, and the transformed $`c := \mathit{isemptyq}` is
+now implementable. The book's intermediate equalities ("several omitted
+steps") are not reproduced; $`\mathit{join}`, $`\mathit{leave}` and $`\mathit{front}` are the next
+chunk. Uses {uses "data_transformation"}[], {uses "program_queue_theory"}[],
+{uses "data_queue_theory"}[] and {uses "specification_laws"}[].
 :::
