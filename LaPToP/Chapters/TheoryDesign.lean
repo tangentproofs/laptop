@@ -6,6 +6,7 @@ import LaPToP.TheoryDesign.SimpleStack
 import LaPToP.TheoryDesign.Queue
 import LaPToP.TheoryDesign.Tree
 import LaPToP.TheoryDesign.ProgramStack
+import LaPToP.TheoryDesign.ProgramQueue
 import LaPToP.TheoryDesign.DataTransformation
 import LaPToP.TheoryDesign.SecuritySwitch
 import LaPToP.TheoryDesign.TakeANumber
@@ -206,6 +207,59 @@ $`\mathbf{screen}!\ \text{“error”} \Leftarrow \mathit{mkempty}.\ \mathit{pop
 is a Chapter 9 notation, cf. {uses "assertions"}[]. Uses
 {uses "program_stack_theory"}[] and {uses "program_stack_implementation"}[].
 :::
+
+:::definition "program_queue_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.ProgramQueueTheory, LaPToP.TheoryDesign.ProgramQueueTheory.not_isemptyq_join, LaPToP.TheoryDesign.ProgramQueueTheory.front_mkemptyq_join, LaPToP.TheoryDesign.ProgramQueueTheory.join_join_leave, LaPToP.TheoryDesign.ProgramQueueTheory.join_join_leave_empty, LaPToP.TheoryDesign.ProgramQueueTheory.front_join_join_leave_empty, LaPToP.TheoryDesign.PQ, LaPToP.TheoryDesign.ListProgramQueue.mkemptyq, LaPToP.TheoryDesign.ListProgramQueue.isemptyq, LaPToP.TheoryDesign.ListProgramQueue.join, LaPToP.TheoryDesign.ListProgramQueue.leave, LaPToP.TheoryDesign.ListProgramQueue.front, LaPToP.TheoryDesign.ListProgramQueue.isemptyq_iff, LaPToP.TheoryDesign.ListProgramQueue.isemptyq_mkemptyq, LaPToP.TheoryDesign.ListProgramQueue.join_empty, LaPToP.TheoryDesign.ListProgramQueue.join_nonempty, LaPToP.TheoryDesign.ListProgramQueue.join_leave_empty, LaPToP.TheoryDesign.ListProgramQueue.join_leave_nonempty, LaPToP.TheoryDesign.ListProgramQueue.theory")
+"Program-queue theory introduces five names: $`\mathit{mkemptyq}` (a program to
+make the queue empty), $`\mathit{isemptyq}` (a binary variable to say whether the
+queue is empty), $`\mathit{join}` (a procedure with parameter of type $`X`),
+$`\mathit{leave}` (a program), and $`\mathit{front}` (of type $`X`). The axioms are
+$`\mathit{isemptyq}' \Leftarrow \mathit{mkemptyq}`,
+$`\mathit{isemptyq} \Rightarrow \mathit{front}' = x \land \lnot\mathit{isemptyq}' \Leftarrow \mathit{join}\ x`,
+$`\lnot\mathit{isemptyq} \Rightarrow \mathit{front}' = \mathit{front} \land \lnot\mathit{isemptyq}' \Leftarrow \mathit{join}\ x`,
+$`\mathit{isemptyq} \Rightarrow (\mathit{join}\ x.\ \mathit{leave} = \mathit{mkemptyq})`,
+$`\lnot\mathit{isemptyq} \Rightarrow (\mathit{join}\ x.\ \mathit{leave} = \mathit{leave}.\ \mathit{join}\ x)`."
+As for {uses "program_stack_theory"}[], the theory is a structure over a state
+type; the first three axioms are refinements, and the two axioms of the form
+$`b \Rightarrow (P = Q)` are stated pointwise, as $`\forall s, s' \cdot b\ s \Rightarrow (P\ s\ s' \Leftrightarrow Q\ s\ s')`.
+Derived from the axioms alone: $`\lnot\mathit{isemptyq}' \Leftarrow \mathit{join}\ x`,
+$`\mathit{front}' = x \land \lnot\mathit{isemptyq}' \Leftarrow \mathit{mkemptyq}.\ \mathit{join}\ x`, and first-in-first-out:
+$`\mathit{join}\ x.\ \mathit{join}\ y.\ \mathit{leave} = \mathit{join}\ x.\ \mathit{leave}.\ \mathit{join}\ y`, which from an empty
+queue is $`\mathit{mkemptyq}.\ \mathit{join}\ y`, after which the front is $`y`. The book gives
+no implementation in this section; the list implementation suggested by
+{uses "data_queue_theory"}[] — $`q : [{*}X]`, $`\mathit{mkemptyq} = q := [\mathit{nil}]`,
+$`\mathit{isemptyq} = (q = [\mathit{nil}])`, $`\mathit{join}\ x = q := q ;; [x]`,
+$`\mathit{leave} = q := q[1;..\# q]`, $`\mathit{front} = q\,0` — is proved to satisfy all five
+axioms, using {uses "list_axioms"}[].
+:::
+
+:::definition "program_tree_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.Dir, LaPToP.TheoryDesign.ProgramTreeTheory, LaPToP.TheoryDesign.ProgramTreeTheory.go_assignNode_go, LaPToP.TheoryDesign.ProgramTreeTheory.go_work_work_go")
+"Imagine a binary tree that is infinite in all directions; there are no leaves
+and no root. You are standing at one node in the tree facing one of the three
+directions up (toward the parent of this node), left (toward the left child of
+this node), or right (toward the right child of this node). Variable
+$`\mathit{node}` (of type $`X`) tells the value of the item where you are, and it can
+be assigned a new value. Variable $`\mathit{aim}` tells what direction you are
+facing, and it can be assigned a new direction. Program $`\mathit{go}` moves you to
+the next node in the direction you are facing, and turns you facing back the
+way you came. ... The axioms use an auxiliary specification that helps in
+writing the axioms, but is not an addition to the theory, and does not need to
+be implemented: $`\mathit{work}` means “Do anything, wander around changing the
+values of nodes if you like, but do not go from this node (your location at
+the start of $`\mathit{work}`) in this direction (the value of variable $`\mathit{aim}` at
+the start of $`\mathit{work}`). End where you started, facing the way you were
+facing at the start.” Here are the axioms.
+$`(\mathit{aim}' = \mathit{up}) = (\mathit{aim} \neq \mathit{up}) \Leftarrow \mathit{go}`,
+$`\mathit{node}' = \mathit{node} \land \mathit{aim}' = \mathit{aim} \Leftarrow \mathit{go}.\ \mathit{work}.\ \mathit{go}`,
+$`\mathit{work} \Leftarrow \mathit{node} := x`,
+$`\mathit{work} \Leftarrow a = \mathit{aim} \neq b \land (\mathit{aim} := b.\ \mathit{go}.\ \mathit{work}.\ \mathit{go}.\ \mathit{aim} := a)`,
+$`\mathit{work} \Leftarrow \mathit{work}.\ \mathit{work}`." Only the structure of this first definition is
+given (with the assignments to $`\mathit{node}` and $`\mathit{aim}` as fields), together
+with the derived law $`\mathit{node}' = \mathit{node} \land \mathit{aim}' = \mathit{aim} \Leftarrow \mathit{go}.\ \mathit{node} := x.\ \mathit{go}`.
+No implementation is given, and the book's second definition by implementer's
+variables $`T`, $`p` with $`\mathit{node} = T@(p; 1)` is not formalized. Uses
+{uses "program_queue_theory"}[] and {uses "data_tree_theory"}[].
+:::
+
 
 :::definition "data_transformation" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.Spec.IsTransformer, LaPToP.TheoryDesign.Spec.transform, LaPToP.TheoryDesign.Spec.transform_spec, LaPToP.TheoryDesign.Spec.transform_mono, LaPToP.TheoryDesign.Spec.implementable_transform, LaPToP.TheoryDesign.Spec.IsTransformerU, LaPToP.TheoryDesign.Spec.transformU, LaPToP.TheoryDesign.Spec.transform_eq_transformU, LaPToP.TheoryDesign.Spec.isTransformer_iff_isTransformerU, LaPToP.TheoryDesign.Spec.transformU_mono, LaPToP.TheoryDesign.Caveat.S, LaPToP.TheoryDesign.Caveat.implementable_S, LaPToP.TheoryDesign.Caveat.not_implementable_transform")
 "Since a theory user has no access to the implementer's variables except
