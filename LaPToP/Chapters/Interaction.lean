@@ -4,6 +4,7 @@ import VersoBlueprint
 import LaPToP.Interaction.InteractiveVariables
 import LaPToP.Interaction.Communication
 import LaPToP.Interaction.CommunicationTiming
+import LaPToP.Interaction.Merge
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -224,4 +225,67 @@ whose intersection is $`\mathit{dbl}_\infty`, as in
 {uses "recursive_program_construction"}[] and {uses "least_fixed_points"}[].
 Not stated: the "strongest implementable solution", whose $`r_c' = w_d' = \infty`
 needs extended-natural cursors, while cursors are naturals here.
+:::
+
+:::theorem "merge" (parent := "interaction_core") (tags := "interaction, channels, merge, hehner-9.1.4") (effort := "medium") (lean := "LaPToP.Interaction.stepF, LaPToP.Interaction.guardedF, LaPToP.Interaction.stepF_seq, LaPToP.Interaction.guardedF_seq, LaPToP.Interaction.MS, LaPToP.Interaction.Merge.inputC, LaPToP.Interaction.Merge.inputD, LaPToP.Interaction.Merge.outputE, LaPToP.Interaction.Merge.lastC, LaPToP.Interaction.Merge.lastD, LaPToP.Interaction.Merge.checkC, LaPToP.Interaction.Merge.checkD, LaPToP.Interaction.Merge.waitC, LaPToP.Interaction.Merge.waitD, LaPToP.Interaction.Merge.tick, LaPToP.Interaction.Merge.mergeBody, LaPToP.Interaction.Merge.mergeBody_step, LaPToP.Interaction.Merge.timemergeBody, LaPToP.Interaction.Merge.implBody, LaPToP.Interaction.Merge.step_refines_c, LaPToP.Interaction.Merge.step_refines_d, LaPToP.Interaction.Merge.not_step_refines")
+"Merging means reading repeatedly from two or more input channels and writing
+those inputs onto an output channel. The output is an interleaving of the
+messages from the input channels. The output must be all and only the
+messages read from the inputs, and it must preserve the order in which they
+were read on each channel. Infinite merging can be specified formally as
+follows. Let the input channels be $`c` and $`d`, and the output channel be $`e`.
+Then $`\mathit{merge} = (c?.\ e!\,c) \lor (d?.\ e!\,d).\ \mathit{merge}`. This specification does not
+state any criterion for choosing between the input channels at each step. ...
+Exercise 521(a) (time merge) asks us to choose the first available input at
+each step. If input is already available on both channels $`c` and $`d`, take
+either one; if input is available on just one channel, take that one; if input
+is available on neither channel, wait for the first one and take it (in case of
+a tie, take either one). Here is the specification.
+$`\mathit{timemerge} = (\surd c \lor \mathcal{T}_c\,r_c \le \mathcal{T}_d\,r_d) \land (c?.\ e!\,c) \lor (\surd d \lor \mathcal{T}_c\,r_c \ge \mathcal{T}_d\,r_d) \land (d?.\ e!\,d).\ \mathit{timemerge}`.
+To account for the time spent waiting for input, we should insert
+$`t := t \uparrow (\mathcal{T}r + 1)` just before each input operation, and for recursive
+time we should insert $`t := t+1` before the recursive call. In Subsection 9.1.2
+on Communication Timing we proved that waiting for input can be implemented
+recursively. Using the same reasoning, we implement $`\mathit{timemerge}` as follows.
+$`\mathit{timemerge} \Leftarrow \mathbf{if}\ \surd c\ \mathbf{then}\ c?.\ e!\,c\ \mathbf{else}\ \mathit{ok}.\ \mathbf{if}\ \surd d\ \mathbf{then}\ d?.\ e!\,d\ \mathbf{else}\ \mathit{ok}.\ t := t+1.\ \mathit{timemerge}`
+where time is an extended natural." Three channels, the transit-time check of
+{uses "communication_timing"}[], and the recursive call as a specification as
+in {uses "recursive_communication"}[]; $`\mathit{timemerge}` includes the waits and
+the time increment the book says to insert. Proved: one step of
+$`\mathit{merge}` reads one message from $`c` or $`d` and writes exactly that message on
+$`e` at the current time ("all and only the messages read"); and an iteration of
+the implementation is a $`\mathit{timemerge}` step when input is available on exactly
+one channel. Honesty note: the book asserts the implementation "using the
+same reasoning" and gives no proof. An iteration of the implementation is
+*not* in general one $`\mathit{timemerge}` step — with input on both channels it reads
+both, with input on neither it reads nothing and lets time pass — and the
+two-input case is given as a counterexample to the step-wise refinement. The
+book's refinement is one of fixed points (a two-input iteration is two steps,
+a no-input iteration is the waiting hidden in $`t := t \uparrow (\mathcal{T}r+1)`) and is
+not formalized here. Uses {uses "backtracking"}[] (for $`\lor`).
+:::
+
+:::definition "monitor" (parent := "interaction_core") (lean := "LaPToP.Interaction.MonS, LaPToP.Interaction.Monitor.checkIn0, LaPToP.Interaction.Monitor.checkIn1, LaPToP.Interaction.Monitor.checkReq0, LaPToP.Interaction.Monitor.checkReq1, LaPToP.Interaction.Monitor.m, LaPToP.Interaction.Monitor.act0, LaPToP.Interaction.Monitor.act1, LaPToP.Interaction.Monitor.act2, LaPToP.Interaction.Monitor.act3, LaPToP.Interaction.Monitor.tick, LaPToP.Interaction.Monitor.monitorBody, LaPToP.Interaction.Monitor.implBody, LaPToP.Interaction.Monitor.onlyIn0, LaPToP.Interaction.Monitor.onlyIn1, LaPToP.Interaction.Monitor.onlyReq0, LaPToP.Interaction.Monitor.onlyReq1, LaPToP.Interaction.Monitor.step_refines_in0, LaPToP.Interaction.Monitor.step_refines_in1, LaPToP.Interaction.Monitor.step_refines_req0, LaPToP.Interaction.Monitor.step_refines_req1")
+"To obtain the effect of a fully shared variable, we create a process called a
+monitor that resolves conflicting uses of the variable. Whenever the monitor
+receives data from another process on one of the channels $`\mathit{xin}_0`,
+$`\mathit{xin}_1`, ... to be written to variable $`x`, it writes the data to $`x`, and
+sends an acknowledgement back to the process on one of the channels
+$`\mathit{xack}_0`, $`\mathit{xack}_1`, ... . Whenever the monitor receives a request from
+another process on one of the channels $`\mathit{xreq}_0`, $`\mathit{xreq}_1`, ... to read
+variable $`x`, it sends the value of $`x` back to the requesting process on one of
+the channels $`\mathit{xout}_0`, $`\mathit{xout}_1`, ... . A monitor for variable $`x` with two
+writing processes and two reading processes can be defined as follows. Let $`m`
+be the minimum of the times of the next input on each of the input channels.
+$`m = \Downarrow [\mathcal{T}_{\mathit{xin}_0}\,r_{\mathit{xin}_0}; \mathcal{T}_{\mathit{xin}_1}\,r_{\mathit{xin}_1}; \mathcal{T}_{\mathit{xreq}_0}\,r_{\mathit{xreq}_0}; \mathcal{T}_{\mathit{xreq}_1}\,r_{\mathit{xreq}_1}]`
+$`\mathit{monitor} = (\surd \mathit{xin}_0 \lor \mathcal{T}_{\mathit{xin}_0}\,r_{\mathit{xin}_0} = m) \land (\mathit{xin}_0?.\ x := \mathit{xin}_0.\ \mathit{xack}_0!\,\top) \lor (\surd \mathit{xin}_1 \lor \ldots) \land (\mathit{xin}_1?.\ x := \mathit{xin}_1.\ \mathit{xack}_1!\,\top) \lor (\surd \mathit{xreq}_0 \lor \ldots) \land (\mathit{xreq}_0?.\ \mathit{xout}_0!\,x) \lor (\surd \mathit{xreq}_1 \lor \ldots) \land (\mathit{xreq}_1?.\ \mathit{xout}_1!\,x).\ \mathit{monitor}`
+Just like $`\mathit{timemerge}`, a monitor takes the first available input and
+responds to it. ... Here's one way to implement a monitor, assuming time is an
+extended natural:
+$`\mathit{monitor} \Leftarrow \mathbf{if}\ \surd \mathit{xin}_0\ \mathbf{then}\ \mathit{xin}_0?.\ x := \mathit{xin}_0.\ \mathit{xack}_0!\,\top\ \mathbf{else}\ \mathit{ok}.\ \mathbf{if}\ \surd \mathit{xin}_1\ \mathbf{then} \ldots \mathbf{else}\ \mathit{ok}.\ \mathbf{if}\ \surd \mathit{xreq}_0\ \mathbf{then}\ \mathit{xreq}_0?.\ \mathit{xout}_0!\,x\ \mathbf{else}\ \mathit{ok}.\ \mathbf{if}\ \surd \mathit{xreq}_1\ \mathbf{then} \ldots \mathbf{else}\ \mathit{ok}.\ t := t+1.\ \mathit{monitor}`."
+Defined as for {uses "merge"}[] (four input and four output channels, the
+variable $`x`, the minimum $`m`, the recursive-time increment), and, as for the
+merge, an iteration of the implementation is proved to be a monitor step
+whenever exactly one input channel has input available (four lemmas, one per
+channel); the same honesty note applies to the book's implementation.
 :::
