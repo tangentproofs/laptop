@@ -386,7 +386,7 @@ price of the distribution is that we have lost all fairness between the two
 machines." Uses {uses "set_packaging"}[], {uses "bunch_interval"}[] and {uses "specification_laws"}[].
 :::
 
-:::theorem "limited_queue" (parent := "theory_design_core") (tags := "theory design, transformation, queues, hehner-7.2.3") (effort := "medium") (lean := "LaPToP.TheoryDesign.LimitedQueue.U, LaPToP.TheoryDesign.LimitedQueue.O, LaPToP.TheoryDesign.LimitedQueue.N₀, LaPToP.TheoryDesign.LimitedQueue.N, LaPToP.TheoryDesign.LimitedQueue.Inside, LaPToP.TheoryDesign.LimitedQueue.Outside, LaPToP.TheoryDesign.LimitedQueue.D₀, LaPToP.TheoryDesign.LimitedQueue.D, LaPToP.TheoryDesign.LimitedQueue.isTransformer_D₀, LaPToP.TheoryDesign.LimitedQueue.isTransformer_D, LaPToP.TheoryDesign.LimitedQueue.mkemptyq, LaPToP.TheoryDesign.LimitedQueue.assignC, LaPToP.TheoryDesign.LimitedQueue.assignC_isemptyq, LaPToP.TheoryDesign.LimitedQueue.assignC_isfullq, LaPToP.TheoryDesign.LimitedQueue.not_implementable_isemptyq₀, LaPToP.TheoryDesign.LimitedQueue.mkemptyqT, LaPToP.TheoryDesign.LimitedQueue.isemptyqT, LaPToP.TheoryDesign.LimitedQueue.isfullqT, LaPToP.TheoryDesign.LimitedQueue.mkemptyq_refines, LaPToP.TheoryDesign.LimitedQueue.isemptyq_refines, LaPToP.TheoryDesign.LimitedQueue.isfullq_refines, LaPToP.TheoryDesign.LimitedQueue.implementable_isemptyqT")
+:::theorem "limited_queue" (parent := "theory_design_core") (tags := "theory design, transformation, queues, hehner-7.2.3") (effort := "medium") (lean := "LaPToP.TheoryDesign.LimitedQueue.U, LaPToP.TheoryDesign.LimitedQueue.O, LaPToP.TheoryDesign.LimitedQueue.N₀, LaPToP.TheoryDesign.LimitedQueue.N, LaPToP.TheoryDesign.LimitedQueue.Inside, LaPToP.TheoryDesign.LimitedQueue.Outside, LaPToP.TheoryDesign.LimitedQueue.D₀, LaPToP.TheoryDesign.LimitedQueue.D, LaPToP.TheoryDesign.LimitedQueue.isTransformer_D₀, LaPToP.TheoryDesign.LimitedQueue.isTransformer_D, LaPToP.TheoryDesign.LimitedQueue.mkemptyq, LaPToP.TheoryDesign.LimitedQueue.assignC, LaPToP.TheoryDesign.LimitedQueue.assignC_isemptyq, LaPToP.TheoryDesign.LimitedQueue.assignC_isfullq, LaPToP.TheoryDesign.LimitedQueue.not_implementable_isemptyq₀, LaPToP.TheoryDesign.LimitedQueue.mkemptyqT, LaPToP.TheoryDesign.LimitedQueue.isemptyqT, LaPToP.TheoryDesign.LimitedQueue.isfullqT, LaPToP.TheoryDesign.LimitedQueue.mkemptyq_refines, LaPToP.TheoryDesign.LimitedQueue.isemptyq_refines, LaPToP.TheoryDesign.LimitedQueue.isfullq_refines, LaPToP.TheoryDesign.LimitedQueue.implementable_isemptyqT, LaPToP.TheoryDesign.LimitedQueue.join, LaPToP.TheoryDesign.LimitedQueue.leave, LaPToP.TheoryDesign.LimitedQueue.assignX_front, LaPToP.TheoryDesign.LimitedQueue.joinT, LaPToP.TheoryDesign.LimitedQueue.leaveT, LaPToP.TheoryDesign.LimitedQueue.frontT, LaPToP.TheoryDesign.LimitedQueue.notFullT, LaPToP.TheoryDesign.LimitedQueue.notEmptyT, LaPToP.TheoryDesign.LimitedQueue.guardT, LaPToP.TheoryDesign.LimitedQueue.outside_index_lt, LaPToP.TheoryDesign.LimitedQueue.join_refines, LaPToP.TheoryDesign.LimitedQueue.leave_refines, LaPToP.TheoryDesign.LimitedQueue.front_refines")
 "Exercise 464 transforms a limited queue to achieve a time bound that is not
 met by the original implementation. A limited queue is a queue with a limited
 number of places for items. Let the limit be $`n : \mathit{nat}+1`, and let
@@ -414,7 +414,16 @@ whether we have the “inside” mode or “outside” mode. We revise the trans
 $`D` as follows: $`m \land Q[0;..p] = R[f;..b] \lor \lnot m \land Q[0;..p] = R[(f;..n); (0;..b)]`.
 Now we have to retransform $`\mathit{mkemptyq}`. ... $`\Leftarrow m := \top.\ f := 0.\ b := 0`. Next we
 retransform $`c := \mathit{isemptyq}`. ... $`= c := \mathbf{if}\ m\ \mathbf{then}\ f = b\ \mathbf{else}\ b = 0 \land f = n`.
-... Next we transform $`c := \mathit{isfullq}`. ... $`\Leftarrow c := \mathbf{if}\ m\ \mathbf{then}\ f = 0 \land b = n\ \mathbf{else}\ f = b`."
+... Next we transform $`c := \mathit{isfullq}`. ... $`\Leftarrow c := \mathbf{if}\ m\ \mathbf{then}\ f = 0 \land b = n\ \mathbf{else}\ f = b`.
+Next we transform $`\mathit{join}\ x`. Before this operation, there should be a
+check that the queue is not full. ...
+$`\Leftarrow \mathbf{if}\ b < n\ \mathbf{then}\ R\,b := x.\ b := b+1\ \mathbf{else}\ R\,0 := x.\ b := 1.\ m := \bot`.
+Next we transform $`\mathit{leave}`. Before this operation, there should be a check
+that the queue is not empty. ...
+$`\Leftarrow \mathbf{if}\ f < n\ \mathbf{then}\ f := f+1\ \mathbf{else}\ f := 1.\ m := \top`. Last we
+transform $`x := \mathit{front}` where $`x` is a user's variable of the same type as
+the items. Before this operation, there should be a check that the queue is
+not empty. ... $`\Leftarrow \mathbf{if}\ f < n\ \mathbf{then}\ x := R\,f\ \mathbf{else}\ x := R\,0`."
 Lists of length $`n` are functions of which only the indexes below $`n` matter,
 and the implicit conjuncts are made explicit in the transformers (the
 "outside" items are $`R\,((f+k) \bmod n)`). The transformer property
@@ -425,8 +434,12 @@ the first transformer is unimplementable, because from $`f = b` the imagined
 queue may be empty (inside) or full (outside). With the mode bit the book's
 three programs are proved to refine the transformed $`\mathit{mkemptyq}`,
 $`c := \mathit{isemptyq}` and $`c := \mathit{isfullq}`, and the transformed $`c := \mathit{isemptyq}` is
-now implementable. The book's intermediate equalities ("several omitted
-steps") are not reproduced; $`\mathit{join}`, $`\mathit{leave}` and $`\mathit{front}` are the next
-chunk. Uses {uses "data_transformation"}[], {uses "program_queue_theory"}[],
+now implementable. The programs for $`\mathit{join}\ x`, $`\mathit{leave}` and $`x := \mathit{front}`
+are proved to refine the transformed operations under the checks the book
+asks for — "not full", resp. "not empty", as preconditions on the new state
+(the transformed $`\mathit{isfullq}` and $`\mathit{isemptyq}`) — with the full case
+analysis over the two modes and the wrap-around $`(f+k) \bmod n`; the
+"opportunity to rotate the queue within $`R`" is declined as in the book. The
+book's intermediate equalities ("several omitted steps") are not reproduced. Uses {uses "data_transformation"}[], {uses "program_queue_theory"}[],
 {uses "data_queue_theory"}[] and {uses "specification_laws"}[].
 :::
