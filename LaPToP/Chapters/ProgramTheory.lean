@@ -6,6 +6,8 @@ import LaPToP.ProgramTheory.Programs
 import LaPToP.ProgramTheory.Time
 import LaPToP.ProgramTheory.Space
 import LaPToP.ProgramTheory.Search
+import LaPToP.ProgramTheory.FastExp
+import LaPToP.ProgramTheory.Fibonacci
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -370,6 +372,70 @@ states, for segments within the list), and the three timing refinements with
 $`\mathit{ceil}\,(\log \ldots)` as `Nat.clog 2`, using the halving lemma of
 {uses "findmax"}[]: $`1 + \mathit{ceil}\,(\log(\text{half})) \le \mathit{ceil}\,(\log(j-h))`. Uses
 {uses "linear_search"}[] and {uses "recursive_time"}[].
+:::
+
+:::theorem "fast_exponentiation" (parent := "program_theory_core") (tags := "programs, time, hehner-4.2.6") (effort := "medium") (lean := "LaPToP.ProgramTheory.FastExp.ES, LaPToP.ProgramTheory.FastExp.assignX, LaPToP.ProgramTheory.FastExp.assignZ, LaPToP.ProgramTheory.FastExp.assignY, LaPToP.ProgramTheory.FastExp.tick, LaPToP.ProgramTheory.FastExp.assignX_seq, LaPToP.ProgramTheory.FastExp.assignZ_seq, LaPToP.ProgramTheory.FastExp.assignY_seq, LaPToP.ProgramTheory.FastExp.tick_seq, LaPToP.ProgramTheory.FastExp.guard, LaPToP.ProgramTheory.FastExp.Z, LaPToP.ProgramTheory.FastExp.P, LaPToP.ProgramTheory.FastExp.mul_self_pow_div_two, LaPToP.ProgramTheory.FastExp.simple₁, LaPToP.ProgramTheory.FastExp.simple₂, LaPToP.ProgramTheory.FastExp.simple₃, LaPToP.ProgramTheory.FastExp.fast₂, LaPToP.ProgramTheory.FastExp.fast₃, LaPToP.ProgramTheory.FastExp.fast₄, LaPToP.ProgramTheory.FastExp.fast₅, LaPToP.ProgramTheory.FastExp.fast₆, LaPToP.ProgramTheory.FastExp.T, LaPToP.ProgramTheory.FastExp.time₁, LaPToP.ProgramTheory.FastExp.time₂, LaPToP.ProgramTheory.FastExp.time₃, LaPToP.ProgramTheory.FastExp.time₄, LaPToP.ProgramTheory.FastExp.time₅, LaPToP.ProgramTheory.FastExp.time₆")
+"Exercise 180: Given rational variables $`x` and $`z` and natural variable $`y`,
+write a program for $`z' = x^y` that runs fast without using exponentiation. ...
+The idea is to accumulate a product, using variable $`z` as accumulator. Define
+$`P = z' = z \times x^y`. We can solve the problem as follows, though this solution
+does not give the fastest possible computation. $`z' = x^y \Leftarrow z := 1.\ P`;
+$`P \Leftarrow \mathbf{if}\ y = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ y > 0 \Rightarrow P`;
+$`y > 0 \Rightarrow P \Leftarrow z := z \times x.\ y := y-1.\ P`. To speed up the computation, we
+change our refinement of $`y > 0 \Rightarrow P` to test whether $`y` is even or odd; in the
+odd case we make no improvement but in the even case we can cut $`y` in half.
+... Before we consider time, here is the fast exponentiation program again.
+$`z' = x^y \Leftarrow z := 1.\ P`;
+$`P \Leftarrow \mathbf{if}\ \mathit{even}\ y\ \mathbf{then}\ \mathit{even}\ y \Rightarrow P\ \mathbf{else}\ \mathit{odd}\ y \Rightarrow P`;
+$`\mathit{even}\ y \Rightarrow P \Leftarrow \mathbf{if}\ y = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ \mathit{even}\ y \land y > 0 \Rightarrow P`;
+$`\mathit{odd}\ y \Rightarrow P \Leftarrow z := z \times x.\ y := y-1.\ \mathit{even}\ y \Rightarrow P`;
+$`\mathit{even}\ y \land y > 0 \Rightarrow P \Leftarrow x := x \times x.\ y := y/2.\ y > 0 \Rightarrow P`;
+$`y > 0 \Rightarrow P \Leftarrow \mathbf{if}\ \mathit{even}\ y\ \mathbf{then}\ \mathit{even}\ y \land y > 0 \Rightarrow P\ \mathbf{else}\ \mathit{odd}\ y \Rightarrow P`.
+In the recursive time measure, every loop of calls must include a time
+increment. In this program, a single time increment charged to the call
+$`y > 0 \Rightarrow P` does the trick. ... it is easier to prove the less precise
+specification $`T` defined as $`T = \mathbf{if}\ y = 0\ \mathbf{then}\ t' = t\ \mathbf{else}\ t' \le t + \log y`. To
+do so, we need to refine $`T` with exactly the same refinement structure that we
+used to refine the result $`z' = x^y` so that we can conjoin the result and
+timing specifications according to Refinement by Parts. ... It does not matter
+that specification $`T` is refined more than once. When we conjoin it with the
+previous result specifications, we find that each specification is refined
+only once." Proved, with the recursive calls as specifications and $`\log` as
+the floor of the binary logarithm: the simple solution's three refinements,
+the six refinements of the fast program ("each of these refinements is easily
+proved"), and the six timing refinements with the same structure — the
+conjunction then follows by {uses "refinement_by_steps_parts_cases"}[]. Uses
+{uses "binary_search"}[] and {uses "recursive_time"}[].
+:::
+
+:::theorem "fibonacci" (parent := "program_theory_core") (tags := "programs, time, hehner-4.2.7") (effort := "small") (lean := "LaPToP.ProgramTheory.Fibonacci.FS, LaPToP.ProgramTheory.Fibonacci.assignX, LaPToP.ProgramTheory.Fibonacci.assignY, LaPToP.ProgramTheory.Fibonacci.assignN, LaPToP.ProgramTheory.Fibonacci.tick, LaPToP.ProgramTheory.Fibonacci.assignX_seq, LaPToP.ProgramTheory.Fibonacci.assignY_seq, LaPToP.ProgramTheory.Fibonacci.assignN_seq, LaPToP.ProgramTheory.Fibonacci.tick_seq, LaPToP.ProgramTheory.Fibonacci.Goal, LaPToP.ProgramTheory.Fibonacci.P, LaPToP.ProgramTheory.Fibonacci.Shift, LaPToP.ProgramTheory.Fibonacci.goal_refines, LaPToP.ProgramTheory.Fibonacci.P_refines, LaPToP.ProgramTheory.Fibonacci.shift_refines, LaPToP.ProgramTheory.Fibonacci.TL, LaPToP.ProgramTheory.Fibonacci.TS, LaPToP.ProgramTheory.Fibonacci.time_refines, LaPToP.ProgramTheory.Fibonacci.shift_time")
+"In this subsection, we tackle Exercise 256. The definition of the Fibonacci
+numbers $`\mathit{fib}\ 0 = 0`, $`\mathit{fib}\ 1 = 1`, $`\mathit{fib}\ (n+2) = \mathit{fib}\ n + \mathit{fib}\ (n+1)` immediately
+suggests a recursive function definition ... We did not include functions in
+our programming language, so we still have some work to do. Also, the
+functional solution we have just given has exponential execution time, and we
+can do much better. For $`n \ge 2`, we can find a Fibonacci number if we know the
+previous pair of Fibonacci numbers. That suggests we keep track of a pair of
+numbers. Let $`x`, $`y`, and $`n` be natural variables. We refine $`x' = \mathit{fib}\ n \Leftarrow P`
+where $`P` is the problem of finding a pair of Fibonacci numbers.
+$`P = x' = \mathit{fib}\ n \land y' = \mathit{fib}\ (n+1)`. When $`n = 0`, the solution is easy. When $`n \ge 1`,
+we can decrease it by $`1`, find a pair of Fibonacci numbers at that previous
+argument, and then move $`x` and $`y` along one place.
+$`P \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ x := 0.\ y := 1\ \mathbf{else}\ n := n-1.\ P.\ x' = y \land y' = x+y`.
+To move $`x` and $`y` along we need another variable. We could use a new variable,
+but we already have $`n`; is it safe to use $`n` for this purpose? The
+specification $`x' = y \land y' = x+y` allows $`n` to change, so we can use it if we want.
+$`x' = y \land y' = x+y \Leftarrow n := x.\ x := y.\ y := n+y`. The time for this solution is
+linear. To prove it, we keep the same refinement structure, but we replace the
+specifications with new ones concerning time. We replace $`P` by $`t' = t+n` and
+add $`t := t+1` in front of its use; we also change $`x' = y \land y' = x+y` into $`t' = t`.
+$`t' = t+n \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ x := 0.\ y := 1\ \mathbf{else}\ n := n-1.\ t := t+1.\ t' = t+n.\ t' = t`;
+$`t' = t \Leftarrow n := x.\ x := y.\ y := n+y`. Linear time is a lot better than exponential
+time, but we can do even better." The linear-time solution and its timing are
+proved with Mathlib's $`\mathit{fib}` and the recursive call as a specification; the
+logarithmic-time solution with the doubling identities is the next chunk.
+Uses {uses "fast_exponentiation"}[], {uses "recursive_time"}[] and
+{uses "nat_induction_predicate"}[].
 :::
 
 :::theorem "space" (parent := "program_theory_core") (tags := "programs, space, time, hehner-4.3") (effort := "medium") (lean := "LaPToP.ProgramTheory.Hanoi.HS, LaPToP.ProgramTheory.Hanoi.assignN, LaPToP.ProgramTheory.Hanoi.tick, LaPToP.ProgramTheory.Hanoi.assignS, LaPToP.ProgramTheory.Hanoi.assignM, LaPToP.ProgramTheory.Hanoi.assignN_seq, LaPToP.ProgramTheory.Hanoi.tick_seq, LaPToP.ProgramTheory.Hanoi.assignS_seq, LaPToP.ProgramTheory.Hanoi.assignM_seq, LaPToP.ProgramTheory.Hanoi.enat_add_one_sub_one, LaPToP.ProgramTheory.Hanoi.movePile, LaPToP.ProgramTheory.Hanoi.movePile_n, LaPToP.ProgramTheory.Hanoi.T, LaPToP.ProgramTheory.Hanoi.two_pow_succ_sub_one, LaPToP.ProgramTheory.Hanoi.time_refines, LaPToP.ProgramTheory.Hanoi.S, LaPToP.ProgramTheory.Hanoi.movePileSpace, LaPToP.ProgramTheory.Hanoi.space_refines, LaPToP.ProgramTheory.Hanoi.MS, LaPToP.ProgramTheory.Hanoi.MS_m_le, LaPToP.ProgramTheory.Hanoi.longLine, LaPToP.ProgramTheory.Hanoi.longLineSpec, LaPToP.ProgramTheory.Hanoi.longLine_refines, LaPToP.ProgramTheory.Hanoi.movePileMax, LaPToP.ProgramTheory.Hanoi.max_case_refines, LaPToP.ProgramTheory.Hanoi.maxSpace_refines, LaPToP.ProgramTheory.Hanoi.AS, LaPToP.ProgramTheory.Hanoi.Avg.assignN, LaPToP.ProgramTheory.Hanoi.Avg.assignS, LaPToP.ProgramTheory.Hanoi.Avg.assignP, LaPToP.ProgramTheory.Hanoi.Avg.assignN_seq, LaPToP.ProgramTheory.Hanoi.Avg.assignS_seq, LaPToP.ProgramTheory.Hanoi.Avg.assignP_seq, LaPToP.ProgramTheory.Hanoi.Avg.incr, LaPToP.ProgramTheory.Hanoi.Avg.Pavg, LaPToP.ProgramTheory.Hanoi.Avg.avg_refines, LaPToP.ProgramTheory.Hanoi.Avg.average_space, LaPToP.ProgramTheory.Hanoi.FS, LaPToP.ProgramTheory.Hanoi.Full.assignN, LaPToP.ProgramTheory.Hanoi.Full.assignS, LaPToP.ProgramTheory.Hanoi.Full.assignM, LaPToP.ProgramTheory.Hanoi.Full.tick, LaPToP.ProgramTheory.Hanoi.Full.addP, LaPToP.ProgramTheory.Hanoi.Full.assignN_seq, LaPToP.ProgramTheory.Hanoi.Full.assignS_seq, LaPToP.ProgramTheory.Hanoi.Full.assignM_seq, LaPToP.ProgramTheory.Hanoi.Full.tick_seq, LaPToP.ProgramTheory.Hanoi.Full.addP_seq, LaPToP.ProgramTheory.Hanoi.Full.MovePile, LaPToP.ProgramTheory.Hanoi.Full.body, LaPToP.ProgramTheory.Hanoi.Full.movePile_refines")
