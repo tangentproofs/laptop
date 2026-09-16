@@ -7,6 +7,7 @@ import LaPToP.RecursiveDefinition.DataConstruction
 import LaPToP.Concurrency.Composition
 import LaPToP.Concurrency.ListConcurrency
 import LaPToP.Concurrency.Transformation
+import LaPToP.Concurrency.InsertionSort
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -22,7 +23,8 @@ definition (Section 6.0) is formalized in `LaPToP.RecursiveDefinition.Nat` and
 (Section 6.1) in `LaPToP.RecursiveDefinition.Programs`, and concurrent
 composition (Section 8.0) in `LaPToP.Concurrency.Composition` and
 `LaPToP.Concurrency.ListConcurrency`, and the sequential-to-concurrent
-transformation (Section 8.1) in `LaPToP.Concurrency.Transformation`.
+transformation (Section 8.1) in `LaPToP.Concurrency.Transformation` and
+`LaPToP.Concurrency.InsertionSort`.
 :::
 
 :::definition "recursive_program" (parent := "recursion_concurrency_core") (lean := "LaPToP.RecursiveDefinition.IsFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint.unique")
@@ -402,4 +404,40 @@ infinite buffer with write and read counters $`w`, $`r` (concurrent whenever
 $`w \neq r`) and the cyclic buffer of length $`n` are left informal, as the book
 says the pattern "is not expressible as a source program without additional
 interactive constructs (Chapter 9)".
+:::
+
+:::theorem "insertion_sort" (parent := "recursion_concurrency_core") (tags := "concurrency, sorting, for-loop, hehner-8.1.1") (effort := "medium") (lean := "LaPToP.Concurrency.ISort.sorted, LaPToP.Concurrency.ISort.sorted_zero, LaPToP.Concurrency.ISort.sorted_one, LaPToP.Concurrency.ISort.IsPermBelow, LaPToP.Concurrency.ISort.IsPermBelow.refl, LaPToP.Concurrency.ISort.IsPermBelow.mono, LaPToP.Concurrency.ISort.IsPermBelow.trans, LaPToP.Concurrency.ISort.IsPermBelow.eq_of_le, LaPToP.Concurrency.ISort.IsPermBelow.apply_lt, LaPToP.Concurrency.ISort.IsPermBelow.le_of_forall_le, LaPToP.Concurrency.ISort.swap, LaPToP.Concurrency.ISort.swap_iff, LaPToP.Concurrency.ISort.swap_isPermBelow, LaPToP.Concurrency.ISort.sortStep, LaPToP.Concurrency.ISort.sortStep_refines, LaPToP.Concurrency.ISort.sortLoop, LaPToP.Concurrency.ISort.sortLoop_forRefines, LaPToP.Concurrency.ISort.sortLoop_zero, LaPToP.Concurrency.ISort.swap_swap_comm, LaPToP.Concurrency.ISort.S_comm, LaPToP.Concurrency.ISort.swap_preserves_cmp, LaPToP.Concurrency.ISort.S_preserves_C")
+"Exercise 209 asks for a program to sort a list in time bounded by the square
+of the length of the list. Here is a solution. Let the list be $`L`, and define
+$`\mathit{sort} = \langle n \cdot \forall i, j : 0,..n \cdot i \le j \Rightarrow L\,i \le L\,j \rangle`
+so that $`\mathit{sort}\ n` says that $`L` is sorted up to index $`n`. The
+specification is $`(L' \text{ is a permutation of } L) \land \mathit{sort}'\,(\# L) \land t' \le t + (\# L)^2`.
+We leave the first conjunct informal, and ensure that it is satisfied by using
+$`\mathit{swap}\ i\ j = L\,i := L\,j \parallel L\,j := L\,i` to make changes to $`L`. We
+ignore the last conjunct; program transformation will give a linear time
+solution. The second conjunct is equal to $`\mathit{sort}\ 0 \Rightarrow \mathit{sort}'\,(\# L)`
+since $`\mathit{sort}\ 0` is a theorem.
+$`\mathit{sort}\ 0 \Rightarrow \mathit{sort}'\,(\# L) \Leftarrow \mathbf{for}\ n := 0;..\# L\ \mathbf{do}\ \mathit{sort}\ n \Rightarrow \mathit{sort}'\,(n+1)`
+$`\mathit{sort}\ n \Rightarrow \mathit{sort}'\,(n+1) \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ \mathbf{if}\ L\,(n-1) \le L\,n\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ \mathit{swap}\,(n-1)\,n.\ \mathit{sort}\,(n-1) \Rightarrow \mathit{sort}'\,n`
+... Let $`C\,n` stand for the comparison $`L\,(n-1) \le L\,n` and let $`S\,n` stand for
+$`\mathit{swap}\,(n-1)\,n`. ... If $`i` and $`j` differ by more than $`1`, then $`S\,i` and
+$`S\,j` can be executed concurrently. Under the same condition, $`S\,i` can be
+executed and $`C\,j` can be evaluated concurrently. ... For the ease of writing
+a quadratic-time sequential sort, given a clever compiler, we obtain a
+linear-time parallel sort." On the list state of {uses "list_concurrency"}[]
+(the time is ignored, as in the book), $`\mathit{swap}` is the simultaneous update
+$`L \circ (i \leftrightarrow j)`, with the item-level reading of
+$`L\,i := L\,j \parallel L\,j := L\,i` proved. Both refinements are proved — the
+recursive one with the call taken as a specification, the loop as the
+obligations of {uses "for_loop"}[]. Deviation, recorded: the book's informal
+first conjunct must be carried in the specification for the refinement to be
+provable (the recursive call must leave item $`n` in place), so
+$`\mathit{sort}\ n \Rightarrow \mathit{sort}'\,(n+1)` is paired with "$`L'` is a
+permutation of $`L` fixing every index $`\ge n+1`", which
+$`\mathit{swap}` establishes. Of the concurrency remark, what is proved is that
+swaps on disjoint items commute (so by {uses "sequential_to_concurrent"}[]
+either order gives the same result) and that $`S\,i` leaves $`C\,j` unchanged when
+$`|i - j| > 1`; the linear-time execution pattern is a picture and is not
+formalized. Uses {uses "concurrent_composition"}[] and
+{uses "specification_laws"}[].
 :::
