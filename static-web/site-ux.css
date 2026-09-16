@@ -1,34 +1,498 @@
-/* Site UX enhancements (permalinks + drill-down TOC). Injected post-build. */
+/* Site UX: permalinks + drill-down TOC (#764) + visual restyle (#786).
+   Inter linked by enhance-site-ux.py; system-ui stack is the offline fallback. */
 
-/* Stable statement anchors: keep scroll target clear of sticky chrome. */
+/* ------------------------------------------------------------------ */
+/* Design tokens                                                      */
+/* ------------------------------------------------------------------ */
+:root {
+  --site-ux-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --site-ux-font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", "Roboto Mono",
+    Menlo, Consolas, "Liberation Mono", monospace;
+
+  --site-ux-text: #0f172a;
+  --site-ux-text-body: #1e293b;
+  --site-ux-text-muted: #334155;   /* slate-700 — accessible muted */
+  --site-ux-text-faint: #475569;   /* slate-600 */
+  --site-ux-link: #0f766e;         /* teal-700 — intentional, not default blue */
+  --site-ux-link-hover: #115e59;   /* teal-800 */
+  --site-ux-focus: #0284c7;        /* sky-600 */
+
+  --site-ux-surface: #ffffff;
+  --site-ux-surface-muted: #f8fafc;
+  --site-ux-surface-subtle: #f1f5f9;
+  --site-ux-border: #e2e8f0;
+  --site-ux-border-strong: #cbd5e1;
+
+  --site-ux-def: #0369a1;          /* sky-700 */
+  --site-ux-def-bg: #f0f9ff;       /* sky-50 */
+  --site-ux-def-border: #bae6fd;   /* sky-200 */
+  --site-ux-thm: #5b21b6;          /* violet-800 */
+  --site-ux-thm-bg: #faf5ff;       /* purple-50 */
+  --site-ux-thm-border: #e9d5ff;   /* purple-200 */
+  --site-ux-lem: #6d28d9;
+  --site-ux-lem-bg: #f5f3ff;
+  --site-ux-lem-border: #ddd6fe;
+  --site-ux-proof: #57534e;        /* stone-600 */
+  --site-ux-proof-bg: #fafaf9;     /* stone-50 */
+  --site-ux-proof-border: #d6d3d1; /* stone-300 */
+  --site-ux-proof-stripe: #a8a29e;
+
+  --site-ux-radius: 0.5rem;
+  --site-ux-radius-sm: 0.35rem;
+  --site-ux-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+
+  --site-ux-header-offset: calc(var(--verso-header-height, 3rem) + 0.75rem);
+
+  /* Verso token overrides */
+  --verso-structure-font-family: var(--site-ux-font-sans) !important;
+  --verso-text-font-family: var(--site-ux-font-sans) !important;
+  --verso-code-font-family: var(--site-ux-font-mono) !important;
+  --verso-text-color: var(--site-ux-text-body);
+  --verso-structure-color: var(--site-ux-text);
+  --verso-toc-background-color: #f8fafc;
+  --verso-toc-border-color: var(--site-ux-border);
+  --verso-toc-width: 20.5rem;           /* was ~18rem / 288px — less cramped */
+  --verso-content-max-width: 46.5rem;   /* ~744px readable measure */
+  --verso-font-size: 16px;
+
+  --bp-color-text-strong: var(--site-ux-text);
+  --bp-color-text: var(--site-ux-text-body);
+  --bp-color-text-muted: var(--site-ux-text-muted);
+  --bp-color-text-subtle: var(--site-ux-text-muted);
+  --bp-color-text-faint: var(--site-ux-text-faint);
+  --bp-color-surface: var(--site-ux-surface);
+  --bp-color-surface-muted: var(--site-ux-surface-muted);
+  --bp-color-border: var(--site-ux-border-strong);
+  --bp-color-border-soft: var(--site-ux-border);
+  --bp-color-link: var(--site-ux-link);
+}
+
+/* ------------------------------------------------------------------ */
+/* 1. Type system — unify UI/prose to modern sans; math/code separate */
+/* ------------------------------------------------------------------ */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body,
+header,
+header *,
+#toc,
+#toc *:not(.katex):not(.katex *),
+main,
+.content-wrapper,
+.bp_heading,
+.bp_caption,
+.bp_label,
+.bp_extras,
+.bp_relation_chip,
+.bp_code_link,
+.bp_build_metadata,
+#bp-style-switcher {
+  font-family: var(--site-ux-font-sans) !important;
+}
+
+body {
+  color: var(--site-ux-text-body);
+  background: var(--site-ux-surface);
+  line-height: 1.65;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--site-ux-text);
+  font-family: var(--site-ux-font-sans) !important;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.28;
+}
+
+h1 { margin: 0.25rem 0 0.85rem; font-size: 1.65rem; }
+h2 { margin: 1.6rem 0 0.55rem; }
+h3 { margin: 1.25rem 0 0.45rem; }
+
+p, li, dd, dt {
+  font-family: var(--site-ux-font-sans) !important;
+  line-height: 1.65;
+  color: var(--site-ux-text-body);
+}
+
+p { margin: 0.65rem 0; }
+
+/* Math stays KaTeX; code is dedicated mono at smaller size */
+.katex, .katex * {
+  font-family: KaTeX_Main, "Times New Roman", serif !important;
+}
+
+code, pre, .hl.lean, .hl.lean *,
+.bp_external_decl_signature,
+.bp_code_decl_name,
+.declaration .code,
+pre code {
+  font-family: var(--site-ux-font-mono) !important;
+}
+
+/* Lean / code: smaller than prose (was ~16px and oversized) */
+code.hl.lean.block,
+pre code.hl.lean.block,
+.bp_code_panel .hl.lean,
+.bp_code_panel pre,
+.bp_external_decl_signature,
+.declaration {
+  font-size: 0.8125rem !important; /* 13px at 16px root */
+  line-height: 1.45 !important;
+}
+
+code:not(.hl) {
+  font-size: 0.875em;
+  background: var(--site-ux-surface-subtle);
+  border-radius: 0.25rem;
+  padding: 0.08em 0.28em;
+}
+
+pre, code.hl.lean.block {
+  border: 1px solid var(--site-ux-border);
+  border-radius: var(--site-ux-radius-sm);
+  background: var(--site-ux-surface-muted) !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. Layout — measure, scroll-margin under fixed header, TOC width   */
+/* ------------------------------------------------------------------ */
+main > .content-wrapper {
+  padding-top: 0.65rem;
+  padding-bottom: 3.5rem;
+}
+
+main > .content-wrapper > section {
+  max-width: var(--verso-content-max-width);
+}
+
+header {
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: saturate(1.15) blur(8px);
+  box-shadow: 0 1px 0 var(--site-ux-border) !important;
+}
+
+.header-title h1,
+.toc-title h1 {
+  font-weight: 650 !important;
+  letter-spacing: -0.02em;
+  font-size: 1.05rem !important;
+}
+
+.bp-stable-anchor,
+.bp_wrapper,
+:target {
+  scroll-margin-top: var(--site-ux-header-offset);
+}
+
+/* Widen default TOC a bit; still user-resizable via Verso */
+@media screen and (min-width: 701px) {
+  :root {
+    --verso-toc-width: 20.5rem;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 6. Palette — links & focus                                         */
+/* ------------------------------------------------------------------ */
+main a,
+.content-wrapper a,
+#toc a {
+  color: var(--site-ux-link);
+  text-underline-offset: 0.14em;
+}
+
+main a:hover,
+.content-wrapper a:hover,
+#toc a:hover {
+  color: var(--site-ux-link-hover);
+}
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+select:focus-visible,
+.bp-node-permalink:focus-within {
+  outline: 2px solid var(--site-ux-focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. Statement / proof hierarchy — distinct treatments               */
+/* ------------------------------------------------------------------ */
+.bp_wrapper {
+  scroll-margin-top: var(--site-ux-header-offset);
+  margin: 1.25rem 0 !important;
+  padding: 0.9rem 1.05rem 1rem !important;
+  border: 1px solid var(--site-ux-border) !important;
+  border-radius: var(--site-ux-radius) !important;
+  background: var(--site-ux-surface) !important;
+  box-shadow: var(--site-ux-shadow);
+}
+
+/* Definitions — sky accent + cool tint */
+.bp_wrapper.bp_kind_definition_wrapper,
+.bp_wrapper.bp_style_definition {
+  border-color: var(--site-ux-def-border) !important;
+  border-left: 3px solid var(--site-ux-def) !important;
+  background: linear-gradient(180deg, #ffffff 0%, var(--site-ux-def-bg) 100%) !important;
+}
+
+/* Theorems / propositions — violet accent */
+.bp_wrapper.bp_kind_theorem_wrapper,
+.bp_wrapper.bp_kind_proposition_wrapper,
+.bp_wrapper.bp_kind_corollary_wrapper {
+  border-color: var(--site-ux-thm-border) !important;
+  border-left: 3px solid var(--site-ux-thm) !important;
+  background: linear-gradient(180deg, #ffffff 0%, var(--site-ux-thm-bg) 100%) !important;
+}
+
+.bp_wrapper.bp_kind_lemma_wrapper {
+  border-color: var(--site-ux-lem-border) !important;
+  border-left: 3px solid var(--site-ux-lem) !important;
+  background: linear-gradient(180deg, #ffffff 0%, var(--site-ux-lem-bg) 100%) !important;
+}
+
+/* Proofs — stone/warm muted panel, dashed accent, quieter type */
+.bp_wrapper.bp_kind_proof_wrapper,
+.bp_wrapper.bp_style_proof,
+details.bp_kind_proof_wrapper {
+  border: 1px dashed var(--site-ux-proof-border) !important;
+  border-left: 3px solid var(--site-ux-proof-stripe) !important;
+  background: var(--site-ux-proof-bg) !important;
+  box-shadow: none !important;
+}
+
+.bp_heading {
+  gap: 0.45rem 0.6rem !important;
+  font-weight: 650 !important;
+  font-style: normal !important;
+  color: var(--site-ux-text) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--site-ux-border) 85%, transparent);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.2rem;
+  font-size: 1rem !important;
+}
+
+.bp_kind_proof_heading,
+.proof_heading {
+  border-bottom-color: transparent;
+  font-weight: 600 !important;
+  color: var(--site-ux-proof) !important;
+  font-size: 0.92rem !important;
+  font-variant: normal;
+}
+
+/* Caption pills */
+.bp_caption,
+span[class$="_thmcaption"] {
+  display: inline-flex !important;
+  align-items: center;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  font-style: normal !important;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--site-ux-def) !important;
+  background: #e0f2fe;
+  border: 1px solid var(--site-ux-def-border);
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  line-height: 1.25;
+}
+
+.bp_wrapper.bp_kind_theorem_wrapper .bp_caption,
+.bp_kind_theorem_caption,
+.theorem_thmcaption {
+  color: var(--site-ux-thm) !important;
+  background: #f3e8ff;
+  border-color: var(--site-ux-thm-border);
+}
+
+.bp_wrapper.bp_kind_lemma_wrapper .bp_caption,
+.bp_kind_lemma_caption,
+.lemma_thmcaption:not(.bp_code_summary_text) {
+  color: var(--site-ux-lem) !important;
+  background: #ede9fe;
+  border-color: var(--site-ux-lem-border);
+}
+
+.bp_wrapper.bp_kind_proof_wrapper .bp_caption,
+.bp_kind_proof_caption,
+.proof_thmcaption {
+  color: var(--site-ux-proof) !important;
+  background: #f5f5f4;
+  border-color: var(--site-ux-proof-border);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-weight: 650 !important;
+}
+
+.bp_label,
+span[class$="_thmlabel"] {
+  font-weight: 650 !important;
+  font-style: normal !important;
+  color: var(--site-ux-text) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Statement body: readable roman (not italic serif) */
+.bp_wrapper.bp_style_plain .bp_content,
+div.theorem-style-plain div[class$="_thmcontent"],
+.bp_kind_theorem_content,
+.bp_kind_proposition_content,
+.bp_kind_lemma_content,
+.bp_kind_corollary_content,
+.bp_kind_definition_content,
+div.theorem_thmcontent,
+div.proposition_thmcontent,
+div.lemma_thmcontent,
+div.corollary_thmcontent,
+div.definition_thmcontent {
+  font-style: normal !important;
+  font-weight: 400 !important;
+  font-family: var(--site-ux-font-sans) !important;
+  color: var(--site-ux-text-body) !important;
+  line-height: 1.65 !important;
+  border-left: none !important;
+  padding-left: 0.1rem !important;
+  margin-top: 0.55rem !important;
+}
+
+.bp_kind_proof_content,
+div.proof_content {
+  font-style: normal !important;
+  font-family: var(--site-ux-font-sans) !important;
+  color: var(--site-ux-text-muted) !important;
+  line-height: 1.6 !important;
+  border-left: none !important;
+  padding-left: 0.1rem !important;
+  margin-top: 0.35rem !important;
+  font-size: 0.95em;
+}
+
+.bp_content > :first-child { margin-top: 0; }
+.bp_content > :last-child { margin-bottom: 0; }
+
+/* Metadata chips — less visual weight */
+.bp_relation_chip,
+.bp_code_link,
+button.bp_relation_chip,
+.bp_tags span,
+.bp_effort,
+[class*="bp_tag"] {
+  font-size: 0.72rem !important;
+  font-weight: 550 !important;
+  color: var(--site-ux-text-faint) !important;
+  background: transparent !important;
+  border: 1px solid var(--site-ux-border) !important;
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem !important;
+  opacity: 0.92;
+}
+
+.bp_relation_chip:hover,
+.bp_code_link:hover {
+  color: var(--site-ux-link) !important;
+  border-color: color-mix(in srgb, var(--site-ux-link) 35%, var(--site-ux-border)) !important;
+  background: color-mix(in srgb, var(--site-ux-link) 6%, white) !important;
+}
+
+.bp_extras {
+  opacity: 0.9;
+  font-size: 0.85em;
+}
+
+/* ------------------------------------------------------------------ */
+/* 4. Lean / code panels — collapsed by default, separated from math  */
+/* ------------------------------------------------------------------ */
+details.bp_code_block.bp_code_panel,
+details.bp_code_panel {
+  margin: 0.55rem 0 1.1rem !important;
+  padding: 0 !important;
+  border: 1px solid var(--site-ux-border) !important;
+  border-radius: var(--site-ux-radius-sm) !important;
+  background: var(--site-ux-surface-muted) !important;
+  box-shadow: none !important;
+}
+
+details.bp_code_panel > summary.bp_heading {
+  padding: 0.55rem 0.75rem;
+  margin: 0;
+  border-bottom: none;
+  font-size: 0.88rem !important;
+  color: var(--site-ux-text-muted) !important;
+  cursor: pointer;
+  list-style: none;
+}
+
+details.bp_code_panel > summary.bp_heading::-webkit-details-marker {
+  display: none;
+}
+
+details.bp_code_panel > summary.bp_heading::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  color: var(--site-ux-text-faint);
+  margin-right: 0.25rem;
+}
+
+details.bp_code_panel[open] > summary.bp_heading::before {
+  content: "▾";
+}
+
+details.bp_code_panel[open] > summary.bp_heading {
+  border-bottom: 1px solid var(--site-ux-border);
+}
+
+details.bp_code_panel .bp_code_summary_text,
+details.bp_code_panel .lemma_thmcaption.bp_code_summary_text {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  color: var(--site-ux-text-muted) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+details.bp_code_panel > :not(summary) {
+  padding: 0.55rem 0.75rem 0.75rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Permalinks (#764)                                                  */
+/* ------------------------------------------------------------------ */
 .bp-stable-anchor {
   display: block;
   position: relative;
-  top: 0;
   height: 0;
   width: 0;
   overflow: hidden;
   visibility: hidden;
   pointer-events: none;
-  scroll-margin-top: 1.25rem;
+  scroll-margin-top: var(--site-ux-header-offset);
 }
 
-/* Highlight the statement when its friendly hash is targeted. */
-.bp_wrapper:has(> .bp-stable-anchor:target),
 .bp_wrapper:has(> .bp-stable-anchor:target) {
-  outline: 2px solid color-mix(in srgb, currentColor 35%, transparent);
-  outline-offset: 4px;
+  outline: 2px solid color-mix(in srgb, var(--site-ux-focus) 55%, transparent);
+  outline-offset: 3px;
 }
 
-/* Permalink control on blueprint statements (Verso-like, discoverable). */
 .bp-node-permalink.permalink-widget.inline {
-  opacity: 0.35;
+  opacity: 0.4;
   width: auto;
-  margin-left: 0.4rem;
-  font-size: 0.75em;
+  margin-left: 0.3rem;
+  font-size: 0.78em;
   vertical-align: middle;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.15s ease;
 }
 
 .bp_heading:hover .bp-node-permalink.permalink-widget.inline,
@@ -36,6 +500,7 @@
 .bp-node-permalink.permalink-widget.inline:focus-within,
 .bp-node-permalink.is-copied {
   opacity: 1;
+  color: var(--site-ux-link);
 }
 
 .bp-node-permalink > a,
@@ -51,34 +516,67 @@
 }
 
 .bp-node-permalink .bp-permalink-copied {
-  margin-left: 0.35rem;
+  margin-left: 0.3rem;
   font-size: 0.85em;
-  opacity: 0.85;
+  color: #0f766e;
+  font-weight: 600;
 }
 
-/* Drill-down TOC */
+/* ------------------------------------------------------------------ */
+/* 5. TOC — spacing, nesting, active statement, quieter disclosure    */
+/* ------------------------------------------------------------------ */
+#toc {
+  color: var(--site-ux-text-body);
+  font-size: 0.9rem;
+}
+
+#toc .toc-title h1 {
+  font-size: 0.95rem !important;
+  color: var(--site-ux-text);
+}
+
+#toc a {
+  color: var(--site-ux-text-body);
+  text-decoration: none;
+}
+
+#toc a:hover {
+  color: var(--site-ux-link);
+  text-decoration: underline;
+}
+
 #toc .site-ux-toc {
   list-style: none;
-  margin: 0.25rem 0 0.75rem;
-  padding: 0 0 0 0.15rem;
-  font-size: 0.92em;
+  margin: 0.4rem 0 0.9rem;
+  padding: 0;
+  line-height: 1.45;
 }
 
 #toc .site-ux-toc > li {
-  margin: 0.15rem 0;
+  margin: 0.28rem 0;
 }
 
 #toc .site-ux-toc .site-ux-toc-row {
   display: flex;
   align-items: baseline;
-  gap: 0.15rem;
+  gap: 0.25rem;
   flex-wrap: nowrap;
+  padding: 0.18rem 0.35rem;
+  border-radius: 0.35rem;
+  line-height: 1.4;
+}
+
+#toc .site-ux-toc .site-ux-toc-chapter.current > .site-ux-toc-row {
+  background: color-mix(in srgb, var(--site-ux-link) 9%, transparent);
 }
 
 #toc .site-ux-toc .site-ux-toc-row .num {
   flex: 0 0 auto;
-  min-width: 1.4em;
-  opacity: 0.75;
+  min-width: 1.55em;
+  color: var(--site-ux-text-faint);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  font-size: 0.92em;
 }
 
 #toc .site-ux-toc .site-ux-toc-row a {
@@ -88,36 +586,82 @@
 
 #toc .site-ux-toc .site-ux-toc-chapter.current > .site-ux-toc-row > a,
 #toc .site-ux-toc .site-ux-toc-chapter.current > .site-ux-toc-row .num {
-  font-weight: 600;
+  font-weight: 650;
+  color: var(--site-ux-text);
 }
 
 #toc .site-ux-toc .site-ux-toc-nested {
   list-style: none;
-  margin: 0.1rem 0 0.35rem 0.55rem;
-  padding: 0 0 0 0.45rem;
-  border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  margin: 0.2rem 0 0.45rem 0.35rem;
+  padding: 0 0 0 0.65rem;
+  border-left: 2px solid var(--site-ux-border);
 }
 
 #toc .site-ux-toc .site-ux-toc-group-title {
-  font-size: 0.92em;
-  opacity: 0.9;
+  font-size: 0.86em;
+  font-weight: 600;
+  color: var(--site-ux-text-muted);
+  line-height: 1.4;
 }
 
 #toc .site-ux-toc .site-ux-toc-entry {
-  margin: 0.08rem 0;
-  font-size: 0.9em;
-  line-height: 1.25;
+  margin: 0.12rem 0;
+  font-size: 0.88em;
+  line-height: 1.4;
 }
 
 #toc .site-ux-toc .site-ux-toc-entry a {
-  text-decoration: none;
+  color: var(--site-ux-text-muted);
+  display: block;
+  padding: 0.12rem 0.3rem;
+  border-radius: 0.3rem;
 }
 
 #toc .site-ux-toc .site-ux-toc-entry a:hover {
-  text-decoration: underline;
+  color: var(--site-ux-link);
+  background: color-mix(in srgb, var(--site-ux-link) 6%, transparent);
+  text-decoration: none;
 }
 
-/* Reuse Verso toggle affordance for nested chapters/groups. */
+/* Active statement (set by site-ux.js) */
+#toc .site-ux-toc .site-ux-toc-entry.is-active > a,
+#toc .site-ux-toc .site-ux-toc-entry a.is-active {
+  color: var(--site-ux-text) !important;
+  font-weight: 650;
+  background: color-mix(in srgb, var(--site-ux-focus) 12%, transparent);
+  box-shadow: inset 2px 0 0 var(--site-ux-focus);
+}
+
+/* Quieter disclosure controls — hide native marker, use compact chevron */
+#toc label.toggle-split-toc {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+}
+
+#toc label.toggle-split-toc input.toggle-split-toc {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin: 0;
+  border-right: 2px solid var(--site-ux-text-faint);
+  border-bottom: 2px solid var(--site-ux-text-faint);
+  transform: rotate(-45deg);
+  translate: 0 -1px;
+  cursor: pointer;
+}
+
+#toc label.toggle-split-toc input.toggle-split-toc:checked {
+  transform: rotate(45deg);
+  translate: 0 -2px;
+}
+
 #toc .site-ux-toc label.toggle-split-toc {
   flex: 0 0 auto;
 }
@@ -128,5 +672,115 @@
 }
 
 #toc .split-toc.site-ux-local-toc > ol.site-ux-toc {
-  margin-top: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+/* Book TOC (non-enhanced rows) also get sans + spacing */
+#toc .split-tocs,
+#toc .split-toc {
+  font-family: var(--site-ux-font-sans) !important;
+}
+
+#toc .split-toc ol {
+  line-height: 1.45;
+}
+
+/* ------------------------------------------------------------------ */
+/* 7. Dev chrome off primary reading surface                          */
+/* ------------------------------------------------------------------ */
+.bp_build_metadata {
+  display: none !important; /* relocated into #site-ux-dev-drawer by JS */
+}
+
+#bp-style-switcher {
+  display: none !important; /* relocated into #site-ux-dev-drawer by JS */
+}
+
+#site-ux-dev-drawer {
+  position: fixed;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 1000;
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  font-family: var(--site-ux-font-sans) !important;
+  font-size: 0.78rem;
+  color: var(--site-ux-text-muted);
+}
+
+#site-ux-dev-drawer > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--site-ux-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--site-ux-shadow);
+  color: var(--site-ux-text-faint);
+  font-weight: 600;
+  user-select: none;
+}
+
+#site-ux-dev-drawer > summary::-webkit-details-marker { display: none; }
+
+#site-ux-dev-drawer > summary:hover {
+  color: var(--site-ux-text-muted);
+  border-color: var(--site-ux-border-strong);
+}
+
+#site-ux-dev-drawer[open] > summary {
+  border-radius: var(--site-ux-radius-sm) var(--site-ux-radius-sm) 0 0;
+  border-bottom-color: transparent;
+}
+
+#site-ux-dev-drawer .site-ux-dev-body {
+  border: 1px solid var(--site-ux-border);
+  border-radius: 0 var(--site-ux-radius-sm) var(--site-ux-radius-sm) var(--site-ux-radius-sm);
+  background: var(--site-ux-surface);
+  box-shadow: var(--site-ux-shadow);
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+#site-ux-dev-drawer .bp_build_metadata {
+  display: flex !important;
+  justify-content: flex-start;
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+#site-ux-dev-drawer #bp-style-switcher {
+  display: flex !important;
+  position: static !important;
+  right: auto;
+  bottom: auto;
+  box-shadow: none !important;
+  padding: 0.25rem 0;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* Theme refinements — keep switcher options, our cards win for hierarchy */
+html[data-bp-style="modern"] .bp_wrapper {
+  box-shadow: var(--site-ux-shadow) !important;
+}
+
+html[data-bp-style="bold"] .bp_wrapper {
+  box-shadow: 0 3px 0 rgba(15, 23, 42, 0.1) !important;
+}
+
+@media (max-width: 700px) {
+  .bp_wrapper {
+    padding: 0.7rem 0.75rem 0.8rem !important;
+    margin: 1rem 0 !important;
+  }
+
+  #site-ux-dev-drawer {
+    right: 0.5rem;
+    bottom: 0.5rem;
+  }
 }

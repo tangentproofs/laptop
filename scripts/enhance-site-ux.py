@@ -414,7 +414,75 @@ def enhance_wrappers(page_html: str) -> tuple[str, int]:
     return "".join(out), count
 
 
+
+CODE_PANEL_OPEN_RE = re.compile(
+    r'(<details\b[^>]*\b(?:bp_code_block\s+bp_code_panel|bp_code_panel)\b[^>]*)(\s+open(?:="open")?)',
+    re.IGNORECASE,
+)
+
+
+def collapse_code_panels(page_html: str) -> str:
+    """Lean/code details start closed so the mathematical statement stays primary."""
+    # Broad but safe: any details bearing bp_code_panel with open attr.
+    def strip_open(m: re.Match[str]) -> str:
+        return m.group(1)
+
+    page_html, _ = CODE_PANEL_OPEN_RE.subn(strip_open, page_html)
+    # Also handle open before class
+    page_html = re.sub(
+        r'(<details\b[^>]*?)\s+open(?:="open")?([^>]*\bbp_code_panel\b[^>]*>)',
+        r'\1\2',
+        page_html,
+        flags=re.IGNORECASE,
+    )
+    return page_html
+
+
+EARLY_STYLE_SCRIPT = (
+    "<script>"
+    "/* Prefer modern docs theme for first visit; respect saved choice. */"
+    "(function(){"
+    'var key="verso-blueprint-style";'
+    "var allowed={blueprint:1,modern:1,bold:1};"
+    'var style="modern";'
+    "try{"
+    "var saved=localStorage.getItem(key);"
+    "if(saved&&allowed[saved])style=saved;"
+    'else localStorage.setItem(key,"modern");'
+    "}catch(e){}"
+    'document.documentElement.setAttribute("data-bp-style",style);'
+    "})();"
+    "</script>"
+)
+
+FONT_LINKS = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+    '    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">\n'
+    '    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">'
+)
+
+
 def inject_assets(page_html: str) -> str:
+    if "Prefer modern docs theme" not in page_html:
+        page_html = page_html.replace(
+            "<head>",
+            "<head>\n    " + EARLY_STYLE_SCRIPT,
+            1,
+        )
+
+    if "fonts.googleapis.com/css2?family=Inter" not in page_html:
+        page_html, n = HEAD_LINK_RE.subn(
+            rf"\1\n    {FONT_LINKS}",
+            page_html,
+            count=1,
+        )
+        if n == 0:
+            page_html = page_html.replace(
+                "</head>",
+                f"    {FONT_LINKS}\n  </head>",
+                1,
+            )
+
     if ASSET_CSS not in page_html:
         page_html, n = HEAD_LINK_RE.subn(
             rf'\1\n    <link rel="stylesheet" href="{ASSET_CSS}">',
@@ -422,7 +490,6 @@ def inject_assets(page_html: str) -> str:
             count=1,
         )
         if n == 0:
-            # Fallback: before </head>
             page_html = page_html.replace(
                 "</head>",
                 f'    <link rel="stylesheet" href="{ASSET_CSS}">\n  </head>',
@@ -466,6 +533,7 @@ def enhance_page(path: Path, by_chapter: dict[str, list[dict[str, Any]]]) -> dic
         return enhanced
 
     page, _ = TOC_NAV_RE.subn(toc_sub, page, count=1)
+    page = collapse_code_panels(page)
     page = inject_assets(page)
 
     if page != original:
