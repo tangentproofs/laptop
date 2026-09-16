@@ -552,6 +552,13 @@ details.bp_code_panel > :not(summary) {
   line-height: 1.45;
 }
 
+/* Undo Verso hanging-indent meant for the old table TOC rows. */
+#toc .split-toc > ol.site-ux-toc > li,
+#toc .site-ux-toc li {
+  text-indent: 0;
+  padding-left: 0;
+}
+
 #toc .site-ux-toc > li {
   margin: 0.28rem 0;
 }
@@ -613,8 +620,11 @@ details.bp_code_panel > :not(summary) {
 #toc .site-ux-toc .site-ux-toc-entry a {
   color: var(--site-ux-text-muted);
   display: block;
-  padding: 0.12rem 0.3rem;
+  padding: 0.12rem 0.4rem;
   border-radius: 0.3rem;
+  /* Verso #toc .split-toc > ol > li { text-indent:-1.5rem } inherits into
+     nested entries and pulls text left of the background paint box. */
+  text-indent: 0;
 }
 
 #toc .site-ux-toc .site-ux-toc-entry a:hover {
@@ -623,13 +633,16 @@ details.bp_code_panel > :not(summary) {
   text-decoration: none;
 }
 
-/* Active statement (set by site-ux.js) */
+/* Active statement (set by site-ux.js) — clean bar behind item text.
+   Avoid inset box-shadow: with border-radius it paints a curved left stub
+   that reads as a stray glyph and makes the bar look clipped/misaligned. */
 #toc .site-ux-toc .site-ux-toc-entry.is-active > a,
 #toc .site-ux-toc .site-ux-toc-entry a.is-active {
   color: var(--site-ux-text) !important;
   font-weight: 650;
   background: color-mix(in srgb, var(--site-ux-focus) 12%, transparent);
-  box-shadow: inset 2px 0 0 var(--site-ux-focus);
+  box-shadow: none;
+  text-indent: 0;
 }
 
 /* Quieter disclosure controls — hide native marker, use compact chevron */
@@ -644,20 +657,41 @@ details.bp_code_panel > :not(summary) {
   position: relative;
 }
 
-#toc label.toggle-split-toc input.toggle-split-toc {
+/* Hide Verso black triangle ::before — we draw a compact chevron on the input */
+#toc .split-toc label.toggle-split-toc::before {
+  content: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  background: none !important;
+}
+
+/* Beat Verso #toc .split-toc label.toggle-split-toc input[type=checkbox]
+   (opacity:0; position:absolute; 0-size) so our chevron stays visible. */
+#toc .split-toc label.toggle-split-toc input.toggle-split-toc[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
+  display: inline-block;
+  opacity: 1;
+  position: static;
+  top: auto;
+  left: auto;
+  z-index: auto;
   width: 0.55rem;
   height: 0.55rem;
   margin: 0;
   border-right: 2px solid var(--site-ux-text-faint);
   border-bottom: 2px solid var(--site-ux-text-faint);
+  border-top: none;
+  border-left: none;
+  background: transparent;
   transform: rotate(-45deg);
   translate: 0 -1px;
   cursor: pointer;
 }
 
-#toc label.toggle-split-toc input.toggle-split-toc:checked {
+#toc .split-toc label.toggle-split-toc input.toggle-split-toc[type="checkbox"]:checked {
   transform: rotate(45deg);
   translate: 0 -2px;
 }
@@ -669,6 +703,17 @@ details.bp_code_panel > :not(summary) {
 #toc .site-ux-toc-chapter:has(> .site-ux-toc-row .toggle-split-toc input[type="checkbox"]:not(:checked)) > .site-ux-toc-nested,
 #toc .site-ux-toc-group:has(> .site-ux-toc-row .toggle-split-toc input[type="checkbox"]:not(:checked)) > .site-ux-toc-nested {
   display: none;
+}
+
+/* Defeat Verso #toc .split-toc > :not(:first-child) overflow/indent that
+   can clip nested active backgrounds at the TOC pane edge. */
+#toc .split-toc.book > ol.site-ux-toc,
+#toc .split-toc.site-ux-local-toc > ol.site-ux-toc {
+  overflow: visible;
+  max-height: none;
+  margin-left: 0;
+  border-left: none;
+  padding-left: 0;
 }
 
 #toc .split-toc.site-ux-local-toc > ol.site-ux-toc {
