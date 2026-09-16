@@ -408,7 +408,7 @@ conjunction then follows by {uses "refinement_by_steps_parts_cases"}[]. Uses
 {uses "binary_search"}[] and {uses "recursive_time"}[].
 :::
 
-:::theorem "fibonacci" (parent := "program_theory_core") (tags := "programs, time, hehner-4.2.7") (effort := "small") (lean := "LaPToP.ProgramTheory.Fibonacci.FS, LaPToP.ProgramTheory.Fibonacci.assignX, LaPToP.ProgramTheory.Fibonacci.assignY, LaPToP.ProgramTheory.Fibonacci.assignN, LaPToP.ProgramTheory.Fibonacci.tick, LaPToP.ProgramTheory.Fibonacci.assignX_seq, LaPToP.ProgramTheory.Fibonacci.assignY_seq, LaPToP.ProgramTheory.Fibonacci.assignN_seq, LaPToP.ProgramTheory.Fibonacci.tick_seq, LaPToP.ProgramTheory.Fibonacci.Goal, LaPToP.ProgramTheory.Fibonacci.P, LaPToP.ProgramTheory.Fibonacci.Shift, LaPToP.ProgramTheory.Fibonacci.goal_refines, LaPToP.ProgramTheory.Fibonacci.P_refines, LaPToP.ProgramTheory.Fibonacci.shift_refines, LaPToP.ProgramTheory.Fibonacci.TL, LaPToP.ProgramTheory.Fibonacci.TS, LaPToP.ProgramTheory.Fibonacci.time_refines, LaPToP.ProgramTheory.Fibonacci.shift_time")
+:::theorem "fibonacci" (parent := "program_theory_core") (tags := "programs, time, hehner-4.2.7") (effort := "small") (lean := "LaPToP.ProgramTheory.Fibonacci.FS, LaPToP.ProgramTheory.Fibonacci.assignX, LaPToP.ProgramTheory.Fibonacci.assignY, LaPToP.ProgramTheory.Fibonacci.assignN, LaPToP.ProgramTheory.Fibonacci.tick, LaPToP.ProgramTheory.Fibonacci.assignX_seq, LaPToP.ProgramTheory.Fibonacci.assignY_seq, LaPToP.ProgramTheory.Fibonacci.assignN_seq, LaPToP.ProgramTheory.Fibonacci.tick_seq, LaPToP.ProgramTheory.Fibonacci.Goal, LaPToP.ProgramTheory.Fibonacci.P, LaPToP.ProgramTheory.Fibonacci.Shift, LaPToP.ProgramTheory.Fibonacci.goal_refines, LaPToP.ProgramTheory.Fibonacci.P_refines, LaPToP.ProgramTheory.Fibonacci.shift_refines, LaPToP.ProgramTheory.Fibonacci.TL, LaPToP.ProgramTheory.Fibonacci.TS, LaPToP.ProgramTheory.Fibonacci.time_refines, LaPToP.ProgramTheory.Fibonacci.shift_time, LaPToP.ProgramTheory.Fibonacci.fib_odd, LaPToP.ProgramTheory.Fibonacci.fib_even, LaPToP.ProgramTheory.Fibonacci.guard, LaPToP.ProgramTheory.Fibonacci.Sq₁, LaPToP.ProgramTheory.Fibonacci.Sq₂, LaPToP.ProgramTheory.Fibonacci.P_log, LaPToP.ProgramTheory.Fibonacci.odd_refines, LaPToP.ProgramTheory.Fibonacci.even_refines, LaPToP.ProgramTheory.Fibonacci.sq₁_refines, LaPToP.ProgramTheory.Fibonacci.sq₂_refines, LaPToP.ProgramTheory.Fibonacci.TLog, LaPToP.ProgramTheory.Fibonacci.tlog₁, LaPToP.ProgramTheory.Fibonacci.tlog_odd, LaPToP.ProgramTheory.Fibonacci.tlog_even, LaPToP.ProgramTheory.Fibonacci.sq₁_time, LaPToP.ProgramTheory.Fibonacci.sq₂_time")
 "In this subsection, we tackle Exercise 256. The definition of the Fibonacci
 numbers $`\mathit{fib}\ 0 = 0`, $`\mathit{fib}\ 1 = 1`, $`\mathit{fib}\ (n+2) = \mathit{fib}\ n + \mathit{fib}\ (n+1)` immediately
 suggests a recursive function definition ... We did not include functions in
@@ -431,10 +431,27 @@ specifications with new ones concerning time. We replace $`P` by $`t' = t+n` and
 add $`t := t+1` in front of its use; we also change $`x' = y \land y' = x+y` into $`t' = t`.
 $`t' = t+n \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ x := 0.\ y := 1\ \mathbf{else}\ n := n-1.\ t := t+1.\ t' = t+n.\ t' = t`;
 $`t' = t \Leftarrow n := x.\ x := y.\ y := n+y`. Linear time is a lot better than exponential
-time, but we can do even better." The linear-time solution and its timing are
-proved with Mathlib's $`\mathit{fib}` and the recursive call as a specification; the
-logarithmic-time solution with the doubling identities is the next chunk.
-Uses {uses "fast_exponentiation"}[], {uses "recursive_time"}[] and
+time, but we can do even better. Exercise 256 asks for a solution with
+logarithmic time. To get it, we need to take the hint offered in the exercise
+and use the equations $`\mathit{fib}(2 \times k + 1) = (\mathit{fib}\ k)^2 + (\mathit{fib}(k+1))^2`,
+$`\mathit{fib}(2 \times k + 2) = 2 \times \mathit{fib}\ k \times \mathit{fib}(k+1) + (\mathit{fib}(k+1))^2`. ...
+$`P \Leftarrow \mathbf{if}\ n = 0\ \mathbf{then}\ x := 0.\ y := 1\ \mathbf{else\ if}\ \mathit{even}\ n\ \mathbf{then}\ \mathit{even}\ n \land n > 0 \Rightarrow P\ \mathbf{else}\ \mathit{odd}\ n \Rightarrow P`;
+$`\mathit{odd}\ n \Rightarrow P \Leftarrow n := (n-1)/2.\ P.\ x' = x^2 + y^2 \land y' = 2 \times x \times y + y^2`;
+... we can get $`\mathit{fib}(2 \times k + 3)` as the sum of $`\mathit{fib}(2 \times k + 1)` and
+$`\mathit{fib}(2 \times k + 2)`.
+$`\mathit{even}\ n \land n > 0 \Rightarrow P \Leftarrow n := n/2 - 1.\ P.\ x' = 2 \times x \times y + y^2 \land y' = x^2 + y^2 + x'`.
+The remaining two problems ... require another variable as before, and as
+before, we can use $`n`. $`x' = x^2 + y^2 \land y' = 2 \times x \times y + y^2 \Leftarrow n := x.\ x := x^2 + y^2.\ y := 2 \times n \times y + y^2`;
+$`x' = 2 \times x \times y + y^2 \land y' = x^2 + y^2 + x' \Leftarrow n := x.\ x := 2 \times x \times y + y^2.\ y := n^2 + y^2 + x`.
+To prove that this program is now logarithmic time, we define time
+specification $`T = t' \le t + \log(n+1)` and we put $`t := t+1` before calls to $`T`.
+... $`\mathit{odd}\ n \Rightarrow 1 + \log((n-1)/2 + 1) \le \log(n+1)` (logarithm law)
+$`= \mathit{odd}\ n \Rightarrow \log(n-1+2) \le \log(n+1) = \top`; ... $`\mathit{even}\ n \land n > 0 \Rightarrow \log n \le \log(n+1) = \top`."
+Both solutions and their timings are proved with Mathlib's $`\mathit{fib}` and the
+recursive call as a specification; the doubling identities are Mathlib's,
+restated in the book's form, and $`\log` is the floor of the binary logarithm,
+for which the book's logarithm-law steps hold exactly. Uses
+{uses "fast_exponentiation"}[], {uses "recursive_time"}[] and
 {uses "nat_induction_predicate"}[].
 :::
 
