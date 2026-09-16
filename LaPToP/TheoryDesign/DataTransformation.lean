@@ -78,6 +78,35 @@ theorem implementable_transform {S : Spec (U × O)} (hS : Implementable S)
   rw [huniq o₁ ho₁]
   exact ⟨o', hn', hS'⟩
 
+/-! ### Transformers that mention the user's variables
+
+"Specification `S` talks about its nonlocal variables `old` and `old′` (and
+the user's variables), and the transformed specification talks about its
+nonlocal variables `new` and `new′` (and the user's variables)." A transformer
+`D` may itself mention the user's variables — the security switch of
+Section 7.2.0 uses `A=B=c` with `c` a user's variable — and then `D′` "with
+primes on all the variables" primes the user's variables too. `transformU`
+is this general form; `transform` is the special case in which `D` does not
+mention the user's variables. -/
+
+/-- `∀new· ∃old· D`, for a transformer that may mention the user's variables. -/
+def IsTransformerU (D : U → O → N → Prop) : Prop := ∀ u n, ∃ o, D u o n
+
+/-- `∀old· D ⇒ ∃old′· D′ ∧ S` where `D′` primes the user's variables as well. -/
+def transformU (D : U → O → N → Prop) (S : Spec (U × O)) : Spec (U × N) :=
+  fun s s' => ∀ o, D s.1 o s.2 → ∃ o', D s'.1 o' s'.2 ∧ S (s.1, o) (s'.1, o')
+
+/-- `transform` is `transformU` with a transformer ignoring the user's variables. -/
+theorem transform_eq_transformU (S : Spec (U × O)) : transform D S = transformU (fun _ => D) S := rfl
+
+theorem isTransformer_iff_isTransformerU [Nonempty U] : IsTransformer D ↔ IsTransformerU (fun _ : U => D) :=
+  ⟨fun h _ n => h n, fun h n => h (Classical.arbitrary U) n⟩
+
+/-- Transformation with a general transformer is monotonic with respect to refinement. -/
+theorem transformU_mono (D : U → O → N → Prop) {S S' : Spec (U × O)} (h : Refines S S') :
+    Refines (transformU D S) (transformU D S') :=
+  fun _s _s' hS' o ho => let ⟨o', hD, hS⟩ := hS' o ho; ⟨o', hD, h _ _ hS⟩
+
 end Spec
 
 /-! ### Exercise 454(a): replacing a natural by a binary -/
