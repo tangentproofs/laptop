@@ -15,9 +15,10 @@ open Informal
 :::group "program_theory_core"
 Programs as predicates on pre- and post-states; refinement as implication;
 sequential composition, conditionals, and assignment in Hehner's theory.
-Sections 4.0–4.2 of the book are formalized in the Lean modules
-`LaPToP.ProgramTheory.Specifications`, `LaPToP.ProgramTheory.Programs` and
-`LaPToP.ProgramTheory.Time`.
+Sections 4.0–4.3 of the book are formalized in the Lean modules
+`LaPToP.ProgramTheory.Specifications`, `LaPToP.ProgramTheory.Programs`,
+`LaPToP.ProgramTheory.Time` (Section 4.2) and `LaPToP.ProgramTheory.Space`
+(Section 4.3, the Towers of Hanoi).
 :::
 
 :::definition "program_as_predicate" (parent := "program_theory_core") (lean := "LaPToP.ProgramTheory.Spec, LaPToP.ProgramTheory.Spec.ext, LaPToP.ProgramTheory.Spec.outputs, LaPToP.ProgramTheory.Spec.Satisfiable, LaPToP.ProgramTheory.Spec.Unsatisfiable, LaPToP.ProgramTheory.Spec.Deterministic, LaPToP.ProgramTheory.Spec.Nondeterministic, LaPToP.ProgramTheory.Spec.Implementable, LaPToP.ProgramTheory.Spec.satisfiable_iff, LaPToP.ProgramTheory.Spec.unsatisfiable_iff, LaPToP.ProgramTheory.Spec.deterministic_iff, LaPToP.ProgramTheory.Spec.nondeterministic_iff, LaPToP.ProgramTheory.Spec.implementable_iff")

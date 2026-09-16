@@ -20,11 +20,17 @@ open Informal
 :::group "programming_language_core"
 Hehner's Chapter 5: the programming notations of "several languages" —
 control structures, scope, data structures, subprograms — explained as
-refinement notations or as specifications in the theory of Chapter 4. The
-while-loop of Section 5.2.0 is formalized in `LaPToP.ProgramTheory.WhileLoop`
-the for-loop of Section 5.2.3 in `LaPToP.ProgramTheory.ForLoop`, and variable
-declaration and suspension (Section 5.0) in `LaPToP.ProgramTheory.Scope`,
-assertions and backtracking (Section 5.4) in `LaPToP.ProgramTheory.Assertions`.
+refinement notations or as specifications in the theory of Chapter 4. In book
+order: variable declaration and suspension (Section 5.0) are formalized in
+`LaPToP.ProgramTheory.Scope`; arrays and records (Section 5.1) in
+`LaPToP.ProgramTheory.Arrays`; the while-loop (Section 5.2.0) in
+`LaPToP.ProgramTheory.WhileLoop`, the exit-loop (Section 5.2.1) in
+`LaPToP.ProgramTheory.ExitLoop`, the two-dimensional search (Section 5.2.2) in
+`LaPToP.ProgramTheory.TwoDimSearch`, the for-loop (Section 5.2.3) in
+`LaPToP.ProgramTheory.ForLoop`; time and space dependence (Section 5.3) in
+`LaPToP.ProgramTheory.TimeDependence`; assertions and backtracking
+(Section 5.4) in `LaPToP.ProgramTheory.Assertions`; and the value expression,
+functions and procedures (Section 5.5) in `LaPToP.ProgramTheory.Subprograms`.
 :::
 
 :::definition "data_structures" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Arrays.AS, LaPToP.ProgramTheory.Arrays.assignElem, LaPToP.ProgramTheory.Arrays.assignA, LaPToP.ProgramTheory.Arrays.assignI, LaPToP.ProgramTheory.Arrays.assignA_seq, LaPToP.ProgramTheory.Arrays.assignI_seq, LaPToP.ProgramTheory.Arrays.assignElem_eq_assignA, LaPToP.ProgramTheory.Arrays.orElse_arrow_apply, LaPToP.ProgramTheory.Arrays.example₁, LaPToP.ProgramTheory.Arrays.example₁_naive, LaPToP.ProgramTheory.Arrays.example₂, LaPToP.ProgramTheory.Arrays.example₂_naive, LaPToP.ProgramTheory.Arrays.AS2, LaPToP.ProgramTheory.Arrays.assignElem2, LaPToP.ProgramTheory.Arrays.assignElem2_eq, LaPToP.ProgramTheory.Arrays.Person, LaPToP.ProgramTheory.Arrays.RS, LaPToP.ProgramTheory.Arrays.assignAge, LaPToP.ProgramTheory.Arrays.assignAge_eq")

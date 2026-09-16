@@ -16,7 +16,9 @@ Functions with an explicit domain, selective union, predicates and relations,
 and the quantifiers built on them: Hehner's Chapter 3, the prerequisite for the
 specifications and refinements of Program Theory. The formal counterparts are the
 Lean modules `LaPToP.FunctionTheory.Functions`,
-`LaPToP.FunctionTheory.Quantifiers` and `LaPToP.FunctionTheory.FinePoints`.
+`LaPToP.FunctionTheory.Quantifiers`, `LaPToP.FunctionTheory.FinePoints`
+(Section 3.2, function fine points) and `LaPToP.FunctionTheory.HigherOrder`
+(Sections 3.2.1–3.2.2, functions as data).
 :::
 
 :::definition "function_notation" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn, LaPToP.FunctionTheory.Fn.lam, LaPToP.FunctionTheory.Fn.domain, LaPToP.FunctionTheory.Fn.size, LaPToP.FunctionTheory.Fn.apply, LaPToP.FunctionTheory.Fn.arrow, LaPToP.FunctionTheory.Fn.ext")

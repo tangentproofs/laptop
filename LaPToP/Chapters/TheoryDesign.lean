@@ -24,9 +24,12 @@ Hehner's Chapter 7: "the stack, the queue, and the tree ... are presented here
 as case studies in theory design and implementation", a theory being "a
 contract between two parties, an implementer and a user". The data theories
 of Section 7.0 are formalized in `LaPToP.TheoryDesign.Stack`, `SimpleStack`,
-`Queue` and `Tree`; program-stack theory (Section 7.1) in
-`LaPToP.TheoryDesign.ProgramStack`; data transformation (Section 7.2) in
-`LaPToP.TheoryDesign.DataTransformation`.
+`Queue` and `Tree`; program-stack theory (Sections 7.1.0–7.1.3) in
+`LaPToP.TheoryDesign.ProgramStack` and program-queue and program-tree theory
+(Sections 7.1.4–7.1.5) in `LaPToP.TheoryDesign.ProgramQueue`; data
+transformation (Section 7.2) in `LaPToP.TheoryDesign.DataTransformation`, with
+its examples in `SecuritySwitch` (Section 7.2.0), `TakeANumber` (7.2.1),
+`Parsing` (7.2.2) and `LimitedQueue` (7.2.3).
 :::
 
 :::definition "data_stack_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.DataStackTheory, LaPToP.TheoryDesign.DataStackTheory.construction, LaPToP.TheoryDesign.DataStackTheory.construction_pred, LaPToP.TheoryDesign.DataStackTheory.induction_bunch, LaPToP.TheoryDesign.DataStackTheory.eq_empty_or_push, LaPToP.TheoryDesign.DataStackTheory.push_inj_of_lifo, LaPToP.TheoryDesign.WeakStackTheory, LaPToP.TheoryDesign.DataStackTheory.toWeak, LaPToP.TheoryDesign.unitStack, LaPToP.TheoryDesign.unitStack_push_eq_empty")

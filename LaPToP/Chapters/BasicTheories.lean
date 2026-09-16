@@ -19,7 +19,8 @@ Hehner's Sections 2.0 and 2.1; the formal counterpart lives in the Lean module
 `LaPToP.BasicTheories.Bunch` (axioms and laws) and
 `LaPToP.BasicTheories.Numbers` (named bunches, the interval, distribution).
 The number laws of Section 1.1 (reference §11.3.2) are in
-`LaPToP.BasicTheories.NumberLaws`.
+`LaPToP.BasicTheories.NumberLaws`, and the calculation style of Section 1.0.1
+(`calc`, the Law of Portation) in `LaPToP.BasicTheories.Calculation`.
 :::
 
 :::definition "bunch_vs_set" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Bunch, LaPToP.BasicTheories.HSet")

@@ -22,8 +22,15 @@ open Informal
 Hehner's Chapter 9: "The interactive variables and communication channels of
 this chapter allow ... a computation to interact with its environment while it
 is in progress". Interactive variables (Section 9.0) are formalized in
-`LaPToP.Interaction.InteractiveVariables`, and communication channels
-(Section 9.1) in `LaPToP.Interaction.Communication`.
+`LaPToP.Interaction.InteractiveVariables`, the thermostat (Section 9.0.0) in
+`Thermostat` and space as an interactive variable (Section 9.0.1) in
+`GrowSlow`; communication channels (Sections 9.1–9.1.1) in
+`LaPToP.Interaction.Communication`, communication timing and recursive
+communication (Sections 9.1.2–9.1.3) in `CommunicationTiming`, merge and
+monitor (Sections 9.1.4–9.1.5) in `Merge` and `MergeInterleave`, the reaction
+controller and channel declaration (Sections 9.1.6–9.1.7) in
+`ChannelDeclaration`, deadlock and broadcast (Sections 9.1.8–9.1.9) in
+`Deadlock`, and power series multiplication (Section 9.1.10) in `PowerSeries`.
 :::
 
 :::definition "interactive_variables" (parent := "interaction_core") (lean := "LaPToP.Interaction.BT, LaPToP.Interaction.IVar, LaPToP.Interaction.ISpec, LaPToP.Interaction.ISpec.ext, LaPToP.Interaction.ISpec.newX, LaPToP.Interaction.ISpec.ok, LaPToP.Interaction.ISpec.assignA, LaPToP.Interaction.ISpec.assignX, LaPToP.Interaction.ISpec.assignXP, LaPToP.Interaction.ISpec.assignYQ, LaPToP.Interaction.ISpec.seq, LaPToP.Interaction.ISpec.par, LaPToP.Interaction.ISpec.ok_seq, LaPToP.Interaction.ISpec.seq_ok, LaPToP.Interaction.ISpec.seq_assoc, LaPToP.Interaction.ISpec.assignA_seq, LaPToP.Interaction.ISpec.substX, LaPToP.Interaction.ISpec.not_substitution_law")
