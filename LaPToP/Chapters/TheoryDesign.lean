@@ -7,6 +7,7 @@ import LaPToP.TheoryDesign.Queue
 import LaPToP.TheoryDesign.Tree
 import LaPToP.TheoryDesign.ProgramStack
 import LaPToP.TheoryDesign.DataTransformation
+import LaPToP.TheoryDesign.SecuritySwitch
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -205,7 +206,7 @@ is a Chapter 9 notation, cf. {uses "assertions"}[]. Uses
 {uses "program_stack_theory"}[] and {uses "program_stack_implementation"}[].
 :::
 
-:::definition "data_transformation" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.Spec.IsTransformer, LaPToP.TheoryDesign.Spec.transform, LaPToP.TheoryDesign.Spec.transform_spec, LaPToP.TheoryDesign.Spec.transform_mono, LaPToP.TheoryDesign.Spec.implementable_transform, LaPToP.TheoryDesign.Caveat.S, LaPToP.TheoryDesign.Caveat.implementable_S, LaPToP.TheoryDesign.Caveat.not_implementable_transform")
+:::definition "data_transformation" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.Spec.IsTransformer, LaPToP.TheoryDesign.Spec.transform, LaPToP.TheoryDesign.Spec.transform_spec, LaPToP.TheoryDesign.Spec.transform_mono, LaPToP.TheoryDesign.Spec.implementable_transform, LaPToP.TheoryDesign.Spec.IsTransformerU, LaPToP.TheoryDesign.Spec.transformU, LaPToP.TheoryDesign.Spec.transform_eq_transformU, LaPToP.TheoryDesign.Spec.isTransformer_iff_isTransformerU, LaPToP.TheoryDesign.Spec.transformU_mono, LaPToP.TheoryDesign.Caveat.S, LaPToP.TheoryDesign.Caveat.implementable_S, LaPToP.TheoryDesign.Caveat.not_implementable_transform")
 "Since a theory user has no access to the implementer's variables except
 through the theory, an implementer is free to change them in any way that
 provides the same theory to the user. ... We can replace the old implementer's
@@ -227,7 +228,11 @@ $`\forall\mathit{new}\cdot\exists\mathit{old}\cdot D` alone does *not* preserve 
 $`\mathbf{if}\ v = 0\ \mathbf{then}\ v' = 0\ \mathbf{else}\ v' = 1` transforms to an unimplementable
 specification, since from $`w = \top` the user may imagine $`v = 0` or $`v = 2` and
 no single $`w'` serves both — so the implementability of each transformed
-operation is to be checked, as the book does in its examples. Uses
+operation is to be checked, as the book does in its examples. Since "$`S`
+talks about its nonlocal variables $`\mathit{old}` and $`\mathit{old}'` (and the user's
+variables)", a transformer may mention the user's variables as well;
+`Spec.transformU` is that general form (with $`D'` priming the user's variables
+too) and `Spec.transform` its special case. Uses
 {uses "variable_declaration"}[], {uses "specification_notations"}[] and
 {uses "quantifier_forall_exists"}[].
 :::
@@ -249,4 +254,35 @@ $`\mathit{even}\ w' = \neg\mathit{even}\ w \land u' = u \Leftarrow w := w + 1`,
 $`\mathit{even}\ w' = \mathit{even}\ w = u' \Leftarrow u := \mathit{even}\ w`; the three transformed
 specifications are computed as equalities and the three refinements proved.
 Uses {uses "data_transformation"}[] and {uses "substitution_law"}[].
+:::
+
+:::theorem "security_switch" (parent := "theory_design_core") (tags := "theory design, transformation, hehner-7.2.0") (effort := "small") (lean := "LaPToP.TheoryDesign.SecuritySwitch.U, LaPToP.TheoryDesign.SecuritySwitch.O, LaPToP.TheoryDesign.SecuritySwitch.D, LaPToP.TheoryDesign.SecuritySwitch.isTransformer, LaPToP.TheoryDesign.SecuritySwitch.switchStep, LaPToP.TheoryDesign.SecuritySwitch.flipA, LaPToP.TheoryDesign.SecuritySwitch.flipB, LaPToP.TheoryDesign.SecuritySwitch.opA, LaPToP.TheoryDesign.SecuritySwitch.opB, LaPToP.TheoryDesign.SecuritySwitch.switchStepT, LaPToP.TheoryDesign.SecuritySwitch.transformU_switchStep, LaPToP.TheoryDesign.SecuritySwitch.transformU_opA, LaPToP.TheoryDesign.SecuritySwitch.transformU_opB, LaPToP.TheoryDesign.SecuritySwitch.majority, LaPToP.TheoryDesign.SecuritySwitch.xor_eq_majority, LaPToP.TheoryDesign.SecuritySwitch.xor_circuit")
+"Exercise 460 is to design a security switch. It has three binary user's
+variables $`a`, $`b`, and $`c`. The users assign values to $`a` and $`b` as input
+to the switch. The switch's output is assigned to $`c`. The output changes when
+both inputs have changed. More precisely, the output changes when both inputs
+differ from what they were the previous time the output changed. ... We can
+implement the switch with two binary implementer's variables: $`A` records the
+state of input $`a` at the last previous output change, $`B` records the state
+of input $`b` at the last previous output change. There are two operations:
+$`a := \lnot a.\ \mathbf{if}\ a \neq A \land b \neq B\ \mathbf{then}\ c := \lnot c.\ A := a.\ B := b\ \mathbf{else}\ \mathit{ok}`
+and the same with $`b := \lnot b`. ... This implementation is a direct
+formalization of the problem, but it can be simplified by data transformation.
+We replace implementer's variables $`A` and $`B` by nothing according to the
+transformer $`A = B = c`. To check that this is a transformer, we check
+$`\exists A, B \cdot A = B = c \Leftarrow \top`, generalization, using $`c` for both $`A`
+and $`B`. ... The transformation does not affect the assignments to $`a` and
+$`b`, so we have only one transformation to make.
+$`\forall A, B \cdot A = B = c \Rightarrow \exists A', B' \cdot A' = B' = c' \land \mathbf{if}\ a \neq A \land b \neq B\ \mathbf{then}\ c := \lnot c.\ A := a.\ B := b\ \mathbf{else}\ \mathit{ok}`
+$`= \mathbf{if}\ a \neq c \land b \neq c\ \mathbf{then}\ c := \lnot c\ \mathbf{else}\ \mathit{ok}`
+$`= c := (a \neq c \land b \neq c) \neq c`.
+Output $`c` becomes the majority value of $`a`, $`b`, and $`c`. (As a circuit,
+that's three “exclusive or” gates and one “and” gate.)" The transformer
+mentions the user's variable $`c`, so it is a transformer in the general form
+`Spec.transformU` of {uses "data_transformation"}[], whose $`D'` primes the
+user's variables too (as the book's $`A' = B' = c'` does). The book's chain of
+equalities is proved as one equation, the transformed operations are
+$`a := \lnot a.\ c := (a \neq c \land b \neq c) \neq c` and likewise for $`b`, and the
+majority and circuit remarks are checked on the eight cases. Uses
+{uses "binary_laws_basic"}[] and {uses "specification_laws"}[].
 :::
