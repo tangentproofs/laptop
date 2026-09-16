@@ -8,6 +8,7 @@ import LaPToP.ProgramTheory.Assertions
 import LaPToP.ProgramTheory.Subprograms
 import LaPToP.ProgramTheory.ExitLoop
 import LaPToP.ProgramTheory.TwoDimSearch
+import LaPToP.ProgramTheory.TimeDependence
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -264,6 +265,42 @@ example $`s := \Sigma L = \mathbf{frame}\ s \cdot \mathbf{new}\ n : \mathit{nat}
 ("first we reduce the state space to $`s`; ... next we introduce local variable
 $`n`") is checked on the state of {uses "list_summation"}[]. Uses
 {uses "variable_declaration"}[] and {uses "assignment_spec"}[].
+:::
+
+:::definition "time_dependence" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.TimeDependence.TD, LaPToP.ProgramTheory.TimeDependence.assignT, LaPToP.ProgramTheory.TimeDependence.assignDeadline, LaPToP.ProgramTheory.TimeDependence.tick, LaPToP.ProgramTheory.TimeDependence.assignT_seq, LaPToP.ProgramTheory.TimeDependence.RespectsClock, LaPToP.ProgramTheory.TimeDependence.respectsClock_assignDeadline, LaPToP.ProgramTheory.TimeDependence.respectsClock_tick, LaPToP.ProgramTheory.TimeDependence.respectsClock_cond, LaPToP.ProgramTheory.TimeDependence.respectsClock_seq, LaPToP.ProgramTheory.TimeDependence.not_respectsClock_assignT_const, LaPToP.ProgramTheory.TimeDependence.waitUntil, LaPToP.ProgramTheory.TimeDependence.respectsClock_waitUntil, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_ge, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_lt, LaPToP.ProgramTheory.TimeDependence.waitUntil_refines, LaPToP.ProgramTheory.TimeDependence.waitUntil_whileRefines")
+"Some programming languages provide a clock, or a delay, or other
+time-dependent features. Our examples have used the time variable $`t` as a
+ghost, or auxiliary variable, never affecting the course of a computation. ...
+But if there is a readable clock available as a time source during a
+computation, it can be used to affect the computation. The assignment
+$`\mathit{deadline} := t+5` is allowed, as is $`\mathbf{if}\ t \le \mathit{deadline}\ \mathbf{then} \ldots \mathbf{else} \ldots`.
+But the assignment $`t := 5` is not allowed. We can look at the clock, but not
+reset it arbitrarily; all assignments to $`t` must correspond to the passage of
+time (according to some measure); otherwise $`t` would not represent the time.
+... We may occasionally want to specify the passage of time. For example, we
+may want the computation to “wait until time $`w`”. Let us invent a notation
+for it, and define it formally as $`\mathbf{wait\ until}\ w = t := t \uparrow w`. Because we
+are not allowed to reset the clock, $`t := t \uparrow w` is not acceptable as a
+program until we refine it by a program. Letting time be an extended natural
+and using recursive time,
+$`\mathbf{wait\ until}\ w \Leftarrow \mathbf{if}\ t \ge w\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ t := t+1.\ \mathbf{wait\ until}\ w`
+and we obtain a busy-wait loop. We can prove this refinement by cases. First,
+$`t \ge w \land \mathit{ok} = t \ge w \land (t := t) \Rightarrow t := t \uparrow w`. Second,
+$`t < w \land (t := t+1.\ t := t \uparrow w) = t+1 \le w \land (t := (t+1) \uparrow w) = t+1 \le w \land (t := w) = t < w \land (t := t \uparrow w) \Rightarrow t := t \uparrow w`.
+... Our space variable $`s`, like the time variable $`t`, has so far been used to
+prove things about space usage, not to affect the computation. ... Like $`t`,
+$`s` can be read but not written arbitrarily." The clock discipline is the
+predicate "the specification never decreases $`t`": $`\mathit{deadline} := t+5`,
+$`t := t+1`, the clock-dependent conditional, sequential composition and
+$`\mathbf{wait\ until}\ w` respect it, and $`t := 5` does not (from $`t = 7` it turns the
+clock back). The busy-wait refinement is proved by the two cases exactly as
+the book calculates them — the second uses $`t < w \Rightarrow t+1 \le w` in $`\mathit{xnat}`
+and the {uses "substitution_law"}[] — and combined by
+{uses "refinement_by_steps_parts_cases"}[]; it is also stated as the
+{uses "while_loop"}[] $`\mathbf{while}\ t < w\ \mathbf{do}\ t := t+1\ \mathbf{od}`. Not formalized:
+the real-time variant (Exercise 333(b)), and the space variable, since space
+(Section 4.3) is not modelled in this development. Uses {uses "time_variable"}[]
+and {uses "recursive_time"}[].
 :::
 
 :::definition "assertions" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Assertions.AT, LaPToP.ProgramTheory.Assertions.assignX, LaPToP.ProgramTheory.Assertions.assignY, LaPToP.ProgramTheory.Assertions.assignX_seq, LaPToP.ProgramTheory.Assertions.assert, LaPToP.ProgramTheory.Assertions.assert_of_holds, LaPToP.ProgramTheory.Assertions.assert_of_not, LaPToP.ProgramTheory.Assertions.assert_true, LaPToP.ProgramTheory.Assertions.assert_refines_ensure, LaPToP.ProgramTheory.Assertions.implementable_assert, LaPToP.ProgramTheory.Assertions.implementable_assert', LaPToP.ProgramTheory.Assertions.assert_seq_of_not, LaPToP.ProgramTheory.Assertions.assert_seq_of_holds")
