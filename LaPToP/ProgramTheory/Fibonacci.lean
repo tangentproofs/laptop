@@ -1,12 +1,15 @@
 import LaPToP.ProgramTheory.Time
 import Mathlib.Data.Nat.Fib.Basic
+import Mathlib.Data.Nat.Log
+import Mathlib.Tactic.Ring
 
 /-!
 # Fibonacci numbers
 
-This module formalizes the first part of Subsection 4.2.7 (Fibonacci
-Numbers) of Eric Hehner's *A Practical Theory of Programming* (aPToP),
-Exercise 256: the linear-time solution and its timing.
+This module formalizes Subsection 4.2.7 (Fibonacci Numbers) of Eric
+Hehner's *A Practical Theory of Programming* (aPToP), Exercise 256: the
+linear-time solution and its timing, and the logarithmic-time solution and
+its timing.
 
 "The definition of the Fibonacci numbers `fib 0 = 0`, `fib 1 = 1`,
 `fib (n+2) = fib n + fib (n+1)` immediately suggests a recursive function
@@ -32,9 +35,25 @@ t:= t+1. t′ = t+n. t′=t`, `t′=t ⇐ n:= x. x:= y. y:= n+y`."
 
 ## The model
 
+"Exercise 256 asks for a solution with logarithmic time. To get it, we need
+to take the hint offered in the exercise and use the equations
+`fib(2×k + 1) = (fib k)² + (fib(k+1))²`, `fib(2×k + 2) = 2 × fib k × fib(k+1) +
+(fib(k+1))²`. ... `P ⇐ if n=0 then x:= 0. y:= 1 else if even n then even n ∧ n>0 ⇒ P
+else odd n ⇒ P`; `odd n ⇒ P ⇐ n:= (n–1)/2. P. x′ = x² + y² ∧ y′ = 2×x×y + y²`; ...
+`even n ∧ n>0 ⇒ P ⇐ n:= n/2 – 1. P. x′ = 2×x×y + y² ∧ y′ = x² + y² + x′`. The
+remaining two problems ... require another variable as before, and as
+before, we can use `n`. ... To prove that this program is now logarithmic
+time, we define time specification `T = t′ ≤ t + log (n+1)` and we put
+`t:= t+1` before calls to `T`."
+
+## The model
+
 `fib` is Mathlib's `Nat.fib`; the state has natural `x`, `y`, `n` and the time;
-the recursive call `P` is the specification. The logarithmic-time solution
-with the doubling identities is the next part.
+the recursive call `P` is the specification. The doubling identities are
+Mathlib's `Nat.fib_two_mul_add_one` and `Nat.fib_two_mul_add_two`, restated in
+the book's form; `log` is `Nat.log 2` (floor), for which the book's
+"logarithm law" steps `1 + log ((n–1)/2 + 1) = log (n+1)` (odd `n`) and
+`1 + log (n/2) = log n ≤ log (n+1)` (even `n > 0`) hold exactly.
 -/
 
 namespace LaPToP.ProgramTheory
@@ -129,6 +148,152 @@ theorem time_refines :
 
 /-- `t′=t ⇐ n:= x. x:= y. y:= n+y`. -/
 theorem shift_time : Refines TS (seq (assignN fun s => s.x) (seq (assignX fun s => s.y) (assignY fun s => s.n + s.y))) := by
+  intro s s' h
+  rw [assignN_seq, assignX_seq, assignY] at h
+  subst h
+  rfl
+
+/-! ### The logarithmic solution -/
+
+/-- `fib(2×k + 1) = (fib k)² + (fib(k+1))²`. -/
+theorem fib_odd (k : ℕ) : Nat.fib (2 * k + 1) = Nat.fib k ^ 2 + Nat.fib (k + 1) ^ 2 := by
+  rw [Nat.fib_two_mul_add_one]; ring
+
+/-- `fib(2×k + 2) = 2 × fib k × fib(k+1) + (fib(k+1))²`. -/
+theorem fib_even (k : ℕ) : Nat.fib (2 * k + 2) = 2 * Nat.fib k * Nat.fib (k + 1) + Nat.fib (k + 1) ^ 2 := by
+  rw [Nat.fib_two_mul_add_two]; ring
+
+/-- `b ⇒ S`. -/
+def guard (b : FS → Prop) (S : Spec FS) : Spec FS := fun s s' => b s → S s s'
+
+/-- `x′ = x² + y² ∧ y′ = 2×x×y + y²`. -/
+def Sq₁ : Spec FS := fun s s' => s'.x = s.x ^ 2 + s.y ^ 2 ∧ s'.y = 2 * s.x * s.y + s.y ^ 2
+
+/-- `x′ = 2×x×y + y² ∧ y′ = x² + y² + x′`. -/
+def Sq₂ : Spec FS := fun s s' => s'.x = 2 * s.x * s.y + s.y ^ 2 ∧ s'.y = s.x ^ 2 + s.y ^ 2 + s'.x
+
+/-- `P ⇐ if n=0 then x:= 0. y:= 1 else if even n then even n ∧ n>0 ⇒ P else odd n ⇒ P`. -/
+theorem P_log :
+    Refines P (cond (fun s => s.n = 0) (seq (assignX fun _ => 0) (assignY fun _ => 1))
+      (cond (fun s => Even s.n) (guard (fun s => Even s.n ∧ 0 < s.n) P) (guard (fun s => Odd s.n) P))) := by
+  rintro s s' (⟨hn, h⟩ | ⟨hn, (⟨he, h⟩ | ⟨he, h⟩)⟩)
+  · rw [assignX_seq, assignY] at h
+    subst h
+    simp [P, hn]
+  · exact h ⟨he, Nat.pos_of_ne_zero hn⟩
+  · exact h (Nat.not_even_iff_odd.mp he)
+
+/-- `odd n ⇒ P ⇐ n:= (n–1)/2. P. x′ = x² + y² ∧ y′ = 2×x×y + y²`. -/
+theorem odd_refines : Refines (guard (fun s => Odd s.n) P) (seq (assignN fun s => (s.n - 1) / 2) (seq P Sq₁)) := by
+  intro s s' h ho
+  rw [assignN_seq] at h
+  obtain ⟨u, ⟨hx, hy⟩, hsx, hsy⟩ := h
+  obtain ⟨k, hk⟩ := ho
+  simp only at hx hy
+  have hk' : (s.n - 1) / 2 = k := by omega
+  rw [hk'] at hx hy
+  refine ⟨?_, ?_⟩
+  · rw [hsx, hx, hy, hk, fib_odd]
+  · rw [hsy, hx, hy, hk, show 2 * k + 1 + 1 = 2 * k + 2 by omega, fib_even]
+
+/-- `even n ∧ n>0 ⇒ P ⇐ n:= n/2 – 1. P. x′ = 2×x×y + y² ∧ y′ = x² + y² + x′`: "we can get
+`fib(2×k + 3)` as the sum of `fib(2×k + 1)` and `fib(2×k + 2)`". -/
+theorem even_refines :
+    Refines (guard (fun s => Even s.n ∧ 0 < s.n) P) (seq (assignN fun s => s.n / 2 - 1) (seq P Sq₂)) := by
+  intro s s' h ⟨he, hpos⟩
+  rw [assignN_seq] at h
+  obtain ⟨u, ⟨hx, hy⟩, hsx, hsy⟩ := h
+  obtain ⟨m, hm⟩ := he
+  obtain ⟨k, rfl⟩ : ∃ k, m = k + 1 := ⟨m - 1, by omega⟩
+  have hn : s.n = 2 * k + 2 := by omega
+  simp only at hx hy
+  have hk' : s.n / 2 - 1 = k := by omega
+  rw [hk'] at hx hy
+  refine ⟨?_, ?_⟩
+  · rw [hsx, hx, hy, hn, fib_even]
+  · rw [hsy, hsx, hx, hy, hn, show 2 * k + 2 + 1 = (2 * k + 1) + 2 by omega, Nat.fib_add_two, fib_odd,
+      show 2 * k + 1 + 1 = 2 * k + 2 by omega, fib_even]
+
+/-- `x′ = x² + y² ∧ y′ = 2×x×y + y² ⇐ n:= x. x:= x² + y². y:= 2×n×y + y²`. -/
+theorem sq₁_refines :
+    Refines Sq₁ (seq (assignN fun s => s.x) (seq (assignX fun s => s.x ^ 2 + s.y ^ 2) (assignY fun s => 2 * s.n * s.y + s.y ^ 2))) := by
+  intro s s' h
+  rw [assignN_seq, assignX_seq, assignY] at h
+  subst h
+  exact ⟨rfl, rfl⟩
+
+/-- `x′ = 2×x×y + y² ∧ y′ = x² + y² + x′ ⇐ n:= x. x:= 2×x×y + y². y:= n² + y² + x`. -/
+theorem sq₂_refines :
+    Refines Sq₂ (seq (assignN fun s => s.x) (seq (assignX fun s => 2 * s.x * s.y + s.y ^ 2) (assignY fun s => s.n ^ 2 + s.y ^ 2 + s.x))) := by
+  intro s s' h
+  rw [assignN_seq, assignX_seq, assignY] at h
+  subst h
+  exact ⟨rfl, rfl⟩
+
+/-! ### Logarithmic time -/
+
+/-- `T = t′ ≤ t + log (n+1)`. -/
+def TLog : Spec FS := fun s s' => s'.t ≤ s.t + (Nat.log 2 (s.n + 1) : ℕ∞)
+
+/-- `T ⇐ if n=0 then x:= 0. y:= 1 else if even n then even n ∧ n>0 ⇒ T else odd n ⇒ T`. -/
+theorem tlog₁ :
+    Refines TLog (cond (fun s => s.n = 0) (seq (assignX fun _ => 0) (assignY fun _ => 1))
+      (cond (fun s => Even s.n) (guard (fun s => Even s.n ∧ 0 < s.n) TLog) (guard (fun s => Odd s.n) TLog))) := by
+  rintro s s' (⟨hn, h⟩ | ⟨hn, (⟨he, h⟩ | ⟨he, h⟩)⟩)
+  · rw [assignX_seq, assignY] at h
+    subst h
+    exact le_self_add
+  · exact h ⟨he, Nat.pos_of_ne_zero hn⟩
+  · exact h (Nat.not_even_iff_odd.mp he)
+
+/-- `odd n ⇒ T ⇐ n:= (n–1)/2. t:= t+1. T. t′=t`: "`1 + log ((n–1)/2+1) ≤ log (n+1)`,
+logarithm law ... `= log (n–1+2) ≤ log (n+1)`". -/
+theorem tlog_odd : Refines (guard (fun s => Odd s.n) TLog) (seq (assignN fun s => (s.n - 1) / 2) (seq tick (seq TLog TS))) := by
+  intro s s' h ho
+  rw [assignN_seq, tick_seq] at h
+  obtain ⟨u, hu, hs⟩ := h
+  obtain ⟨k, hk⟩ := ho
+  simp only [TLog] at hu ⊢
+  rw [TS] at hs
+  have hk' : (s.n - 1) / 2 + 1 = (s.n + 1) / 2 := by omega
+  have hlog : Nat.log 2 ((s.n + 1) / 2) + 1 = Nat.log 2 (s.n + 1) := by
+    rw [Nat.log_div_base]
+    have := Nat.log_pos (b := 2) one_lt_two (show 2 ≤ s.n + 1 by omega)
+    omega
+  rw [hk', add_assoc, add_comm (1 : ℕ∞), ← Nat.cast_succ, Nat.succ_eq_add_one, hlog] at hu
+  rw [hs]
+  exact hu
+
+/-- `even n ∧ n>0 ⇒ T ⇐ n:= n/2 – 1. t:= t+1. T. t′=t`: "`1 + log (n/2 – 1+1) ≤ log (n+1) =
+log n ≤ log (n+1)`". -/
+theorem tlog_even :
+    Refines (guard (fun s => Even s.n ∧ 0 < s.n) TLog) (seq (assignN fun s => s.n / 2 - 1) (seq tick (seq TLog TS))) := by
+  intro s s' h ⟨he, hpos⟩
+  rw [assignN_seq, tick_seq] at h
+  obtain ⟨u, hu, hs⟩ := h
+  simp only [TLog] at hu ⊢
+  rw [TS] at hs
+  have h2 : 2 ≤ s.n := by obtain ⟨m, hm⟩ := he; omega
+  have hk' : s.n / 2 - 1 + 1 = s.n / 2 := by omega
+  have hlog : Nat.log 2 (s.n / 2) + 1 = Nat.log 2 s.n := by
+    rw [Nat.log_div_base]
+    have := Nat.log_pos (b := 2) one_lt_two h2
+    omega
+  rw [hk', add_assoc, add_comm (1 : ℕ∞), ← Nat.cast_succ, Nat.succ_eq_add_one, hlog] at hu
+  rw [hs]
+  exact le_trans hu (by gcongr; exact Nat.le_succ _)
+
+/-- `t′=t ⇐ n:= x. x:= x² + y². y:= 2×n×y + y²`. -/
+theorem sq₁_time :
+    Refines TS (seq (assignN fun s => s.x) (seq (assignX fun s => s.x ^ 2 + s.y ^ 2) (assignY fun s => 2 * s.n * s.y + s.y ^ 2))) := by
+  intro s s' h
+  rw [assignN_seq, assignX_seq, assignY] at h
+  subst h
+  rfl
+
+/-- `t′=t ⇐ n:= x. x:= 2×x×y + y². y:= n² + y² + x`. -/
+theorem sq₂_time :
+    Refines TS (seq (assignN fun s => s.x) (seq (assignX fun s => 2 * s.x * s.y + s.y ^ 2) (assignY fun s => s.n ^ 2 + s.y ^ 2 + s.x))) := by
   intro s s' h
   rw [assignN_seq, assignX_seq, assignY] at h
   subst h
