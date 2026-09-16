@@ -51,13 +51,25 @@ Do not enable Pages via API from automation; a human should flip that switch.
 LaPToP/
   Basic.lean                 # existing library stub (imports Mathlib)
   Blueprint.lean             # top-level Blueprint document
-  Chapters/
-    Prelude.lean
-    BasicTheories.lean
-    DataStructures.lean
-    ProgramTheory.lean
-    RecursionConcurrency.lean
+  Chapters/                  # one Verso chapter per theme, in book order
+    Prelude.lean             # §1.0 Binary Theory
+    BasicTheories.lean       # §1.0.1–2.1 numbers, bunches, sets, calculation
+    FunctionTheory.lean      # §3 functions, quantifiers, functions as data
+    DataStructures.lean      # §2.2–2.3 strings and lists
+    ProgramTheory.lean       # §4 specifications, refinement, time, space
+    ProgrammingLanguage.lean # §5 loops, scope, data structures, subprograms
+    RecursionConcurrency.lean# §6 recursive definition, §8 concurrency
+    TheoryDesign.lean        # §7 theory design and data transformation
+    Interaction.lean         # §9 interactive variables and communication
     Collatz.lean             # unfinished demo node
+  BasicTheories/  DataStructures/  FunctionTheory/  ProgramTheory/
+  RecursiveDefinition/  TheoryDesign/  Concurrency/  Interaction/
+                             # the Lean modules the chapters point at
 LaPToPMain.lean              # Verso generator entry point
-scripts/ci-pages.sh
+scripts/ci-pages.sh          # builds the site, then scripts/enhance-site-ux.py
 ```
+
+Every Blueprint node quotes the book and points at sorry-free Lean
+declarations. Where the Lean model departs from the book — or where the book's
+argument is corrected, or asserted without proof and left unproved — the node
+prose and the module docstrings say so explicitly; see the published site.

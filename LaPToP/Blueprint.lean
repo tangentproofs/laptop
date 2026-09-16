@@ -22,8 +22,17 @@ open Informal
 
 This Blueprint tracks the Lean formalization of Eric Hehner's
 *A Practical Theory of Programming* (LaPToP). Chapters follow the book's
-major themes; a separate Collatz-style chapter is intentionally unfinished so
-the generated graph and summary show an in-progress goal.
+major themes and cover Chapters 1–9 of the book: the Prelude is Binary Theory
+(Section 1.0), Basic Theories are Sections 1.0.1–2.1, Function Theory is
+Chapter 3, Data Structures are Sections 2.2–2.3 (strings and lists) with
+functions as data, Program Theory is Chapter 4, Programming Language is
+Chapter 5, Recursion and Concurrency are Chapters 6 and 8, Theory Design and
+Implementation is Chapter 7, and Interaction is Chapter 9. Every node quotes
+the book and points at sorry-free Lean declarations; where the model departs
+from the book, or the book's argument is corrected or left unproved, the node
+prose and the module docstrings say so. A separate Collatz-style chapter is
+intentionally unfinished so the generated graph and summary show an
+in-progress goal.
 
 {include 0 LaPToP.Chapters.Prelude}
 {include 0 LaPToP.Chapters.BasicTheories}
