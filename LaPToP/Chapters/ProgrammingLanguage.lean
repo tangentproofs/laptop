@@ -6,6 +6,7 @@ import LaPToP.ProgramTheory.ForLoop
 import LaPToP.ProgramTheory.Scope
 import LaPToP.ProgramTheory.Assertions
 import LaPToP.ProgramTheory.Subprograms
+import LaPToP.ProgramTheory.ExitLoop
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -76,6 +77,44 @@ Case $`x = y = 0`: $`\mathit{ok}` gives $`t' = t` and $`s = 0`. Case $`y > 0`: t
 Substitution Law twice, then $`t + 1 + x + (y-1) + s = t + x + y + s`. Case
 $`x > 0 \land y = 0`: the Substitution Law three times, then
 $`t + 1 + (x-1) + f(x-1) + \Sigma f[0;..x-1] = t + x + \Sigma f[0;..x]`.
+:::
+
+:::definition "exit_loop" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.ExitLoopRefines, LaPToP.ProgramTheory.Spec.exitLoopRefines_iff, LaPToP.ProgramTheory.Spec.exitLoopRefines_iff_cases, LaPToP.ProgramTheory.Spec.exitLoopRefines_ok_iff, LaPToP.ProgramTheory.Spec.ExitLoopRefines.mono, LaPToP.ProgramTheory.Spec.ExitLoopRefines.unroll, LaPToP.ProgramTheory.Spec.DeepExitRefines, LaPToP.ProgramTheory.Spec.deepExitRefines_iff, LaPToP.ProgramTheory.Spec.DeepExitRefines.unroll, LaPToP.ProgramTheory.Spec.DeepShallowRefines, LaPToP.ProgramTheory.Spec.DeepShallowRefines.outer, LaPToP.ProgramTheory.Spec.flagLoop, LaPToP.ProgramTheory.Spec.setDone, LaPToP.ProgramTheory.Spec.ExitLoopRefines.flag, LaPToP.ProgramTheory.Spec.newVarInit_flagLoop, LaPToP.ProgramTheory.Spec.ExitLoopExample.count_up")
+"Some languages provide a command to jump out of the middle of a loop.
+Suppose the loop $`\mathbf{do}\ P\ \mathbf{od}` with the additional syntax
+$`\mathbf{exit\ when}\ b` allowed within $`P`, where $`b` is binary. ... As in
+Subsection 5.2.0, we consider refinement by a loop with exits to be an
+alternative notation. For example, if $`L` is an implementable specification,
+then $`L \Leftarrow \mathbf{do}\ A.\ \mathbf{exit\ when}\ b.\ C\ \mathbf{od}` is an alternative
+notation for $`L \Leftarrow A.\ \mathbf{if}\ b\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ C.\ L`. ...
+$`\mathbf{exit}\ n\ \mathbf{when}\ b` ... means exit $`n` loops when $`b` is satisfied. For
+example, $`P \Leftarrow \mathbf{do}\ A.\ \mathbf{do}\ B.\ \mathbf{exit}\ 2\ \mathbf{when}\ c.\ D\ \mathbf{od}.\ E\ \mathbf{od}`.
+The refinement structure corresponding to this loop is $`P \Leftarrow A.\ Q`,
+$`Q \Leftarrow B.\ \mathbf{if}\ c\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ D.\ Q` for some appropriately
+defined $`Q`. ... The preceding example had a deep exit but no shallow exit,
+leaving $`E` stranded in a dead area. Here is an example with both deep and
+shallow exits. $`P \Leftarrow \mathbf{do}\ A.\ \mathbf{exit}\ 1\ \mathbf{when}\ b.\ C.\ \mathbf{do}\ D.\ \mathbf{exit}\ 2\ \mathbf{when}\ e.\ F.\ \mathbf{exit}\ 1\ \mathbf{when}\ g.\ H\ \mathbf{od}.\ I\ \mathbf{od}`.
+The refinement structure corresponding to this loop is
+$`P \Leftarrow A.\ \mathbf{if}\ b\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ C.\ Q`,
+$`Q \Leftarrow D.\ \mathbf{if}\ e\ \mathbf{then}\ \mathit{ok}\ \mathbf{else}\ F.\ \mathbf{if}\ g\ \mathbf{then}\ I.\ P\ \mathbf{else}\ H.\ Q`
+for some appropriately defined $`Q`. Loops with exits can always be translated
+easily to a refinement structure. But the reverse is not true; some refinement
+structures require the introduction of new variables and even whole data
+structures to encode them as loops with exits." Exactly as for the
+{uses "while_loop"}[], the exit-loop is defined to be its refinement
+structure, and $`\mathbf{exit}\ n` is handled by naming the inner loop, as the book
+does; the two examples are the corresponding pairs of refinements. Proved: an
+exit at the top of the body is $`\mathbf{while}\ \lnot b\ \mathbf{do}\ C\ \mathbf{od}`; the parts may
+be refined in place; unrolling; and the book's remark that "a binary variable
+can be introduced for the purpose of recording whether the goal has been
+reached" — the exit-loop is translated to
+$`\mathbf{new}\ \mathit{done} := \bot \cdot \mathbf{while}\ \lnot\mathit{done}\ \mathbf{do}\ A.\ \mathbf{if}\ b\ \mathbf{then}\ \mathit{done} := \top\ \mathbf{else}\ C\ \mathbf{od}`,
+justified by the while-loop rule with {uses "variable_declaration"}[], and
+declaring the flag recovers $`L` exactly. A small example,
+$`x' = x \uparrow n \Leftarrow \mathbf{do}\ \mathbf{exit\ when}\ x \ge n.\ x := x+1\ \mathbf{od}`, is proved. The last
+remark (refinement structures not expressible as exit-loops) is not
+formalized. Uses {uses "refinement_by_steps_parts_cases"}[] and
+{uses "specification_laws"}[].
 :::
 
 :::definition "for_loop" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.ForRefines, LaPToP.ProgramTheory.Spec.ForRefines.step, LaPToP.ProgramTheory.Spec.ForRefines.exit, LaPToP.ProgramTheory.Spec.forRefines_self, LaPToP.ProgramTheory.Spec.iterSeq, LaPToP.ProgramTheory.Spec.iterSeq_mono, LaPToP.ProgramTheory.Spec.ForRefines.unroll, LaPToP.ProgramTheory.Spec.forRefines_invariant")
