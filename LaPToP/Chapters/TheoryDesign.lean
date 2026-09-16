@@ -8,6 +8,7 @@ import LaPToP.TheoryDesign.Tree
 import LaPToP.TheoryDesign.ProgramStack
 import LaPToP.TheoryDesign.DataTransformation
 import LaPToP.TheoryDesign.SecuritySwitch
+import LaPToP.TheoryDesign.TakeANumber
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -285,4 +286,47 @@ equalities is proved as one equation, the transformed operations are
 $`a := \lnot a.\ c := (a \neq c \land b \neq c) \neq c` and likewise for $`b`, and the
 majority and circuit remarks are checked on the eight cases. Uses
 {uses "binary_laws_basic"}[] and {uses "specification_laws"}[].
+:::
+
+:::theorem "take_a_number" (parent := "theory_design_core") (tags := "theory design, transformation, hehner-7.2.1") (effort := "medium") (lean := "LaPToP.TheoryDesign.TakeANumber.start, LaPToP.TheoryDesign.TakeANumber.take, LaPToP.TheoryDesign.TakeANumber.give, LaPToP.TheoryDesign.TakeANumber.Dbelow, LaPToP.TheoryDesign.TakeANumber.isTransformer_Dbelow, LaPToP.TheoryDesign.TakeANumber.D, LaPToP.TheoryDesign.TakeANumber.transform_start, LaPToP.TheoryDesign.TakeANumber.transform_take, LaPToP.TheoryDesign.TakeANumber.transform_give, LaPToP.TheoryDesign.TakeANumber.giveBook, LaPToP.TheoryDesign.TakeANumber.transform_give_refines_book, LaPToP.TheoryDesign.TakeANumber.transform_give_ne_book, LaPToP.TheoryDesign.TakeANumber.start_refines, LaPToP.TheoryDesign.TakeANumber.takeProg, LaPToP.TheoryDesign.TakeANumber.take_refines, LaPToP.TheoryDesign.TakeANumber.give_refines, LaPToP.TheoryDesign.TakeANumber.D₂, LaPToP.TheoryDesign.TakeANumber.takeProg₂, LaPToP.TheoryDesign.TakeANumber.take_refines₂, LaPToP.TheoryDesign.TakeANumber.Deo, LaPToP.TheoryDesign.TakeANumber.isTransformer_Deo, LaPToP.TheoryDesign.TakeANumber.takeProgEO, LaPToP.TheoryDesign.TakeANumber.take_refinesEO")
+"Exercise 462 (take a number): Maintain a list of natural numbers standing for
+those that are “in use”. The three operations are: make the list empty (for
+initialization); assign to variable $`n` a number that is not in use, and add
+this number to the list (now it is in use); given a number $`n` that is in use,
+remove it from the list. The user's variable is $`n : \mathit{nat}`. ... We
+therefore use a set variable $`s \subseteq \{\mathit{nat}\}` as our implementer's
+variable. The three operations are
+$`\mathit{start} = s' = \{\mathit{null}\} \land n' = n`,
+$`\mathit{take} = \lnot n' \in s \land s' = s \cup \{n'\}`,
+$`\mathit{give} = n \in s \Rightarrow \lnot n' \in s' \land s' \cup \{n\} = s \land n' = n`.
+Here is a data transformation that replaces set $`s` with natural $`m` according
+to the transformer $`s \subseteq \{0,..m\}`. Instead of maintaining the exact set
+of numbers that are in use, we will maintain a possibly larger set. We will
+still never give out a number that is in use." The book transforms
+$`\mathit{start}` to $`n' = n \Leftarrow \mathit{ok}` ("it does not matter what $`m'` is; we may
+as well leave it alone"), $`\mathit{take}` to $`m \le n' < m' \Leftarrow n := m.\ m := m+1`,
+and $`\mathit{give}` to $`(n+1 = m \Rightarrow n \le m') \land (n+1 < m \Rightarrow m \le m') \land n' = n \Leftarrow \mathit{ok}`,
+each after "several omitted steps". "Thanks to the data transformation, we have
+an extremely efficient solution to the problem. One might argue that we have
+not solved the problem because we do not maintain a list of numbers that are
+“in use”. But who can tell?" The omitted steps are filled in as equalities
+with {uses "data_transformation"}[]: $`\mathit{start}` and $`\mathit{take}` transform
+exactly as the book says (the latter for any transformer $`s \subseteq \{0,..f\,\mathit{new}\}`).
+Deviation, recorded: the transformed $`\mathit{give}` is
+$`n < m \Rightarrow (n+1 = m \Rightarrow n \le m') \land (n+1 < m \Rightarrow m \le m') \land n' = n` — when
+$`m \le n` no imagined set $`s \subseteq \{0,..m\}` contains $`n`, so the specification is
+$`\top`; the book's line strengthens it to $`n' = n`, so it is a refinement of the
+transformed specification, not equal to it (a counterexample is given), and
+the conclusion $`\Leftarrow \mathit{ok}` holds for both. For two machines, the
+transformer $`s \subseteq \{0,..i \uparrow j\}` gives
+$`i \uparrow j \le n' < i' \uparrow j' \Leftarrow n := i \uparrow j.\ \mathbf{if}\ i \ge j\ \mathbf{then}\ i := i+1\ \mathbf{else}\ j := j+1`
+("this data transformation does not provide the independent operation of two
+machines"), and for the even/odd transformer
+$`\forall k : {\sim}s \cdot \mathit{even}\ k \land k < i \lor \mathit{odd}\ k \land k < j` with
+$`i : 2 \times \mathit{nat}`, $`j : 2 \times \mathit{nat} + 1`, the program
+$`(n := i.\ i := i+2) \lor (n := j.\ j := j+2)` is proved to refine the transformed
+$`\mathit{take}` under that typing (stated as hypotheses $`\mathit{even}\ i`, $`\mathit{odd}\ j`):
+"we can take a number from either machine without disturbing the other. The
+price of the distribution is that we have lost all fairness between the two
+machines." Uses {uses "set_packaging"}[], {uses "bunch_interval"}[] and {uses "specification_laws"}[].
 :::
