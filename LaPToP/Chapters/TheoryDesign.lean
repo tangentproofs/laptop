@@ -11,6 +11,7 @@ import LaPToP.TheoryDesign.DataTransformation
 import LaPToP.TheoryDesign.SecuritySwitch
 import LaPToP.TheoryDesign.TakeANumber
 import LaPToP.TheoryDesign.LimitedQueue
+import LaPToP.TheoryDesign.Parsing
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -384,6 +385,61 @@ $`\mathit{take}` under that typing (stated as hypotheses $`\mathit{even}\ i`, $`
 "we can take a number from either machine without disturbing the other. The
 price of the distribution is that we have lost all fairness between the two
 machines." Uses {uses "set_packaging"}[], {uses "bunch_interval"}[] and {uses "specification_laws"}[].
+:::
+
+:::theorem "parsing" (parent := "theory_design_core") (tags := "theory design, transformation, parsing, hehner-7.2.2") (effort := "large") (lean := "LaPToP.TheoryDesign.Parsing.Tok, LaPToP.TheoryDesign.Parsing.E, LaPToP.TheoryDesign.Parsing.E.head, LaPToP.TheoryDesign.Parsing.E_x_cons_iff, LaPToP.TheoryDesign.Parsing.E_if_cons_iff, LaPToP.TheoryDesign.Parsing.Cands, LaPToP.TheoryDesign.Parsing.cands_nil_iff, LaPToP.TheoryDesign.Parsing.cands_x_cons_iff, LaPToP.TheoryDesign.Parsing.cands_eog_cons_iff, LaPToP.TheoryDesign.Parsing.cands_tok_cons_iff, LaPToP.TheoryDesign.Parsing.cands_x_x, LaPToP.TheoryDesign.Parsing.cands_x_if, LaPToP.TheoryDesign.Parsing.cands_x_head, LaPToP.TheoryDesign.Parsing.cands_eog_eos, LaPToP.TheoryDesign.Parsing.not_cands_cons_nil, LaPToP.TheoryDesign.Parsing.SentC, LaPToP.TheoryDesign.Parsing.SentC.tail, LaPToP.TheoryDesign.Parsing.SentC.eog_cons, LaPToP.TheoryDesign.Parsing.SentC.prepend, LaPToP.TheoryDesign.Parsing.SentS, LaPToP.TheoryDesign.Parsing.SentS.drop_succ_eq_nil, LaPToP.TheoryDesign.Parsing.SentS.ne_eog, LaPToP.TheoryDesign.Parsing.PS, LaPToP.TheoryDesign.Parsing.assignN, LaPToP.TheoryDesign.Parsing.assignC, LaPToP.TheoryDesign.Parsing.assignQ, LaPToP.TheoryDesign.Parsing.assignN_seq, LaPToP.TheoryDesign.Parsing.assignC_seq, LaPToP.TheoryDesign.Parsing.R, LaPToP.TheoryDesign.Parsing.expansion, LaPToP.TheoryDesign.Parsing.Rprog, LaPToP.TheoryDesign.Parsing.R_refines, LaPToP.TheoryDesign.Parsing.cands_init_iff, LaPToP.TheoryDesign.Parsing.parse_refines, LaPToP.TheoryDesign.Parsing.parse_program_refines")
+"Exercise 451 (parsing): Define $`E` as a bunch of strings of lists of characters
+satisfying $`E = [\text{“x”}], [\text{“if”}]; E; [\text{“then”}]; E; [\text{“else”}]; E; [\text{“fi”}]`.
+Given a string of lists of characters, write a program to determine if the
+string is in the bunch $`E`. For the problem to be nontrivial, we assume that
+recursive data definition and bunch inclusion are not implemented. ... Let the
+given string be $`s` (a constant). ... we introduce natural variable $`n`,
+increasing from $`0` to at most $`\leftrightarrow s`, indicating how much of $`s` we have
+parsed. Let $`A` be a variable whose value is a bunch of strings of lists of
+characters. Bunch $`A` will consist of all strings in $`E` that might possibly be
+$`s` according to what we have seen of $`s`. We can express the result as the
+final value of binary variable $`q`. ... We assume that $`s` ends with the
+sentinel $`[\text{“eos”}]` (end of string) ... and when we initialize variable
+$`A`, we will add the sentinel $`[\text{“eog”}]` (end of grammar) to the end of
+every string ... $`q' = (s_{0;..\leftrightarrow s - 1} : E) \Leftarrow A := E; [\text{“eog”}].\ n := 0.\ P`
+... $`P \Leftarrow \mathbf{if}\ s_n : A_n\ \mathbf{then}\ A := (\S a : A \cdot a_n = s_n).\ n := n+1.\ P\ \mathbf{else}\ q := [\text{“eog”}] : A_n \land s_n = [\text{“eos”}]`
+... We omit the proofs of these refinements in order to pursue our current
+topic, data transformation. We now replace variable $`A` with variable $`b`
+whose value is a single string of lists of characters. ... The data
+transformer is, informally, $`A = (b` with all occurrences of item
+$`[\text{“E”}]` replaced by bunch $`E)`. ... We can make a minor improvement by
+changing the representation of $`E` from $`[\text{“E”}]` to $`[\text{“x”}]` ...
+Our next improvement is to notice that we don't need the initial portion of
+$`b`, which is identical to the initial portion of $`s`. So we transform again,
+replacing $`b` with $`c` using the transformer $`b = s_{0;..n}; c`. Let $`R` be the
+result of transforming $`Q`.
+$`q' = (s_{0;..\leftrightarrow s - 1} : E) \Leftarrow c := [\text{“x”}]; [\text{“eog”}].\ n := 0.\ R`;
+$`R \Leftarrow \mathbf{if}\ s_n = c_0\ \mathbf{then}\ c := c_{1;..\leftrightarrow c}.\ n := n+1.\ R`
+$`\mathbf{else\ if}\ c_0 = [\text{“x”}] \land s_n = [\text{“if”}]\ \mathbf{then}\ c := [\text{“x”}]; [\text{“then”}]; [\text{“x”}]; [\text{“else”}]; [\text{“x”}]; [\text{“fi”}]; c_{1;..\leftrightarrow c}.\ n := n+1.\ R`
+$`\mathbf{else}\ q := c_0 = [\text{“eog”}] \land s_n = [\text{“eos”}]`."
+The items are tokens and $`E` is defined inductively (the least solution, as in
+{uses "recursive_data_construction"}[]). The specification $`R` — the result of
+the two transformations, which the book computes informally — is stated
+directly: $`q'` says whether the rest of the input $`s_{n;..\leftrightarrow s}` is one of
+the strings represented by $`c`, "$`c` with all occurrences of item $`[\text{“x”}]`
+replaced by bunch $`E`" and $`[\text{“eog”}]` standing for $`[\text{“eos”}]`. The
+book's final program is proved to refine $`R` (the recursive call as a
+specification, {uses "recursive_program_zap"}[]), and
+$`q' = (s_{0;..\leftrightarrow s - 1} : E)` is refined by
+$`c := [\text{“x”}]; [\text{“eog”}].\ n := 0.\ R` and hence by the whole program, under the
+sentinel assumptions: $`[\text{“eos”}]` occurs in $`s` only at the end,
+$`[\text{“eog”}]` does not occur in $`s`, and (an antecedent of $`R`) $`[\text{“eog”}]`
+occurs in $`c` only at the end. The heart of the proof is what the first item of
+the input decides: an $`E`-string begins with $`[\text{“x”}]` (and is then
+$`[\text{“x”}]`) or with $`[\text{“if”}]` (and is then
+$`[\text{“if”}]; a; [\text{“then”}]; b; [\text{“else”}]; c; [\text{“fi”}]`). Not formalized: the
+bunch-valued variable $`A`, the intermediate program with $`b`, and the two
+transformers, which the book gives informally and whose refinements it omits;
+what is proved is that the final program meets the original specification,
+which is what the transformations are for. The printed line
+$`c := \ldots; [\text{“fi”}]\ c` is read as $`\ldots; [\text{“fi”}]; c_{1;..\leftrightarrow c}` (the
+$`[\text{“x”}]` at $`c_0` is what is expanded). Uses {uses "data_transformation"}[],
+{uses "string_axioms_indexing"}[] and {uses "specification_laws"}[].
 :::
 
 :::theorem "limited_queue" (parent := "theory_design_core") (tags := "theory design, transformation, queues, hehner-7.2.3") (effort := "medium") (lean := "LaPToP.TheoryDesign.LimitedQueue.U, LaPToP.TheoryDesign.LimitedQueue.O, LaPToP.TheoryDesign.LimitedQueue.N₀, LaPToP.TheoryDesign.LimitedQueue.N, LaPToP.TheoryDesign.LimitedQueue.Inside, LaPToP.TheoryDesign.LimitedQueue.Outside, LaPToP.TheoryDesign.LimitedQueue.D₀, LaPToP.TheoryDesign.LimitedQueue.D, LaPToP.TheoryDesign.LimitedQueue.isTransformer_D₀, LaPToP.TheoryDesign.LimitedQueue.isTransformer_D, LaPToP.TheoryDesign.LimitedQueue.mkemptyq, LaPToP.TheoryDesign.LimitedQueue.assignC, LaPToP.TheoryDesign.LimitedQueue.assignC_isemptyq, LaPToP.TheoryDesign.LimitedQueue.assignC_isfullq, LaPToP.TheoryDesign.LimitedQueue.not_implementable_isemptyq₀, LaPToP.TheoryDesign.LimitedQueue.mkemptyqT, LaPToP.TheoryDesign.LimitedQueue.isemptyqT, LaPToP.TheoryDesign.LimitedQueue.isfullqT, LaPToP.TheoryDesign.LimitedQueue.mkemptyq_refines, LaPToP.TheoryDesign.LimitedQueue.isemptyq_refines, LaPToP.TheoryDesign.LimitedQueue.isfullq_refines, LaPToP.TheoryDesign.LimitedQueue.implementable_isemptyqT, LaPToP.TheoryDesign.LimitedQueue.join, LaPToP.TheoryDesign.LimitedQueue.leave, LaPToP.TheoryDesign.LimitedQueue.assignX_front, LaPToP.TheoryDesign.LimitedQueue.joinT, LaPToP.TheoryDesign.LimitedQueue.leaveT, LaPToP.TheoryDesign.LimitedQueue.frontT, LaPToP.TheoryDesign.LimitedQueue.notFullT, LaPToP.TheoryDesign.LimitedQueue.notEmptyT, LaPToP.TheoryDesign.LimitedQueue.guardT, LaPToP.TheoryDesign.LimitedQueue.outside_index_lt, LaPToP.TheoryDesign.LimitedQueue.join_refines, LaPToP.TheoryDesign.LimitedQueue.leave_refines, LaPToP.TheoryDesign.LimitedQueue.front_refines")
