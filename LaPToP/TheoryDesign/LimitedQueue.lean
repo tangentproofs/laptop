@@ -3,11 +3,11 @@ import LaPToP.TheoryDesign.DataTransformation
 /-!
 # Limited queue
 
-This module formalizes the first part of Section 7.2.3 (Limited Queue) of
-Eric Hehner's *A Practical Theory of Programming* (aPToP), Exercise 464:
-the transformer, the discovery that it loses information, the revised
-transformer with a mode bit, and the transformed `mkemptyq`, `isemptyq`,
-`isfullq`.
+This module formalizes Section 7.2.3 (Limited Queue) of Eric Hehner's *A
+Practical Theory of Programming* (aPToP), Exercise 464: the transformer, the
+discovery that it loses information, the revised transformer with a mode
+bit, and the transformed `mkemptyq`, `isemptyq`, `isfullq`, `join`, `leave`
+and `front`.
 
 "A limited queue is a queue with a limited number of places for items. Let
 the limit be `n: nat+1`, and let `Q: [n*X]` and `p: 0,..n+1` be implementer's
@@ -49,7 +49,12 @@ for `mkemptyq` (`m:= ⊤. f:= 0. b:= 0`), `c:= isemptyq`
 (`c:= if m then f=b else b=0 ∧ f=n`) and `c:= isfullq`
 (`c:= if m then f=0 ∧ b=n else f=b`) are proved to refine the transformed
 operations; the book's intermediate equalities ("several omitted steps") are
-not reproduced. `join`, `leave` and `front` are the second part.
+not reproduced. "Before this operation, there should be a check that the
+queue is not full" (resp. "not empty"): the refinements of `join`, `leave`
+and `front` are stated under these checks as preconditions on the new state
+(the transformed `isfullq` and `isemptyq`). The "opportunity to rotate the
+queue within `R`", which the book declines, is likewise declined: the new
+final states are those of the book's programs.
 -/
 
 namespace LaPToP.TheoryDesign
@@ -210,6 +215,174 @@ theorem isfullq_refines : Refines (transform (D n) (assignC_isfullq n (X := X)))
 refined by a total program). -/
 theorem implementable_isemptyqT : Implementable (transform (D n) (assignC_isemptyq (X := X))) :=
   implementable_of_refines _ _ (isemptyq_refines n) fun _ => ⟨_, rfl⟩
+
+/-! ### `join`, `leave`, `front` (aPToP §7.2.3, continued)
+
+"Next we transform `join x`. Before this operation, there should be a check
+that the queue is not full. ... `⇐ if b<n then R b:= x. b:= b+1 else R 0:= x.
+b:= 1. m:= ⊥`. Next we transform `leave`. Before this operation, there should
+be a check that the queue is not empty. ... `⇐ if f<n then f:= f+1 else f:= 1.
+m:= ⊤`. Last we transform `x:= front` where `x` is a user's variable of the
+same type as the items. Before this operation, there should be a check that
+the queue is not empty. ... `⇐ if f<n then x:= R f else x:= R 0`."
+
+The checks are preconditions on the new state (the transformed `isfullq`
+and `isemptyq`), and the refinements are stated under them. -/
+
+/-- `join x = Q p:= x. p:= p+1`. -/
+def join (x : X) : Spec (U X × O X) := fun s s' => s' = (s.1, (Function.update s.2.1 s.2.2 x, s.2.2 + 1))
+
+/-- `leave = for i:= 1;..p do Q (i–1):= Q i od. p:= p–1`, i.e.
+`Q′ = Q[(1;..p); (p–1;..n)] ∧ p′ = p–1`: the items below `p–1` shift down, the
+rest stay. -/
+def leave : Spec (U X × O X) := fun s s' =>
+  s' = (s.1, (fun k => if k + 1 < s.2.2 then s.2.1 (k + 1) else s.2.1 k, s.2.2 - 1))
+
+/-- `x:= front`, i.e. `x:= Q 0`. -/
+def assignX_front : Spec (U X × O X) := fun s s' => s' = ((s.1.1, s.2.1 0), s.2)
+
+/-- `if b<n then R b:= x. b:= b+1 else R 0:= x. b:= 1. m:= ⊥`. -/
+def joinT (x : X) : Spec (U X × N X) :=
+  cond (fun s => s.2.1.2.2 < n)
+    (fun s s' => s' = (s.1, ((Function.update s.2.1.1 s.2.1.2.2 x, s.2.1.2.1, s.2.1.2.2 + 1), s.2.2)))
+    (fun s s' => s' = (s.1, ((Function.update s.2.1.1 0 x, s.2.1.2.1, 1), False)))
+
+/-- `if f<n then f:= f+1 else f:= 1. m:= ⊤`. -/
+def leaveT : Spec (U X × N X) :=
+  cond (fun s => s.2.1.2.1 < n)
+    (fun s s' => s' = (s.1, ((s.2.1.1, s.2.1.2.1 + 1, s.2.1.2.2), s.2.2)))
+    (fun s s' => s' = (s.1, ((s.2.1.1, 1, s.2.1.2.2), True)))
+
+/-- `if f<n then x:= R f else x:= R 0`. -/
+def frontT : Spec (U X × N X) :=
+  cond (fun s => s.2.1.2.1 < n)
+    (fun s s' => s' = ((s.1.1, s.2.1.1 s.2.1.2.1), s.2))
+    (fun s s' => s' = ((s.1.1, s.2.1.1 0), s.2))
+
+/-- The check "the queue is not full", in the new variables (the transformed `isfullq`). -/
+def notFullT (s : U X × N X) : Prop :=
+  ¬ ((s.2.2 ∧ s.2.1.2.1 = 0 ∧ s.2.1.2.2 = n) ∨ (¬ s.2.2 ∧ s.2.1.2.1 = s.2.1.2.2))
+
+/-- The check "the queue is not empty", in the new variables (the transformed `isemptyq`). -/
+def notEmptyT (s : U X × N X) : Prop :=
+  ¬ ((s.2.2 ∧ s.2.1.2.1 = s.2.1.2.2) ∨ (¬ s.2.2 ∧ s.2.1.2.2 = 0 ∧ s.2.1.2.1 = n))
+
+/-- A specification under a precondition on the initial state. -/
+def guardT (b : U X × N X → Prop) (S : Spec (U X × N X)) : Spec (U X × N X) := fun s s' => b s → S s s'
+
+/-- `(f + k) mod n` for `f + k < n + b`, `b ≤ n`: the "outside" index. -/
+theorem outside_index_lt {f k b : ℕ} (hb : b ≤ n) (h : f + k < n + b) :
+    (f + k) % n = f + k ∨ (n ≤ f + k ∧ (f + k) % n = f + k - n) := by
+  rcases Nat.lt_or_ge (f + k) n with hlt | hge
+  · exact Or.inl (Nat.mod_eq_of_lt hlt)
+  · right
+    refine ⟨hge, ?_⟩
+    rw [Nat.mod_eq_sub_mod hge, Nat.mod_eq_of_lt (by omega)]
+
+/-- `∀Q, p· D ⇒ ∃Q′, p′· D′ ∧ Q′ = p→x | Q ∧ p′=p+1 ⇐ if b<n then R b:= x. b:= b+1 else
+R 0:= x. b:= 1. m:= ⊥`, when the queue is not full. -/
+theorem join_refines (hn : 0 < n) (x : X) :
+    Refines (guardT (notFullT n) (transform (D n) (join x))) (joinT n x) := by
+  rintro ⟨⟨c, x₀⟩, ⟨R, f, b⟩, m⟩ s' h hnf ⟨Q, p⟩ ⟨hp, hf, hb, hmode⟩
+  dsimp only [notFullT] at hnf
+  dsimp only [Inside, Outside] at hmode
+  dsimp only at hp hf hb
+  refine ⟨(Function.update Q p x, p + 1), ?_, ?_⟩
+  · rcases h with ⟨hbn, rfl⟩ | ⟨hbn, rfl⟩
+    · dsimp only [D, Inside, Outside] at hbn ⊢
+      rcases hmode with ⟨hm, hfb, hpe, hQ⟩ | ⟨hm, hpe, hQ⟩
+      · refine ⟨by omega, hf, by omega, Or.inl ⟨hm, by omega, by omega, fun k hk => ?_⟩⟩
+        rcases Nat.lt_or_ge k p with hkp | hkp
+        · rw [Function.update_of_ne (by omega), Function.update_of_ne (by omega)]
+          exact hQ k hkp
+        · have : k = p := by omega
+          subst this
+          rw [Function.update_self, show f + k = b by omega, Function.update_self]
+      · have hfb : f ≠ b := fun h => hnf (Or.inr ⟨hm, h⟩)
+        have hbf : b < f := by omega
+        refine ⟨by omega, hf, by omega, Or.inr ⟨hm, by omega, fun k hk => ?_⟩⟩
+        rcases Nat.lt_or_ge k p with hkp | hkp
+        · rw [Function.update_of_ne (by omega)]
+          rw [hQ k hkp]
+          rcases outside_index_lt n hb (show f + k < n + b by omega) with h1 | ⟨h2, h3⟩
+          · rw [Function.update_of_ne (by omega)]
+          · rw [Function.update_of_ne (by omega)]
+        · have : k = p := by omega
+          subst this
+          rw [Function.update_self, show f + k = n + b by omega, Nat.add_mod_left, Nat.mod_eq_of_lt hbn,
+            Function.update_self]
+    · dsimp only [D, Inside, Outside] at hbn ⊢
+      have hbn' : b = n := by omega
+      rcases hmode with ⟨hm, hfb, hpe, hQ⟩ | ⟨hm, hpe, hQ⟩
+      · have hf0 : 0 < f := by
+          by_contra h0
+          exact hnf (Or.inl ⟨hm, by omega, hbn'⟩)
+        refine ⟨by omega, hf, hn, Or.inr ⟨not_false, by omega, fun k hk => ?_⟩⟩
+        rcases Nat.lt_or_ge k p with hkp | hkp
+        · rw [Function.update_of_ne (by omega), hQ k hkp, Nat.mod_eq_of_lt (by omega),
+            Function.update_of_ne (by omega)]
+        · have : k = p := by omega
+          subst this
+          rw [Function.update_self, show f + k = n by omega, Nat.mod_self, Function.update_self]
+      · have hfb : f = b := by omega
+        exact absurd (Or.inr ⟨hm, hfb⟩) hnf
+  · rcases h with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> rfl
+
+/-- `∀Q, p· D ⇒ ∃Q′, p′· D′ ∧ Q′ = Q[(1;..p); (p–1;..n)] ∧ p′=p–1 ⇐ if f<n then f:= f+1 else
+f:= 1. m:= ⊤`, when the queue is not empty. -/
+theorem leave_refines (hn : 0 < n) :
+    Refines (guardT (notEmptyT n) (transform (D n) (leave (X := X)))) (leaveT n) := by
+  rintro ⟨⟨c, x₀⟩, ⟨R, f, b⟩, m⟩ s' h hne ⟨Q, p⟩ ⟨hp, hf, hb, hmode⟩
+  dsimp only [notEmptyT] at hne
+  dsimp only [Inside, Outside] at hmode
+  dsimp only at hp hf hb
+  refine ⟨(fun k => if k + 1 < p then Q (k + 1) else Q k, p - 1), ?_, ?_⟩
+  · rcases h with ⟨hfn, rfl⟩ | ⟨hfn, rfl⟩
+    · dsimp only [D, Inside, Outside] at hfn ⊢
+      rcases hmode with ⟨hm, hfb, hpe, hQ⟩ | ⟨hm, hpe, hQ⟩
+      · have hlt : f < b := lt_of_le_of_ne hfb fun h => hne (Or.inl ⟨hm, h⟩)
+        refine ⟨by omega, by omega, hb, Or.inl ⟨hm, by omega, by omega, fun k hk => ?_⟩⟩
+        rw [if_pos (by omega), hQ (k + 1) (by omega), show f + (k + 1) = f + 1 + k by omega]
+      · refine ⟨by omega, by omega, hb, Or.inr ⟨hm, by omega, fun k hk => ?_⟩⟩
+        rw [if_pos (by omega), hQ (k + 1) (by omega), show f + (k + 1) = f + 1 + k by omega]
+    · dsimp only [D, Inside, Outside] at hfn ⊢
+      have hfn' : f = n := by omega
+      rcases hmode with ⟨hm, hfb, hpe, hQ⟩ | ⟨hm, hpe, hQ⟩
+      · exact absurd (Or.inl ⟨hm, by omega⟩) hne
+      · have hb1 : 1 ≤ b := by
+          by_contra h0
+          exact hne (Or.inr ⟨hm, by omega, hfn'⟩)
+        refine ⟨by omega, by omega, hb, Or.inl ⟨trivial, hb1, by omega, fun k hk => ?_⟩⟩
+        rw [if_pos (by omega), hQ (k + 1) (by omega), hfn', Nat.add_mod_left, Nat.mod_eq_of_lt (by omega),
+          show 1 + k = k + 1 by omega]
+  · rcases h with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> rfl
+
+/-- `∀Q, p· D ⇒ ∃Q′, p′· D′ ∧ x′ = Q 0 ∧ p′=p ∧ Q′=Q ⇐ if f<n then x:= R f else x:= R 0`,
+when the queue is not empty. -/
+theorem front_refines :
+    Refines (guardT (notEmptyT n) (transform (D n) (assignX_front (X := X)))) (frontT n) := by
+  rintro ⟨⟨c, x₀⟩, ⟨R, f, b⟩, m⟩ s' h hne ⟨Q, p⟩ ⟨hp, hf, hb, hmode⟩
+  dsimp only [notEmptyT] at hne
+  dsimp only [Inside, Outside] at hmode
+  dsimp only at hp hf hb
+  rcases h with ⟨hfn, rfl⟩ | ⟨hfn, rfl⟩
+  · dsimp only at hfn
+    refine ⟨(Q, p), ⟨hp, hf, hb, hmode⟩, ?_⟩
+    simp only [assignX_front, Prod.mk.injEq, and_true, true_and]
+    rcases hmode with ⟨hm, hfb, hpe, hQ⟩ | ⟨hm, hpe, hQ⟩
+    · have hlt : f < b := lt_of_le_of_ne hfb fun h => hne (Or.inl ⟨hm, h⟩)
+      rw [hQ 0 (by omega), Nat.add_zero]
+    · rw [hQ 0 (by omega), Nat.add_zero, Nat.mod_eq_of_lt hfn]
+  · dsimp only at hfn
+    have hfn' : f = n := by omega
+    refine ⟨(Q, p), ⟨hp, hf, hb, hmode⟩, ?_⟩
+    simp only [assignX_front, Prod.mk.injEq, and_true, true_and]
+    rcases hmode with ⟨hm, hfb, hpe, hQ⟩ | ⟨hm, hpe, hQ⟩
+    · exact absurd (Or.inl ⟨hm, by omega⟩) hne
+    · have hb1 : 1 ≤ b := by
+        by_contra h0
+        exact hne (Or.inr ⟨hm, by omega, hfn'⟩)
+      rw [hQ 0 (by omega), Nat.add_zero, hfn', Nat.mod_self]
 
 end LimitedQueue
 
