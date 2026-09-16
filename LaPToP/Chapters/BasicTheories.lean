@@ -4,6 +4,7 @@ import VersoBlueprint
 import LaPToP.BasicTheories.Bunch
 import LaPToP.BasicTheories.Numbers
 import LaPToP.BasicTheories.NumberLaws
+import LaPToP.BasicTheories.Calculation
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -326,8 +327,40 @@ theorem nat_add_zero (n : Nat) : n + 0 = n := by
   simp
 ```
 
-:::definition "calculation_style" (parent := "basic_theories_core")
+:::definition "calculation_style" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Calculation.continuing_equation, LaPToP.BasicTheories.Calculation.portation_calc")
 Proofs in LaPToP are often written as *calculations*: chains of equalities or
 implications annotated with the justifying law at each step. Formal Lean proofs
 should preserve that readable structure where practical.
+
+"A proof is a binary expression that is clearly a theorem. ... One form of
+proof is a continuing equation with hints: $`\mathit{expression}_0 = \mathit{expression}_1 = \mathit{expression}_2 = \mathit{expression}_3`
+with $`\mathit{hint}_0, \mathit{hint}_1, \mathit{hint}_2` on the right side of the page. This
+continuing equation is a short way of writing the longer binary expression
+$`\mathit{expression}_0 = \mathit{expression}_1 \land \mathit{expression}_1 = \mathit{expression}_2 \land \mathit{expression}_2 = \mathit{expression}_3`.
+... The best kind of hint is the name of a law. ... By the transitivity of
+$`=`, this proof proves the theorem $`\mathit{expression}_0 = \mathit{expression}_3`. A formal
+proof is a proof in which every step fits the form of the law given as hint."
+Lean's `calc` block is exactly this form — each step an equation justified by
+the named law, the block proving the equation between first and last expression
+by transitivity — and is used for the book's worked example in
+{uses "portation_by_calculation"}[]. Uses {uses "boolean_domain"}[].
+:::
+
+:::theorem "portation_by_calculation" (parent := "basic_theories_core") (tags := "basic, calculation, hehner-1.0.1") (effort := "small") (lean := "LaPToP.BasicTheories.Calculation.portation_calc, LaPToP.BasicTheories.Calculation.portation_calc', LaPToP.BasicTheories.Calculation.portation_of_calc', LaPToP.BasicTheories.Calculation.portation_calc_eq_law")
+The book's worked example: "suppose we want to prove the first Law of
+Portation $`a \land b \Rightarrow c = a \Rightarrow (b \Rightarrow c)` using only previous laws":
+$`a \land b \Rightarrow c`
+$`= \neg(a \land b) \lor c`  (Material Implication),
+$`= \neg a \lor \neg b \lor c`  (Duality),
+$`= a \Rightarrow \neg b \lor c`  (Material Implication),
+$`= a \Rightarrow (b \Rightarrow c)`  (Material Implication) —
+"by not using brackets on that line, we silently use the Associative Law of
+disjunction", made an explicit step here. "Here is the proof again, in a
+different form":
+$`(a \land b \Rightarrow c = a \Rightarrow (b \Rightarrow c)) = (\neg(a \land b) \lor c = \neg a \lor (\neg b \lor c)) = (\neg a \lor \neg b \lor c = \neg a \lor \neg b \lor c) = \top`
+(Material Implication 3 times; Duality; Reflexivity). Both calculations are
+Lean `calc` blocks whose steps are the laws of {uses "binary_laws_algebra"}[]
+under the book's names, and the first is definitionally the law
+$`(a \land b \Rightarrow c) = (a \Rightarrow (b \Rightarrow c))` of that node. Uses
+{uses "calculation_style"}[].
 :::

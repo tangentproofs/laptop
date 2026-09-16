@@ -3,6 +3,7 @@ import VersoManual
 import VersoBlueprint
 import LaPToP.DataStructures.Strings
 import LaPToP.DataStructures.Lists
+import LaPToP.FunctionTheory.HigherOrder
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -190,8 +191,41 @@ Unpack to contents and apply the string indexing laws
 (`Str.at_map_of_lt`, `Str.sub_sub`, `Str.sub_append`).
 :::
 
-:::definition "function_as_data" (parent := "data_structures_core")
+:::definition "function_as_data" (parent := "data_structures_core") (lean := "LaPToP.FunctionTheory.Fn.comp, LaPToP.FunctionTheory.Fn.comp_domain, LaPToP.FunctionTheory.Fn.comp_apply, LaPToP.FunctionTheory.Fn.map, LaPToP.FunctionTheory.Fn.map_domain, LaPToP.FunctionTheory.Fn.map_apply, LaPToP.FunctionTheory.Fn.values_map, LaPToP.FunctionTheory.Fn.compFns, LaPToP.FunctionTheory.Fn.compFns_union, LaPToP.FunctionTheory.Fn.fnsComp, LaPToP.FunctionTheory.Fn.fnsComp_union, LaPToP.FunctionTheory.Fn.applyList, LaPToP.FunctionTheory.Fn.applyList_example")
 Functions are ordinary data in LaPToP. Higher-order specifications and
 implementations are therefore first-class, building on {uses "list_as_string"}[]
 when the domain is finite or inductive.
+
+Since a function is a value of the type `Fn α β` of {uses "function_notation"}[],
+functions are elements in the sense of Section 2: bunches of functions
+(as in {uses "function_on_bunches"}[] and {uses "function_inclusion"}[]), sets
+of functions, and lists of functions (a list of functions applied pointwise to
+an argument: $`[\mathit{suc}; \mathit{double}]\ 3 = 4; 6`) are all available. Function
+composition (Section 3.2.2): "let $`f` and $`g` be functions such that $`g` is
+not in the domain of $`f`. Then $`f\ g` is the composition of $`f` and $`g`,
+defined by the Function Composition Axioms $`\square(f\ g) = \S x : \square g \cdot g\,x : \square f`
+and $`(f\ g)\,x = f\,(g\,x)`" — `Fn.comp`, with an operator composed with a function
+(`Fn.map`, as in $`-\mathit{suc}` and $`\neg\mathit{even} = \mathit{odd}`), and "like
+application, composition distributes over bunch union": $`f\,(g, h) = f\,g, f\,h`,
+$`(f, g)\,h = f\,h, g\,h`. The proviso "$`g` is not in the domain of $`f`" is
+automatic in the typed model. Higher-order functions and the examples are in
+{uses "higher_order_functions"}[].
+:::
+
+:::theorem "higher_order_functions" (parent := "data_structures_core") (tags := "functions, higher-order, hehner-3.2.1") (effort := "small") (lean := "LaPToP.FunctionTheory.Fn.check, LaPToP.FunctionTheory.Fn.suc_mem_check_domain, LaPToP.FunctionTheory.Fn.check_suc, LaPToP.FunctionTheory.Fn.domain_even_comp_suc, LaPToP.FunctionTheory.Fn.even_comp_suc_three, LaPToP.FunctionTheory.Fn.neg_suc_three, LaPToP.FunctionTheory.Fn.not_comp_even, LaPToP.FunctionTheory.Fn.not_all_iff_ex_not, LaPToP.FunctionTheory.Fn.not_ex_iff_all_not, LaPToP.FunctionTheory.Fn.neg_sup_eq_inf_neg, LaPToP.FunctionTheory.Fn.neg_inf_eq_sup_neg")
+"A higher-order function is a function whose parameter is function-valued, and
+whose argument must therefore be a function. For example, define predicate
+$`\mathit{check} = \langle f : (0,..10) \to \mathit{int} \cdot \forall n : 0,..10 \cdot \mathit{even}\,(f\,n) \rangle`.
+So $`\mathit{check}` applies to any function whose domain includes $`0,..10` ... and
+when applied to any element in $`0,..10` has a result in $`\mathit{int}` ... Since
+$`\mathit{suc} : \mathit{nat} \to \mathit{nat} : (0,..10) \to \mathit{int}` we can apply $`\mathit{check}` to
+$`\mathit{suc}` and the result is $`\bot`." The domain of $`\mathit{check}` is the bunch of
+functions $`(0,..10) \to \mathit{int}` of {uses "function_inclusion"}[]; $`\mathit{suc}` is in
+it and $`\mathit{check}\ \mathit{suc} = \bot` since $`\mathit{suc}\ 0 = 1` is odd. The composition
+examples of Section 3.2.2: $`\square(\mathit{even}\ \mathit{suc}) = \S x : \mathit{nat} \cdot x+1 : \mathit{int} = \mathit{nat}`,
+$`(\mathit{even}\ \mathit{suc})\ 3 = \mathit{even}\ 4 = \top`, $`(-\mathit{suc})\ 3 = -4`, $`\neg\mathit{even} = \mathit{odd}`,
+and "we can write the Duality Laws this way": $`\neg\forall f = \exists\neg f`,
+$`\neg\exists f = \forall\neg f`, $`-\Downarrow f = \Uparrow -f`, $`-\Uparrow f = \Downarrow -f`. Uses
+{uses "function_as_data"}[], {uses "predicates_relations"}[] and
+{uses "quantifier_laws_numeric"}[].
 :::
