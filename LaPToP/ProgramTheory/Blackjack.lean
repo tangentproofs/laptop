@@ -1,6 +1,7 @@
 import LaPToP.ProgramTheory.RandomNumbers
 import Mathlib.Algebra.BigOperators.Ring.Finset
 import Mathlib.Tactic.IntervalCases
+import Mathlib.Algebra.BigOperators.Field
 
 /-!
 # Blackjack (Exercise 344)
@@ -44,10 +45,14 @@ book states it (the "several omitted steps" are a finite sum over the `13`
 first cards and a case analysis on `x′`). For the two-player game, the book's
 own last lines reduce the winning assertion to `c=n ∧ d>14–n` and count over
 the `169` equiprobable card pairs; the formalization proves that reduction
-(`xWins_iff`, `yWins_iff`, `tie_iff`) and the three counts directly, without
-building the four-variable probabilistic program (the Functional-Imperative
-and Substitution Law steps that only rewrite the program are not repeated).
-The equal-probability idealization is the book's.
+(`xWins_iff`, `yWins_iff`, `tie_iff`) and the three counts directly, and then
+also builds the four-variable probabilistic program `game` (`c:= (rand 13)+1.
+d:= (rand 13)+1. if c<n then x:= c+d else x:= c. if c<n+1 then y:= c+d else
+y:= c`, with the `if`s folded into the assignments by the Functional-Imperative
+Law and the deals as fresh-variable sums, `randDeal`), whose Substitution Law
+`pseq_randDeal` reduces it to the count: `prob_xWins_game` is the book's
+`(P. b)` probability that `x` wins, `(n–1)/169`. The equal-probability
+idealization is the book's.
 -/
 
 namespace LaPToP.ProgramTheory
@@ -343,6 +348,119 @@ theorem under_beats_succ (hn : 8 ≤ n ∧ n ≤ 13) : probYWins n < probXWins n
 and as player `x` against "under 9" (`n = 8`). -/
 theorem under_eight_best : probXWins 7 < probYWins 7 ∧ probYWins 8 < probXWins 8 :=
   ⟨under_succ_beats 7 (by norm_num), under_beats_succ 8 (by norm_num)⟩
+
+/-! ### The two-player game as a probabilistic program (four variables) -/
+
+section Program
+
+/-- The four variables of the two-player game: the cards `c`, `d` and the totals `x`, `y`. -/
+structure BJ where
+  /-- The first card. -/
+  c : ℤ
+  /-- The second card. -/
+  d : ℤ
+  /-- Player `x`'s total. -/
+  x : ℤ
+  /-- Player `y`'s total. -/
+  y : ℤ
+
+/-- A random assignment `v:= (fresh value from F)` with the state updated by `up`, each value with
+probability `1/k`: the book's "replace `rand` with a fresh variable", summed. -/
+noncomputable def randDeal {σ : Type} (F : Finset ℤ) (up : σ → ℤ → σ) (k : ℝ) : PSpec σ :=
+  fun s s' => (∑ v ∈ F, ind (s' = up s v)) / k
+
+/-- Substitution Law for a random assignment: `(Σv: F· (v:= …))/k. Q = Σv: F· Q/k` at the updated
+state — the book's "replace `rand` with a fresh variable" applied to a sequential composition. -/
+theorem pseq_randDeal {σ : Type} (F : Finset ℤ) (up : σ → ℤ → σ) (k : ℝ) (Q : PSpec σ) (s s' : σ) :
+    pseq (randDeal F up k) Q s s' = ∑ v ∈ F, (1 / k) * Q (up s v) s' := by
+  unfold pseq randDeal
+  have h1 : ∀ s'', (∑ v ∈ F, ind (s'' = up s v)) / k * Q s'' s' = ∑ v ∈ F, (1 / k) * (ind (s'' = up s v) * Q s'' s') := by
+    intro s''
+    rw [Finset.sum_div, Finset.sum_mul]
+    refine Finset.sum_congr rfl fun v _ => ?_
+    ring
+  simp_rw [h1]
+  rw [Summable.tsum_finsetSum fun v _ => ?_]
+  · refine Finset.sum_congr rfl fun v _ => ?_
+    rw [tsum_mul_left]
+    congr 1
+    simp only [ind, ite_mul, one_mul, zero_mul]
+    convert tsum_ite_eq (up s v) (fun s'' => Q s'' s') using 2
+  · exact summable_of_ne_finset_zero (s := {up s v}) fun s'' hs'' => by
+      rw [Finset.mem_singleton] at hs''
+      simp [ind, hs'']
+
+/-- `c:= (rand 13) + 1`, a fresh card summed over `1,..14`. -/
+noncomputable def dealC : PSpec BJ := randDeal card (fun s v => { s with c := v }) 13
+/-- `d:= (rand 13) + 1`. -/
+noncomputable def dealD : PSpec BJ := randDeal card (fun s v => { s with d := v }) 13
+/-- `if c < n then x:= c+d else x:= c` (the Functional-Imperative Law folds the `if` into the assignment). -/
+noncomputable def setX (n : ℤ) : PSpec BJ := pdet fun s => { s with x := xHand n s.c s.d }
+/-- `if c < n+1 then y:= c+d else y:= c`. -/
+noncomputable def setY (n : ℤ) : PSpec BJ := pdet fun s => { s with y := yHand n s.c s.d }
+
+/-- The two-player game, as the book writes it:
+`c:= (rand 13) + 1. d:= (rand 13) + 1. if c < n then x:= c+d else x:= c. if c < n+1 then y:= c+d else y:= c`. -/
+noncomputable def game (n : ℤ) : PSpec BJ := pseq dealC (pseq dealD (pseq (setX n) (setY n)))
+
+/-- The final state for cards `c`, `d` (every variable is assigned, so the initial state is forgotten). -/
+def final (n : ℤ) (c d : ℤ) : BJ := { c := c, d := d, x := xHand n c d, y := yHand n c d }
+
+/-- The game evaluated: `Σc, d: 1,..14· (σ′ = final) / 169`. -/
+theorem game_eq (n : ℤ) (s s' : BJ) :
+    game n s s' = ∑ c ∈ card, (1 / 13 : ℝ) * ∑ d ∈ card, (1 / 13 : ℝ) * ind (s' = final n c d) := by
+  unfold game dealC dealD
+  rw [pseq_randDeal]
+  refine Finset.sum_congr rfl fun c _ => ?_
+  congr 1
+  rw [pseq_randDeal]
+  refine Finset.sum_congr rfl fun d _ => ?_
+  congr 1
+  rw [setX, setY, pdet_pseq]
+  simp only [pdet, final]
+
+/-- The assertion "`x` wins", `y′<x′≤14 ∨ x′≤14<y′`, on the final state. -/
+def xWinsState (s : BJ) : Prop := (s.y < s.x ∧ s.x ≤ 14) ∨ (s.x ≤ 14 ∧ 14 < s.y)
+
+/-- The average of a function of the final state after the game is its average over the `169`
+equiprobable card pairs. -/
+theorem avg_game (n : ℤ) (e : BJ → ℝ) (s : BJ) :
+    avg (game n) e s = ∑ c ∈ card, (1 / 13 : ℝ) * ∑ d ∈ card, (1 / 13 : ℝ) * e (final n c d) := by
+  unfold avg
+  simp only [game_eq, Finset.sum_mul, Finset.mul_sum]
+  rw [Summable.tsum_finsetSum fun c _ => ?_]
+  · refine Finset.sum_congr rfl fun c _ => ?_
+    rw [Summable.tsum_finsetSum fun d _ => ?_]
+    · refine Finset.sum_congr rfl fun d _ => ?_
+      have : ∀ s', (1 / 13 : ℝ) * ((1 / 13) * ind (s' = final n c d)) * e s'
+          = (1 / 13) * ((1 / 13) * (ind (s' = final n c d) * e s')) := fun s' => by ring
+      simp_rw [this]
+      rw [tsum_mul_left, tsum_mul_left]
+      congr 2
+      simp only [ind, ite_mul, one_mul, zero_mul]
+      convert tsum_ite_eq (final n c d) e using 2
+    · exact summable_of_ne_finset_zero (s := {final n c d}) fun s' hs' => by
+        rw [Finset.mem_singleton] at hs'
+        simp [ind, hs']
+  · refine summable_of_ne_finset_zero (s := card.image (final n c)) fun s' hs' => ?_
+    refine Finset.sum_eq_zero fun d hd => ?_
+    have : s' ≠ final n c d := fun h => hs' (Finset.mem_image.2 ⟨d, hd, h.symm⟩)
+    simp [ind, this]
+
+/-- "The probability that `x` wins is `(n–1)/169`", now for the program: the average of the
+assertion `y′<x′≤14 ∨ x′≤14<y′` after `c:= (rand 13)+1. d:= (rand 13)+1. if c < n then x:= c+d
+else x:= c. if c < n+1 then y:= c+d else y:= c` — the book's `(P. b)` reading of probability. -/
+theorem prob_xWins_game (n : ℤ) (hn : 1 ≤ n ∧ n ≤ 13) (s : BJ) :
+    avg (game n) (fun s' => ind (xWinsState s')) s = (n - 1) / 169 := by
+  rw [avg_game, ← probXWins_eq n hn, probXWins, Finset.sum_product, Finset.sum_div]
+  refine Finset.sum_congr rfl fun c _ => ?_
+  rw [Finset.mul_sum, Finset.sum_div]
+  refine Finset.sum_congr rfl fun d _ => ?_
+  have : ind (xWinsState (final n c d)) = ind (xWins n c d) := rfl
+  rw [this]
+  ring
+
+end Program
 
 end Probabilistic
 
