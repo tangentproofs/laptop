@@ -3,6 +3,7 @@ import Mathlib.Order.LiminfLimsup
 import Mathlib.Topology.Order.LiminfLimsup
 import Mathlib.Topology.Instances.EReal.Lemmas
 import Mathlib.Analysis.SpecificLimits.Basic
+import Mathlib.Analysis.SpecialFunctions.Complex.LogBounds
 
 /-!
 # Limits and reals
@@ -47,8 +48,8 @@ predicate is any binary value between "eventually `p`" and "frequently `p`"
 `[–1, 1]` (so both `–1` and `1` are limit values — "the Limit Axiom tells us a
 little less"); `⇕n· n = ∞`; monotone and antitone sequences have their `⇑`,
 resp. `⇓`, as unique limit value. Every extended real is a limit value of a
-rational sequence, and the reals are the extended reals other than `±∞`. The
-remark that `⇕n· (1+1/n)^n` is `e` is not formalized.
+rational sequence, and the reals are the extended reals other than `±∞`; and
+`⇕n· (1+1/n)^n` is `e` (`isLimit_eSeq_iff`).
 -/
 
 namespace LaPToP.FunctionTheory
@@ -161,6 +162,17 @@ theorem isLimit_invSucc_iff (L : Number) : IsLimit invSucc L ↔ L = 0 := by
   have h : Tendsto invSucc atTop (𝓝 ((0 : ℝ) : Number)) :=
     EReal.tendsto_coe.2 tendsto_one_div_add_atTop_nhds_zero_nat
   rw [isLimit_iff_of_tendsto invSucc h, EReal.coe_zero]
+
+/-- `⟨n: nat· (1 + 1/n)^n⟩`, "the base of the natural logarithms, often denoted `e`". -/
+noncomputable def eSeq : Seq := fun n => (((1 + 1 / (n : ℝ)) ^ n : ℝ) : Number)
+
+/-- `⇕n· (1 + 1/n)^n = e`: every value of the limit is `e` (Mathlib's `Real.exp 1`). -/
+theorem isLimit_eSeq_iff (L : Number) : IsLimit eSeq L ↔ L = ((Real.exp 1 : ℝ) : Number) := by
+  have h : Tendsto eSeq atTop (𝓝 ((Real.exp 1 : ℝ) : Number)) := by
+    refine EReal.tendsto_coe.2 ?_
+    have := Real.tendsto_one_add_div_pow_exp 1
+    simpa [one_div] using this
+  exact isLimit_iff_of_tendsto eSeq h L
 
 /-- `⟨n: nat· (–1)^n⟩`. -/
 noncomputable def altSign : Seq := fun n => (((-1 : ℝ) ^ n : ℝ) : Number)
