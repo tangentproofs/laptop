@@ -1,8 +1,8 @@
-# aPToP §11.3 Laws — survey of Lean coverage (2026-09-17; updated after the Assertions, Limits and Quantifier-distributive batches)
+# aPToP §11.3 Laws — survey of Lean coverage (2026-09-17; complete)
 
 One line per law of the Reference chapter (pp. 235–244): the Lean theorem stating it (module in
 parentheses; `B.` = `LaPToP.BasicTheories`, `DS.` = `LaPToP.DataStructures`, `FT.` = `LaPToP.FunctionTheory`,
-`PT.` = `LaPToP.ProgramTheory`, `C.` = `LaPToP.Concurrency`), or **MISSING**. "(ℤ only)" etc. marks a law
+`PT.` = `LaPToP.ProgramTheory`, `C.` = `LaPToP.Concurrency`), or "not modelled: …" with the reason. "(ℤ only)" etc. marks a law
 stated for a specific type where the book's is generic; "(def)" marks a book equation that is the Lean
 definition itself. Counts: total / covered / missing per table at the end.
 
@@ -48,8 +48,8 @@ definition itself. Counts: total / covered / missing per table at the end.
 - Nothing missing.
 
 ## 11.3.2 Numbers — `B.NumberLaws` (extended numbers `XInt`) and `B.Numbers`
-- Counting (d0+1 = d1 … d9+1 = (d+1)0) — **MISSING** (decimal notation; `norm_num` decides instances; not
-  stated as laws)
+- Counting (d0+1 = d1 … d9+1 = (d+1)0) — not modelled: decimal notation, decided by `norm_num` on instances
+  (recorded in `number_laws_additive`)
 - x+0 = x, x+y = y+x, x+(y+z) = (x+y)+z — `add_zero`, `add_comm`, `add_assoc`
 - Cancellation (finite x) — `add_left_cancel_iff`; Absorption ∞+x, –∞+x — `top_add`, `bot_add`
 - –x = 0–x, – –x = x, –(x+y), –(x–y) — `neg_eq_zero_sub`, `neg_neg`, `neg_add`, `neg_sub`
@@ -65,7 +65,7 @@ definition itself. Counts: total / covered / missing per table at the end.
 - Direction –∞<0<1<∞ — `direction`; Reflection x<y = –y<–x — `lt_iff_neg_lt_neg`; Cancellation/Translation,
   Scale — `add_lt_add_iff_left`, `coe_mul_lt_coe_mul_iff`, `mul_lt_mul_iff_left`; Trichotomy `trichotomy`;
   Extremes `extremes`; `max_top`, `min_bot`
-- Missing: Counting laws only (notation).
+- Nothing statable missing (Counting is notation).
 
 ## 11.3.3 Bunches — `B.Bunch`, `B.Numbers`
 - Elementary, Union, Intersection, Removal — `elem_subset_elem`/`elem_subset_iff`, `mem_union`, `mem_inter`,
@@ -87,10 +87,12 @@ definition itself. Counts: total / covered / missing per table at the end.
 - Induction null: A, Identity, Base — `null_subset`, `union_null`, `inter_null` (the symmetric forms
   `null, A = A`, `null‘A = null` follow by `union_comm`/`inter_comm`; not separately stated)
 - Interval ×3 — `mem_interval`, `size_interval_of_le`, `nat_eq_iUnion_interval` (nat = 0,..∞ in the form
-  of a union of intervals; the direct `nat = 0,..∞` with ∞ as bound — **MISSING**, `interval` takes ℤ bounds)
-- Division by 0 (∞, –∞: x/0; xreal: 0/0) — **MISSING** (bunch-valued division not modelled; `XInt` division
-  is a function)
-- Adding/Multiplying Exponents (bunch inclusion of powers) — **MISSING**
+  of a union of intervals); `nat = 0,..∞` — `nat_eq_Ici` (`B.Numbers`; the interval notation has ℤ bounds, so ∞ is
+  rendered by the unbounded interval; recorded in `bunch_named_bunch_laws`)
+- Division by 0 (∞, –∞: x/0; xreal: 0/0) — not modelled: bunch-valued division (division is a function here;
+  recorded in `bunch_operator_distribution`)
+- Adding/Multiplying Exponents (bunch inclusion of powers) — not modelled: bunch-valued exponentiation
+  (recorded in `bunch_operator_distribution`)
 - Distribution: –null, –(A,B), A+null, (A,B)+(C,D) — `neg_null`, `neg_union`, `add_null`/`null_add`,
   `union_add_union` (and `add_elem`)
 
@@ -98,22 +100,25 @@ definition itself. Counts: total / covered / missing per table at the end.
 - {~S} = S, ~{A} = A, {A}⧧A, A ∈ {B} = A: B, {A} ⊆ {B} = A: B — `pack_contents`, `contents_pack`, (`{A}⧧A`:
   type distinction, **not statable** — recorded in `bunch_vs_set`), `mem_pack`, `pack_subset_pack`
 - {A}: B = A: B (a set as an element of a bunch of sets) — `pack_mem_power` covers `{A}: 𝒫B`; the general
-  form — **MISSING** (elementhood of sets in bunches of sets is `Set.mem`; trivial but unstated)
+  form is set membership in this model (recorded in `set_axioms`)
 - ${A} = ¢A, {A} ∪ {B} = {A, B}, {A} ∩ {B} = {A‘B}, {A} = {B} = A = B, {A} ⧧ {B} = A ⧧ B — `card_pack`,
   `pack_union_pack`, `pack_inter_pack`, `pack_inj` (the `⧧` form is its negation)
 
 ## 11.3.5 Strings — `DS.Strings`
 - S; nil = S = nil; S, associativity — `append_nil`, `nil_append`, `append_assoc`
 - ↔nil = 0, ↔i = 1, ↔(S;T) = ↔S+↔T — `len_nil`, `len_item`, `len_append`
-- ¢nil = 1, ¢(A;B) ≤ ¢A×¢B (bunch strings) — **MISSING** (strings of bunches not modelled)
+- ¢nil = 1, ¢(A;B) ≤ ¢A×¢B (bunch strings) — not modelled: strings of bunches (recorded in
+  `string_axioms_copies_update`)
 - (S;i;T)↔S = i — `at_append_item_append`; S;i;T⊲↔S⊳j = S;j;T — `update_append_item_append`;
-  (S⊲n⊳i)m = if n=m then i else Sm — **MISSING** in this form (`List.getD_set`-style; `HList.at_modify_self/ne`
-  cover the list version)
-- 0*S = nil, (n+1)*S = n*S; S, *S = nat*S — `copies_zero`, `copies_succ`, `mem_star` (**S = *S — **MISSING**)
+  (S⊲n⊳i)m = if n=m then i else Sm — `at_update` (added 2026-09-17; `HList.at_modify_self/ne` are the list
+  version)
+- 0*S = nil, (n+1)*S = n*S; S, *S = nat*S — `copies_zero`, `copies_succ`, `mem_star`; **S = *S — `copies_mem_star`
+  with `copies_copies` (elementwise; the bunch-level `*` on bunches of strings is not modelled — recorded)
 - Indexing composition S(T U) = (S T) U, S nil = nil, S(T;U) = ST;SU, S{A} = {SA} — `sub_sub`, `sub_nil`,
-  `sub_append`, (`S{A}` — **MISSING**, sets of indices)
+  `sub_append`; `S{A}` — not modelled: a string applied to a set of indices (recorded in
+  `string_axioms_copies_update`)
 - Order: nil ≤ S < S;i;T, S;i;T < S;j;U for i<j — `nil_le`, `lt_append_item_append`, `append_lt_append_of_lt`
-- (S;A;T : S;B;T = A: B) — **MISSING** (bunch strings); (i=j = S;i;T = S;j;T) — `append_item_append_inj`
+- (S;A;T : S;B;T = A: B) — not modelled: bunch strings (recorded); (i=j = S;i;T = S;j;T) — `append_item_append_inj`
 - Intervals x;..x = nil, x;..x+1 = x, (x;..y);(y;..z) = x;..z, ↔(x;..y) = y–x — `interval_self`,
   `interval_succ`, `interval_append_interval`, `len_interval`
 
@@ -123,11 +128,12 @@ definition itself. Counts: total / covered / missing per table at the end.
 - [A]: [B] = A: B (bunches of lists) — `image_pack_subset_image_pack`
 - ☐L = 0,..#L — `domain_eq`/`image_domain`; #L = ¢☐L — `length_eq_size_domain` (added 2026-09-17)
 - nil→i | L = i, n→i | [S] = [S⊲n⊳i], (n→i | L) m = if n=m then i else L m — `modify_pack`,
-  `at_modify_self`, `at_modify_ne` (the `nil→i | L` string-indexed form and the (S;T)→i | L law — **MISSING**;
-  multi-dimensional modification not modelled)
+  `at_modify_self`, `at_modify_ne`; the string-indexed `nil→i | L` and (S;T)→i | L — not modelled: multi-dimensional
+  lists (recorded in `list_axioms`)
 - [S] T = ST, S[T] = [ST], [S][T] = [ST], L{A} = {LA}, L[S] = [LS], (L M) N = L (M N) — `pack_comp_pack`,
-  `comp_assoc` (`L{A}`, `L[S]` forms — **MISSING**)
-- L@nil = L, L@i = L i, L@(S;T) = L@S@T — **MISSING** (multi-dimensional indexing `@` not modelled)
+  `comp_assoc`; `L{A} = {LA}` — `HList.toFn_applyBunch`; `L[S] = [LS]` — `HList.comp_pack` (`FT.FinePoints`, added
+  2026-09-17)
+- L@nil = L, L@i = L i, L@(S;T) = L@S@T — not modelled: multi-dimensional indexing `@` (recorded in `list_axioms`)
 
 ## 11.3.7 Functions — `FT.Functions`, `FT.FinePoints`, `FT.HigherOrder`
 - Renaming — `renaming_axiom`; Application — `apply_lam`; Domain ☐⟨v: D· b⟩ = D — `domain_lam`
@@ -135,13 +141,15 @@ definition itself. Counts: total / covered / missing per table at the end.
 - Selective Union ☐(f|g), (f|g)x, f|f = f, f|(g|h) = (f|g)|h, (g|h) f = g f | h f — `domain_orElse`,
   `apply_orElse`, `orElse_self`, `orElse_assoc`, `orElse_comp` (`FT.HigherOrder`, added 2026-09-17)
 - Function Union/Intersection (f, g) — `applyFns_union`/`applyFns_elem` (bunches of functions applied);
-  ☐(f,g) = ☐f‘☐g and (f‘g) — **MISSING** (function bunches as functions not modelled)
+  ☐(f,g) = ☐f‘☐g and (f‘g) — not modelled: a bunch of functions applied as a function, and function
+  intersection (recorded in `function_on_bunches`)
 - Distributive f null = null, f (A,B) = f A, f B, f (§g), f if b then x else y, (if b then f else g) x —
-  `applyBunch_null`, `applyBunch_union`, `applyBunch_sols`; the two `if` laws — **MISSING**
+  `applyBunch_null`, `applyBunch_union`, `applyBunch_sols`; the two `if` laws — `apply_ite`, `ite_apply` (added
+  2026-09-17)
 - Function Inclusion and Equality f: g, f = g, f: A→B — `Incl` (def), `eq_iff`, `incl_arrowB`
 - Arrow: f: null→A, A→B : C→D = A::C ∧ B:D, (A,B)→(C‘D) : A→C : (A‘B)→(C,D), (A,B)→C = A→C | B→C = A→C ‘ B→C —
   `incl_arrowB_null`, `arrowB_incl_arrowB`, `arrowB_union_inter_incl`/`arrowB_incl_inter_union`,
-  `arrowB_union_eq_orElse` (the `‘` form — **MISSING**)
+  `arrowB_union_eq_orElse`; the `‘` form — not modelled: function intersection (recorded in `function_inclusion`)
 - Size #f = ¢☐f — `size_eq`; Extension f = ⟨v: ☐f· f v⟩ — `extension`
 
 ## 11.3.8 Quantifiers — `FT.Functions`, `FT.Quantifiers`, `FT.HigherOrder`
@@ -233,17 +241,17 @@ definition itself. Counts: total / covered / missing per table at the end.
 - Refinement by Parts ×4 — `parts_cond`, `parts_seq`, `parts_par`, `parts_and`
 - Refinement by Cases — `refines_cond_iff`
 
-## Counts (approximate; laws as listed in the tables)
-| table | laws | covered | missing |
+## Counts (laws as listed in the tables; "not modelled" = not statable in this typed model, explained in a node)
+| table | laws | proved | not modelled |
 |---|---|---|---|
-| 11.3.0 Generic | 46 | 46 (new) | 0 |
+| 11.3.0 Generic | 46 | 46 | 0 |
 | 11.3.1 Binary | ~110 | ~110 | 0 |
-| 11.3.2 Numbers | 61 | 51 | 10 (Counting) |
-| 11.3.3 Bunches | 52 | 46 | 6 |
-| 11.3.4 Sets | 11 | 9 | 2 |
-| 11.3.5 Strings | 24 | 17 | 7 |
-| 11.3.6 Lists | 21 | 13 | 8 |
-| 11.3.7 Functions | 26 | 22 | 4 |
+| 11.3.2 Numbers | 61 | 51 | 10 (decimal Counting: notation) |
+| 11.3.3 Bunches | 52 | 47 | 5 (bunch-valued division and exponentiation) |
+| 11.3.4 Sets | 11 | 10 | 1 (`{A} ⧧ A`: a type distinction) |
+| 11.3.5 Strings | 24 | 19 | 5 (strings of bunches, `S{A}`) |
+| 11.3.6 Lists | 21 | 16 | 5 (multi-dimensional `@` and `(S;T)→i|L`; `[S] ⧧ S`) |
+| 11.3.7 Functions | 26 | 24 | 2 (function bunches as functions, function intersection) |
 | 11.3.8 Quantifiers | ~100 | ~100 | 0 |
 | 11.3.9 Limits | 3 | 3 | 0 |
 | 11.3.10 Specs and Programs | 31 | 31 | 0 |
@@ -251,4 +259,16 @@ definition itself. Counts: total / covered / missing per table at the end.
 | 11.3.12 Assertions | 8 | 8 | 0 |
 | 11.3.13 Refinement | 9 | 9 | 0 |
 
-Next batches: the remaining small Bunch/Set/List/String/Function gaps (see the per-table MISSING marks).
+## Closing remarks
+Every law of §11.3 is either a Lean theorem (named above) or is not statable in this typed model for one of
+four reasons, each recorded in the Blueprint node of the corresponding theory: (1) *notation* — the decimal
+Counting laws; (2) *type distinctions* — `{A} ⧧ A` and `[S] ⧧ S`, which the book states because bunches, sets
+and lists share one syntax and Lean separates by type; (3) *bunch-valued operators* — the book's operators
+distribute over bunches (`x/0` is the bunch `∞, –∞`, `x^(y+z)` includes `x^y × x^z`, a bunch of functions
+applies as a function, a string of bunches is a bunch of strings), whereas here arithmetic, application and
+strings are functions of elements and bunches are sets of results (`applyBunch`, `applyFns`, `neg_union`, …
+give the bunch equations that *are* statable); (4) *multi-dimensional lists* — `L@(S;T)` and `(S;T)→i|L`,
+the lists of lists of Section 2.3, which `HList` does not model. Side conditions added by the model (finite
+`n` in the ⇑⇓ arithmetic laws, finite domains for Σ and Π, indices in range) are stated on the theorems and
+in the nodes.
+Survey complete (2026-09-17).

@@ -92,7 +92,7 @@ Indexing is `List.getD`; the laws are `List.map_append`, `List.map_map`, and
 the `getElem?` lemmas for appending and mapping.
 :::
 
-:::theorem "string_axioms_copies_update" (parent := "data_structures_core") (tags := "data, strings, hehner-2.2") (effort := "small") (lean := "LaPToP.DataStructures.Str.copies_zero, LaPToP.DataStructures.Str.copies_succ, LaPToP.DataStructures.Str.copies_three_example, LaPToP.DataStructures.Str.mem_star, LaPToP.DataStructures.Str.update_append_item_append, LaPToP.DataStructures.Str.update_example")
+:::theorem "string_axioms_copies_update" (parent := "data_structures_core") (tags := "data, strings, hehner-2.2") (effort := "small") (lean := "LaPToP.DataStructures.Str.copies_zero, LaPToP.DataStructures.Str.copies_succ, LaPToP.DataStructures.Str.copies_three_example, LaPToP.DataStructures.Str.mem_star, LaPToP.DataStructures.Str.update_append_item_append, LaPToP.DataStructures.Str.update_example, LaPToP.DataStructures.Str.at_update, LaPToP.DataStructures.Str.copies_add, LaPToP.DataStructures.Str.copies_copies, LaPToP.DataStructures.Str.copies_mem_star")
 Copies and update:
 $`0*S = \mathit{nil}`, $`(n+1)*S = n*S; S`, and
 $`(S; i; T) \triangleleft \leftrightarrow S \triangleright j = S; j; T`,
@@ -100,6 +100,12 @@ together with the book's examples $`3*(0; 1) = 0; 1; 0; 1; 0; 1` and
 $`3; 5; 9 \triangleleft 2 \triangleright 8 = 3; 5; 8`, and the membership
 condition for $`*S`. The copy count is a natural number here (the book allows
 $`\infty`). Uses {uses "string_syntax"}[].
+The Reference chapter's $`(S \triangleleft n \triangleright i)\,m = \mathbf{if}\ n = m\ \mathbf{then}\ i\ \mathbf{else}\ S\,m` (§11.3.5) is
+`at_update` (for an index $`n` of $`S`), and $`{*}{*}S = {*}S` is `copies_mem_star` with
+`copies_copies` ($`n{*}(k{*}S) = (n \times k){*}S`): the bunch-level statement is not modelled, since
+$`{*}S` is a bunch of strings and $`{*}` is defined here on strings, not on bunches of strings.
+Not modelled (strings of bunches): $`{\rm c\llap{/}}\mathit{nil} = 1`, $`{\rm c\llap{/}}(A;B) \leq {\rm c\llap{/}}A \times {\rm c\llap{/}}B`,
+$`S; A; T : S; B; T = A : B`, and $`S\{A\}` (a string applied to a set of indices).
 :::
 
 :::proof "string_axioms_copies_update"
@@ -170,6 +176,8 @@ $`[3;5;7;4]\,2`, $`[3;5;7;4]\,[2;1;2]`, $`[3;5;7;4];;[2;1;2]`,
 $`2 \to 22 \mid [10;..15]`, and the item swap) are checked by evaluation.
 Uses {uses "list_packaging"}[] and {uses "string_axioms_indexing"}[].
 The Reference chapter's $`\#L = {\rm c\llap{/}}\square L` (§11.3.6) is `length_eq_size_domain`.
+Not modelled (multi-dimensional lists): the string-indexed modification $`(S;T) \to i \mid L` and the
+indexing $`L @ \mathit{nil}`, $`L @ i`, $`L @ (S;T)` of §11.3.6; `HList` is one-dimensional.
 :::
 
 :::proof "list_axioms"

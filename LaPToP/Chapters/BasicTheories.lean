@@ -150,7 +150,7 @@ $`\mathit{xnat}` and $`\mathit{xint}` are bunches of `XInt`; `toXInt` embeds
 $`\mathit{int}` into them. Builds on {uses "bunch_primitives"}[].
 :::
 
-:::theorem "bunch_named_bunch_laws" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.bin_eq, LaPToP.BasicTheories.Bunch.int_eq, LaPToP.BasicTheories.Bunch.xnat_eq, LaPToP.BasicTheories.Bunch.xint_eq, LaPToP.BasicTheories.Bunch.size_nat")
+:::theorem "bunch_named_bunch_laws" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.bin_eq, LaPToP.BasicTheories.Bunch.int_eq, LaPToP.BasicTheories.Bunch.xnat_eq, LaPToP.BasicTheories.Bunch.xint_eq, LaPToP.BasicTheories.Bunch.size_nat, LaPToP.BasicTheories.Bunch.nat_eq_Ici")
 The book's defining equations for the named bunches:
 $`\mathit{bin} = \top, \bot`, $`\mathit{int} = \mathit{nat}, -\mathit{nat}`,
 $`\mathit{xnat} = \mathit{nat}, \infty`, $`\mathit{xint} = -\infty, \mathit{int}, \infty`.
@@ -158,6 +158,8 @@ Here $`-\mathit{nat}` is pointwise negation (see {uses "bunch_operator_distribut
 and the extended equations go through the embedding of
 {uses "bunch_named_bunches"}[].
 The size law $`{\rm c\llap{/}}\mathit{nat} = \infty` of the Reference chapter (§11.3.3) is `size_nat`.
+$`\mathit{nat} = 0,..\infty` (§11.3.3) is `nat_eq_Ici`: the interval notation of this formalization has
+integer bounds, so the bound $`\infty` is rendered by the unbounded interval.
 :::
 
 :::proof "bunch_named_bunch_laws"
@@ -218,6 +220,9 @@ In Lean these are Mathlib's pointwise operations on sets (`Set.neg`,
 `Set.add`), which have exactly this meaning; an elementary bunch adds like its
 element, $`A + x = \{a + x \mid a : A\}`. Uses {uses "bunch_axioms_algebra"}[]
 and {uses "bunch_primitives"}[].
+Not modelled: the bunch-valued arithmetic of §11.3.3 — $`\infty, -\infty : x/0`, $`\mathit{xreal} : 0/0`, and the
+exponent inclusions $`x^{y+z} : x^y \times x^z`, $`x^{y \times z} : (x^y)^z` — division and exponentiation are
+functions here, not bunch-valued operators.
 :::
 
 :::proof "bunch_operator_distribution"
@@ -244,6 +249,9 @@ The remaining axiom $`\{A\} \neq A` (structure) is not an equation in the typed
 model: a set and its contents have different Lean types, which is exactly the
 distinction it records.
 Uses {uses "set_packaging"}[] and {uses "bunch_axioms_inclusion"}[].
+The Reference chapter's $`\{A\} : B` (§11.3.4), a set as an element of a bunch of sets, is set
+membership in this model; its instance $`\{A\} : \mathcal{P}B = A : B` is `pack_mem_power`, and
+$`\{A\} \neq A` is a type distinction (see the bunch/set node).
 :::
 
 :::proof "set_axioms"
@@ -278,6 +286,8 @@ $`x < \infty \Rightarrow \infty - x = \infty`, $`-\infty < x \Rightarrow -\infty
 The three laws involving $`-(y + z)` or $`-(y - z)` exclude the unspecified
 case $`\{y, z\} = \{\infty, -\infty\}`, where Mathlib's model disagrees with
 the book. Uses {uses "number_domain"}[].
+Not stated as laws: the Counting laws of §11.3.2 ($`d0 + 1 = d1`, …, $`d9 + 1 = (d{+}1)0`) — decimal
+notation, decided by `norm_num` on instances.
 :::
 
 :::proof "number_laws_additive"

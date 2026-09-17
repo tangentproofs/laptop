@@ -276,7 +276,7 @@ Unfold $`\S\langle v : D \cdot b \rangle` to $`\{v \mid v \in D \land b\,v = \to
 reason by extensionality and propositional logic.
 :::
 
-:::definition "function_on_bunches" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn.applyBunch, LaPToP.FunctionTheory.Fn.applyFns, LaPToP.FunctionTheory.Fn.applyBunch_null, LaPToP.FunctionTheory.Fn.applyBunch_union, LaPToP.FunctionTheory.Fn.applyBunch_elem, LaPToP.FunctionTheory.Fn.values_eq_applyBunch_domain, LaPToP.FunctionTheory.Fn.applyBunch_sols, LaPToP.FunctionTheory.Fn.applyFns_union, LaPToP.FunctionTheory.Fn.applyFns_elem, LaPToP.FunctionTheory.Fn.double, LaPToP.FunctionTheory.Fn.double_two_three")
+:::definition "function_on_bunches" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn.applyBunch, LaPToP.FunctionTheory.Fn.applyFns, LaPToP.FunctionTheory.Fn.applyBunch_null, LaPToP.FunctionTheory.Fn.applyBunch_union, LaPToP.FunctionTheory.Fn.applyBunch_elem, LaPToP.FunctionTheory.Fn.values_eq_applyBunch_domain, LaPToP.FunctionTheory.Fn.applyBunch_sols, LaPToP.FunctionTheory.Fn.applyFns_union, LaPToP.FunctionTheory.Fn.applyFns_elem, LaPToP.FunctionTheory.Fn.double, LaPToP.FunctionTheory.Fn.double_two_three, LaPToP.FunctionTheory.Fn.apply_ite, LaPToP.FunctionTheory.Fn.ite_apply")
 "A union of functions applied to an argument gives the union of the results",
 $`(f, g)\,x = f\,x, g\,x`, and "a function applied to a union of arguments gives
 the union of the results": $`f\,\mathit{null} = \mathit{null}`, $`f\,(A, B) = f\,A, f\,B`,
@@ -286,6 +286,12 @@ $`f` is $`f\,(\square f)`." In Lean `Fn.applyBunch f A` is the bunch of results 
 $`f` on $`A : \square f`, and `Fn.applyFns F x` applies a bunch of functions; the
 book's example $`\mathit{double}\,(2, 3) = 4, 6` is checked. Uses
 {uses "function_axioms"}[] and {uses "solution_quantifier"}[].
+The Reference chapter's $`f\,(\mathbf{if}\ b\ \mathbf{then}\ x\ \mathbf{else}\ y) = \mathbf{if}\ b\ \mathbf{then}\ f\,x\ \mathbf{else}\ f\,y` and
+$`(\mathbf{if}\ b\ \mathbf{then}\ f\ \mathbf{else}\ g)\,x = \mathbf{if}\ b\ \mathbf{then}\ f\,x\ \mathbf{else}\ g\,x` (§11.3.7) are `apply_ite` and
+`ite_apply`, for arguments in the domains. Not modelled: a bunch of functions applied as a
+function — $`\square(f, g) = \square f \mathbin{\lq} \square g`, $`(f, g)\,x = f\,x, g\,x` and the function intersection
+$`f \mathbin{\lq} g` (`applyFns` gives the bunch of results of a bunch of functions, which is the
+first of these read as a bunch equation).
 :::
 
 :::definition "function_totality" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn.Total, LaPToP.FunctionTheory.Fn.Partial, LaPToP.FunctionTheory.Fn.Deterministic, LaPToP.FunctionTheory.Fn.Nondeterministic, LaPToP.FunctionTheory.Fn.toBunch, LaPToP.FunctionTheory.Fn.total_toBunch, LaPToP.FunctionTheory.Fn.deterministic_toBunch, LaPToP.FunctionTheory.Fn.pair, LaPToP.FunctionTheory.Fn.pair_three, LaPToP.FunctionTheory.Fn.total_pair, LaPToP.FunctionTheory.Fn.nondeterministic_pair, LaPToP.FunctionTheory.Fn.below, LaPToP.FunctionTheory.Fn.partial_below, LaPToP.FunctionTheory.Fn.nondeterministic_below")
@@ -320,6 +326,8 @@ inclusions $`\mathit{suc} : \mathit{nat} \to \mathit{nat}`, $`\mathit{even} : \m
 $`\mathit{odd} : \mathit{int} \to \mathit{bin}`, $`\mathit{divides} : (\mathit{nat}+1) \to \mathit{int} \to \mathit{bin}`
 are proved. Uses {uses "function_totality"}[], {uses "selective_union"}[],
 {uses "predicates_relations"}[] and {uses "bunch_nat_axioms"}[].
+Not modelled: $`(A, B) \to C = A \to C \mathbin{\lq} B \to C` (§11.3.7), the function intersection
+$`\mathbin{\lq}`; the $`\mid` form is `arrowB_union_eq_orElse`.
 :::
 
 :::proof "function_inclusion"
@@ -327,7 +335,7 @@ Unfolding; equality via `Fn.ext`; $`\mathit{suc} : \mathit{nat} \to \mathit{nat}
 construction axiom $`0 \le n \Rightarrow 0 \le n+1`.
 :::
 
-:::theorem "list_as_function" (parent := "function_theory_core") (tags := "function, list, hehner-3.3") (effort := "small") (lean := "LaPToP.DataStructures.HList.toFn, LaPToP.DataStructures.HList.toFn_apply, LaPToP.DataStructures.HList.toFn_domain, LaPToP.DataStructures.HList.toFn_size, LaPToP.DataStructures.HList.toFn_comp, LaPToP.DataStructures.HList.toFn_inj, LaPToP.DataStructures.HList.sum_toFn, LaPToP.DataStructures.HList.map, LaPToP.DataStructures.HList.suc_map_example, LaPToP.DataStructures.HList.neg_map_example, LaPToP.DataStructures.HList.orElse_arrow_toFn, LaPToP.DataStructures.HList.orElse_arrow_example")
+:::theorem "list_as_function" (parent := "function_theory_core") (tags := "function, list, hehner-3.3") (effort := "small") (lean := "LaPToP.DataStructures.HList.toFn, LaPToP.DataStructures.HList.toFn_apply, LaPToP.DataStructures.HList.toFn_domain, LaPToP.DataStructures.HList.toFn_size, LaPToP.DataStructures.HList.toFn_comp, LaPToP.DataStructures.HList.toFn_inj, LaPToP.DataStructures.HList.sum_toFn, LaPToP.DataStructures.HList.map, LaPToP.DataStructures.HList.suc_map_example, LaPToP.DataStructures.HList.neg_map_example, LaPToP.DataStructures.HList.orElse_arrow_toFn, LaPToP.DataStructures.HList.orElse_arrow_example, LaPToP.DataStructures.HList.toFn_applyBunch, LaPToP.DataStructures.HList.comp_pack")
 "A list $`L` has much in common with the function $`\langle n : \square L \cdot L\,n \rangle`":
 list indexing is function application $`L\,m = \langle n : \square L \cdot L\,n \rangle\,m`;
 list composition coincides with function composition
@@ -340,6 +348,8 @@ $`1 \to 21 \mid [10; 11; 12] = [10; 21; 12]`, in general
 $`n \to i \mid L = (n \to i \mid L)` for an index $`n` of $`L`. Uses
 {uses "list_packaging"}[], {uses "function_axioms"}[], {uses "selective_union"}[]
 and {uses "quantifier_numeric"}[].
+The Reference chapter's $`L\,\{A\} = \{L\,A\}` and $`L\,[S] = [L\,S]` (§11.3.6) are `toFn_applyBunch`
+(a list applied to a bunch of indices gives the bunch of items at those indices) and `comp_pack`.
 :::
 
 :::proof "list_as_function"
