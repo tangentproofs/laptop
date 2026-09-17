@@ -247,6 +247,8 @@ structure ProgramTreeTheory (X : Type u) (σ : Type v) where
   aim_go : Refines (fun s s' => (aim s' = Dir.up) ↔ aim s ≠ Dir.up) go
   /-- `node′=node ∧ aim′=aim ⇐ go. work. go`. -/
   go_work_go : Refines (fun s s' => node s' = node s ∧ aim s' = aim s) (seq go (seq work go))
+  /-- `work ⇐ ok`. -/
+  work_ok : Refines work ok
   /-- `work ⇐ node:= x`. -/
   work_assignNode : ∀ x, Refines work (assignNode x)
   /-- `work ⇐ a=aim⧧b ∧ (aim:= b. go. work. go. aim:= a)`. -/
