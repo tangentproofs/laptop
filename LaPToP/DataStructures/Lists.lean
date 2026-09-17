@@ -108,6 +108,10 @@ theorem length_pack : (Str.pack S).length = Str.len S := rfl
 /-- `☐L = 0,..#L` (domain): the indexes of `L` are the naturals below its length. -/
 theorem domain_eq : L.domain = {n | n < L.contents.length} := rfl
 
+/-- `#L = ¢☐L`: the length is the size of the domain. -/
+theorem length_eq_size_domain : L.length = Bunch.size L.domain := by
+  rw [length, Str.len, domain, Bunch.size, ← Finset.coe_range, Set.encard_coe_eq_coe_finsetCard, Finset.card_range]
+
 /-- The domain, read in the integers, is the bunch interval `0,..#L`. -/
 theorem image_domain : (Nat.cast '' L.domain : Bunch ℤ) = Bunch.interval 0 L.contents.length := by
   ext k

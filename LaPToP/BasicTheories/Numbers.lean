@@ -1,6 +1,7 @@
 import LaPToP.BasicTheories.Bunch
 import Mathlib.Algebra.Group.Pointwise.Set.Basic
 import Mathlib.Data.Int.Interval
+import Mathlib.Order.Interval.Set.Infinite
 
 /-!
 # Useful bunches and the interval `x,..y`
@@ -81,6 +82,12 @@ theorem nat_induction (B : Bunch ℤ) (h : elem 0 ∪ (B + elem 1) ⊆ B) : nat 
   have h0 : (0 : ℤ) ∈ B := h (Or.inl rfl)
   have hs : ∀ m, m ∈ B → m + 1 ∈ B := fun m hm => h (Or.inr ⟨m, hm, 1, rfl, rfl⟩)
   exact Int.leInduction h0 (fun m _ hm => hs m hm) n hn
+
+/-- `¢nat = ∞`. -/
+theorem size_nat : size nat = ⊤ := by
+  have : nat = Set.Ici (0 : ℤ) := by ext n; simp [nat]
+  rw [this, size, Set.encard_eq_top_iff]
+  exact Set.Ici_infinite 0
 
 /-- `int = nat, –nat`. -/
 theorem int_eq : int = nat ∪ -nat := by

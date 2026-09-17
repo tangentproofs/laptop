@@ -62,6 +62,47 @@ theorem comp_domain (f : Fn β γ) (g : Fn α β) :
 theorem comp_apply (f : Fn β γ) (g : Fn α β) (x : α) (hx : x ∈ (f.comp g).domain) :
     (f.comp g).apply x hx = f.apply (g.apply x hx.1) (hx.2 hx.1) := rfl
 
+/-- `f | f = f` (Selective Union). -/
+theorem orElse_self (f : Fn α β) : orElse f f = f := by
+  classical
+  refine Fn.ext (Set.union_self _) fun x hf hg => ?_
+  change (f.orElse f).apply x hf = f.apply x hg
+  rw [apply_orElse, dif_pos hg]
+
+/-- `f | (g | h) = (f | g) | h` (Selective Union). -/
+theorem orElse_assoc (f g h : Fn α β) : orElse f (orElse g h) = orElse (orElse f g) h := by
+  classical
+  refine Fn.ext (Set.union_assoc _ _ _).symm fun x h₁ h₂ => ?_
+  change (f.orElse (g.orElse h)).apply x h₁ = ((f.orElse g).orElse h).apply x h₂
+  simp only [apply_orElse]
+  by_cases hf : x ∈ f.domain <;> by_cases hg : x ∈ g.domain <;> simp [hf, hg, domain_orElse]
+
+/-- `(g | h) f = g f | h f` (Selective Union distributes over composition). -/
+theorem orElse_comp (g h : Fn β γ) (f : Fn α β) : (orElse g h).comp f = orElse (g.comp f) (h.comp f) := by
+  classical
+  refine Fn.ext ?_ fun x h₁ h₂ => ?_
+  · ext x
+    simp only [comp, orElse, Set.mem_ofPred_eq, Set.mem_union]
+    constructor
+    · rintro ⟨hf, hd⟩
+      rcases hd hf with hg | hh
+      · exact Or.inl ⟨hf, fun _ => hg⟩
+      · exact Or.inr ⟨hf, fun _ => hh⟩
+    · rintro (⟨hf, hg⟩ | ⟨hf, hh⟩)
+      · exact ⟨hf, fun _ => Or.inl (hg hf)⟩
+      · exact ⟨hf, fun _ => Or.inr (hh hf)⟩
+  · by_cases hg : x ∈ (g.comp f).dom
+    · have hgd : f.body x h₁.1 ∈ g.dom := hg.2 hg.1
+      show (if hg' : f.body x h₁.1 ∈ g.dom then g.body _ hg' else _) =
+        if hg' : x ∈ (g.comp f).dom then (g.comp f).body x hg' else _
+      rw [dif_pos hgd, dif_pos hg]
+      rfl
+    · have hgd : f.body x h₁.1 ∉ g.dom := fun hgd => hg ⟨h₁.1, fun _ => hgd⟩
+      show (if hg' : f.body x h₁.1 ∈ g.dom then _ else h.body _ _) =
+        if hg' : x ∈ (g.comp f).dom then _ else (h.comp f).body x (h₂.resolve_left hg')
+      rw [dif_neg hgd, dif_neg hg]
+      rfl
+
 /-- An operator composed with a function: `h f` for an operator `h`, applied to
 each result (`–suc`, `¬even`). -/
 def map (h : β → γ) (f : Fn α β) : Fn α γ := ⟨f.dom, fun x hx => h (f.apply x hx)⟩

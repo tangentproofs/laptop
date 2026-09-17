@@ -116,6 +116,9 @@ theorem remove_union : A \ (B ∪ C) = (A \ B) \ C := Set.sdiff_sdiff.symm
 theorem remove_remove : (A \ B) \ C = (A \ B) ∩ (A \ C) := by
   ext; simp; tauto
 
+/-- `(A, B)–, C = A–, C , B–, C` (union removal, third equation). -/
+theorem union_remove : (A ∪ B) \ C = (A \ C) ∪ (B \ C) := Set.union_sdiff_distrib
+
 /-- `A‘(B–, C) = (A‘B)–, C` (intersection removal, first equation). -/
 theorem inter_remove : A ∩ (B \ C) = (A ∩ B) \ C := (Set.inter_sdiff_assoc A B C).symm
 
