@@ -14,6 +14,7 @@ import LaPToP.ProgramTheory.GoTo
 import LaPToP.ProgramTheory.Alias
 import LaPToP.ProgramTheory.Probabilistic
 import LaPToP.ProgramTheory.RandomNumbers
+import LaPToP.ProgramTheory.Blackjack
 import LaPToP.ProgramTheory.Information
 import LaPToP.ProgramTheory.Functional
 
@@ -39,7 +40,8 @@ order: variable declaration and suspension (Section 5.0) are formalized in
 functions and procedures (Section 5.5) in `LaPToP.ProgramTheory.Subprograms`;
 aliasing (Section 5.6) in `LaPToP.ProgramTheory.Alias`; probabilistic
 programming (Section 5.7) in `LaPToP.ProgramTheory.Probabilistic`, random
-number generators (Section 5.7.0) in `LaPToP.ProgramTheory.RandomNumbers` and
+number generators (Section 5.7.0) in `LaPToP.ProgramTheory.RandomNumbers` (with
+the blackjack Exercise 344 in `LaPToP.ProgramTheory.Blackjack`) and
 information (Section 5.7.1) in `LaPToP.ProgramTheory.Information`;
 and functional programming with function refinement (Sections 5.8 and 5.8.0)
 in `LaPToP.ProgramTheory.Functional`.
@@ -666,7 +668,62 @@ body with the dice summed out is $`\mathbf{if}\ 1/6\ \mathbf{then}\ ok\ \mathbf{
 and the hypothesis `tdist` is proved to be its fixed point (`diceBody_tdist`,
 the book's last three lines), a distribution of $`t'` (a shifted geometric
 series), with average $`t + 5` (`avg_tdist`, from $`\Sigma n \cdot n\,(5/6)^n = 30`). The
-blackjack Exercise 344 (pp. 88–89) is not formalized.
+blackjack Exercise 344 (pp. 88–89) is the next node.
+:::
+
+:::theorem "blackjack" (parent := "programming_language_core") (tags := "probability, random, exercise-344, hehner-5.7.0") (effort := "medium") (lean := "LaPToP.ProgramTheory.Probabilistic.card, LaPToP.ProgramTheory.Probabilistic.card_card, LaPToP.ProgramTheory.Probabilistic.hasSum_uniform, LaPToP.ProgramTheory.Probabilistic.prob_uniform, LaPToP.ProgramTheory.Probabilistic.deal, LaPToP.ProgramTheory.Probabilistic.secondCard, LaPToP.ProgramTheory.Probabilistic.sum_ind_eq_interval, LaPToP.ProgramTheory.Probabilistic.randAssign_deal, LaPToP.ProgramTheory.Probabilistic.randAssign_secondCard, LaPToP.ProgramTheory.Probabilistic.isDistribution_deal, LaPToP.ProgramTheory.Probabilistic.isDistribution_secondCard, LaPToP.ProgramTheory.Probabilistic.support_deal, LaPToP.ProgramTheory.Probabilistic.under7Body, LaPToP.ProgramTheory.Probabilistic.game7, LaPToP.ProgramTheory.Probabilistic.isDistribution_game7, LaPToP.ProgramTheory.Probabilistic.dist7, LaPToP.ProgramTheory.Probabilistic.game7_eq_sum, LaPToP.ProgramTheory.Probabilistic.game7_eq, LaPToP.ProgramTheory.Probabilistic.xHand, LaPToP.ProgramTheory.Probabilistic.yHand, LaPToP.ProgramTheory.Probabilistic.xWins, LaPToP.ProgramTheory.Probabilistic.yWins, LaPToP.ProgramTheory.Probabilistic.xWins_iff, LaPToP.ProgramTheory.Probabilistic.yWins_iff, LaPToP.ProgramTheory.Probabilistic.tie, LaPToP.ProgramTheory.Probabilistic.tie_iff, LaPToP.ProgramTheory.Probabilistic.sum_ind, LaPToP.ProgramTheory.Probabilistic.probXWins, LaPToP.ProgramTheory.Probabilistic.probYWins, LaPToP.ProgramTheory.Probabilistic.probTie, LaPToP.ProgramTheory.Probabilistic.probXWins_eq, LaPToP.ProgramTheory.Probabilistic.probYWins_eq, LaPToP.ProgramTheory.Probabilistic.probTie_eq, LaPToP.ProgramTheory.Probabilistic.probs_sum, LaPToP.ProgramTheory.Probabilistic.under_succ_beats, LaPToP.ProgramTheory.Probabilistic.under_beats_succ, LaPToP.ProgramTheory.Probabilistic.under_eight_best")
+"Exercise 344 is a simplified version of blackjack. You are dealt a card from a
+deck; its value is in the range $`1` through $`13` inclusive. You may stop with just
+one card, or have a second card if you want. Your object is to get a total as
+near as possible to $`14`, but not over $`14`. Your strategy is to take a second
+card if the first is under $`7`. Assuming each card value has equal probability
+(actually, the second card drawn has a diminished probability of having the
+same value as the first card drawn, but let's ignore that complication), we
+represent a card as $`(\mathit{rand}\ 13) + 1`. In one variable $`x`, the game is
+$`x := (\mathit{rand}\ 13) + 1.\ \mathbf{if}\ x < 7\ \mathbf{then}\ x := x + (\mathit{rand}\ 13) + 1\ \mathbf{else}\ ok`
+$`= (x' : (0,..13){+}1)/13.\ \mathbf{if}\ x < 7\ \mathbf{then}\ (x' : x + (0,..13){+}1)/13\ \mathbf{else}\ x' = x`
+$`= \Sigma x'' \cdot (x'' : 1,..14)/13 \times ((x'' < 7) \times (x' : x''{+}1,..x''{+}14)/13 + (x'' \geq 7) \times (x' = x''))`
+by several omitted steps
+$`= ((2 \leq x' < 7) \times (x' - 1) + (7 \leq x' < 14) \times 19 + (14 \leq x' < 20) \times (20 - x')) / 169`.
+That is the distribution of $`x'` if we use the “under 7” strategy. We can
+similarly find the distribution of $`x'` if we use the “under 8” strategy, or any
+other strategy. But which strategy is best? To compare two strategies, we play
+both of them at once. Player $`x` will play “under $`n`” and player $`y` will play
+“under $`n{+}1`” using exactly the same cards $`c` and $`d` (the result would be no
+different if they used different cards, but it would require more variables).
+Here is the new game, followed by the assertion that $`x` wins:
+$`c := (\mathit{rand}\ 13) + 1.\ d := (\mathit{rand}\ 13) + 1.\ \mathbf{if}\ c < n\ \mathbf{then}\ x := c{+}d\ \mathbf{else}\ x := c.\ \mathbf{if}\ c < n{+}1\ \mathbf{then}\ y := c{+}d\ \mathbf{else}\ y := c.\ y' < x' \leq 14 \lor x' \leq 14 < y'`
+Replace $`\mathit{rand}` and use the Functional-Imperative Law twice. ... Use the
+Substitution Law twice. ...
+$`= (c' : (0,..13){+}1 \land d' : (0,..13){+}1 \land x' = x \land y' = y) / 169.\ c = n \land d > 14 - n`
+$`= \Sigma d : 1,..14 \cdot (d > 14 - n)/169 = (n - 1) / 169`. The probability that $`x` wins
+is $`(n - 1) / 169`. By similar calculations we can find that the probability
+that $`y` wins is $`(14 - n) / 169`, and the probability of a tie is $`12/13`. For
+$`n < 8`, “under $`n{+}1`” beats “under $`n`”. For $`n \geq 8`, “under $`n`” beats “under
+$`n{+}1`”. So “under 8” beats both “under 7” and “under 9”."
+
+Model notes, on top of {uses "random_number_generators"}[] and
+{uses "probabilistic_programming"}[]. A dealt card $`x := (\mathit{rand}\ 13) + 1` is the
+uniform distribution `deal` on $`1,..14`, proved equal to the fresh-variable
+replacement `randAssign 13`, and likewise the second card; both are
+distributions. The “under 7” game `game7` is the probabilistic program
+$`\mathit{deal}.\ \mathbf{if}\ x < 7\ \mathbf{then}\ \mathit{secondCard}\ \mathbf{else}\ ok`; it is a distribution, its
+sum form is the book's $`\Sigma x''` line (`game7_eq_sum`), and the "several
+omitted steps" are carried out (`game7_eq`): a finite sum over the $`13` first
+cards, evaluated for each $`x'` in $`2,..20` and shown to vanish elsewhere,
+giving exactly the book's closed form `dist7`. For the two-player game the
+book's reduction of the winning assertion is proved for cards $`c, d : 1,..14`
+and $`1 \leq n \leq 13` — `xWins_iff` ($`c = n \land d > 14 - n`), `yWins_iff`
+($`c = n \land d \leq 14 - n`) and `tie_iff` ($`c \neq n`) — and the probabilities are the
+counts over the $`169` equiprobable card pairs (the book's own last line
+$`\Sigma d : 1,..14 \cdot (d > 14 - n)/169`): `probXWins_eq` $`= (n-1)/169`, `probYWins_eq`
+$`= (14-n)/169`, `probTie_eq` $`= 12/13`, summing to $`1`; then `under_succ_beats`
+($`n < 8`), `under_beats_succ` ($`n \geq 8`) and `under_eight_best` (“under 8” beats
+“under 7” as player $`y` with $`n = 7`, and “under 9” as player $`x` with $`n = 8`). The
+four-variable probabilistic program of the two-player game is not built: the
+Functional-Imperative and {uses "substitution_law"}[] steps of the book only
+rewrite the program before the count, and the count is what is proved. The
+equal-probability idealization is the book's.
 :::
 
 :::theorem "information" (parent := "programming_language_core") (tags := "probability, information, entropy, hehner-5.7.1") (effort := "small") (lean := "LaPToP.ProgramTheory.Probabilistic.info, LaPToP.ProgramTheory.Probabilistic.entro, LaPToP.ProgramTheory.Probabilistic.prob_even_rand_eight, LaPToP.ProgramTheory.Probabilistic.prob_rand_eight_eq_five, LaPToP.ProgramTheory.Probabilistic.prob_rand_eight_lt_eight, LaPToP.ProgramTheory.Probabilistic.info_half, LaPToP.ProgramTheory.Probabilistic.info_eighth, LaPToP.ProgramTheory.Probabilistic.info_one, LaPToP.ProgramTheory.Probabilistic.info_seven_eighths, LaPToP.ProgramTheory.Probabilistic.info_seven_eighths_bounds, LaPToP.ProgramTheory.Probabilistic.entro_eq_binEntropy_div, LaPToP.ProgramTheory.Probabilistic.entro_half, LaPToP.ProgramTheory.Probabilistic.entro_symm, LaPToP.ProgramTheory.Probabilistic.entro_eighth_eq, LaPToP.ProgramTheory.Probabilistic.entro_eighth_bounds, LaPToP.ProgramTheory.Probabilistic.entro_le_one, LaPToP.ProgramTheory.Probabilistic.entro_eq_one_iff")
