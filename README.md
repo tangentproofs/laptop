@@ -48,7 +48,7 @@ Do not enable Pages via API from automation; a human should flip that switch.
 ## Coverage
 
 Every section of Chapters 1–9 of the book is formalized, and the law tables of
-the Reference chapter (§11.3) are surveyed law by law. The Blueprint has 166
+the Reference chapter (§11.3) are surveyed law by law. The Blueprint has 167
 nodes; all are formalized and sorry-free except the intentionally open demo
 node `collatz_conjecture`.
 
@@ -57,7 +57,7 @@ node `collatz_conjecture`.
 | Prelude | §1.0 Binary Theory |
 | Basic Theories | §1.0.1 calculation, §1.1 numbers, §2.0–2.1 bunches and sets; §11.3.0 Generic laws |
 | Function Theory | §3.0–3.4 functions, quantifiers, fine points, functions as data, limits and reals; §11.3.7–11.3.9 laws |
-| Data Structures | §2.2–2.3 strings and lists |
+| Data Structures | §2.2–2.3 strings, lists and multidimensional structures |
 | Program Theory | §4.0–4.4 specifications, refinement, time, space, old program theory; §11.3.10–11.3.13 laws |
 | Programming Language | §5.0–5.8 scope, data structures, loops, time and space dependence, assertions, subprograms, alias, probabilistic and functional programming |
 | Recursion and Concurrency | §6.0–6.2 recursive definition; §8.0–8.1 concurrency |
@@ -66,11 +66,10 @@ node `collatz_conjecture`.
 
 `.sci/laws-survey.md` maps each of the ~450 laws of the fourteen §11.3 tables to
 the Lean theorem stating it. The laws that are not statable in this typed model
-fall into four classes, each explained in the corresponding node: decimal
-Counting laws (notation); the type distinctions `{A} ⧧ A` and `[S] ⧧ S`;
+fall into three classes, each explained in the corresponding node: decimal
+Counting laws (notation); the type distinctions `{A} ⧧ A` and `[S] ⧧ S`; and
 bunch-valued operators (`x/0 = ∞, –∞`, exponent inclusions, bunches of functions
-applied as functions, strings of bunches); and multi-dimensional lists (`L@(S;T)`,
-`(S;T)→i | L`). §4.2.3 (Soundness and Completeness), meta-statements about
+applied as functions, strings of bunches). §4.2.3 (Soundness and Completeness), meta-statements about
 observations of computations, is explained in prose in the Program Theory
 chapter. Side conditions the model adds (finite `n` in the ⇑⇓ arithmetic laws,
 finite domains for Σ and Π, indices in range) are stated on the theorems.
@@ -93,7 +92,7 @@ LaPToP/
     Interaction.lean         # §9 interactive variables and communication
     Collatz.lean             # unfinished demo node
   BasicTheories/             # Binary, Bunch, Numbers, NumberLaws, Calculation, GenericLaws
-  DataStructures/            # Strings, Lists
+  DataStructures/            # Strings, Lists, Multidimensional
   FunctionTheory/            # Functions, Quantifiers, FinePoints, HigherOrder, Limits, QuantifierDistribution
   ProgramTheory/             # Specifications, Programs, Time, Space, Search, FastExp, Fibonacci, CollatzTime,
                              #   OldTheory, AssertionLaws, WhileLoop, ForLoop, ExitLoop, TwoDimSearch, GoTo, Scope,

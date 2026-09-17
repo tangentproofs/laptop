@@ -3,6 +3,7 @@ import VersoManual
 import VersoBlueprint
 import LaPToP.DataStructures.Strings
 import LaPToP.DataStructures.Lists
+import LaPToP.DataStructures.Multidimensional
 import LaPToP.FunctionTheory.HigherOrder
 
 open Verso.Genre
@@ -15,8 +16,9 @@ open Informal
 Data structures as they appear in LaPToP: lists/strings, functions as data,
 and related theories used when specifying programs that manipulate structure.
 The string and list material is Hehner's Sections 2.2 and 2.3; the formal
-counterparts are the Lean modules `LaPToP.DataStructures.Strings` and
-`LaPToP.DataStructures.Lists`.
+counterparts are the Lean modules `LaPToP.DataStructures.Strings`,
+`LaPToP.DataStructures.Lists` and `LaPToP.DataStructures.Multidimensional`
+(Section 2.3.0).
 :::
 
 :::definition "list_as_string" (parent := "data_structures_core") (lean := "LaPToP.DataStructures.Str, LaPToP.DataStructures.Str.nil, LaPToP.DataStructures.Str.item, LaPToP.DataStructures.Str.len")
@@ -179,8 +181,9 @@ $`[3;5;7;4]\,2`, $`[3;5;7;4]\,[2;1;2]`, $`[3;5;7;4];;[2;1;2]`,
 $`2 \to 22 \mid [10;..15]`, and the item swap) are checked by evaluation.
 Uses {uses "list_packaging"}[] and {uses "string_axioms_indexing"}[].
 The Reference chapter's $`\#L = {\rm c\llap{/}}\square L` (§11.3.6) is `length_eq_size_domain`.
-Not modelled (multi-dimensional lists): the string-indexed modification $`(S;T) \to i \mid L` and the
-indexing $`L @ \mathit{nil}`, $`L @ i`, $`L @ (S;T)` of §11.3.6; `HList` is one-dimensional.
+The string-indexed modification $`(S;T) \to i \mid L` and the indexing $`L @ \mathit{nil}`, $`L @ i`,
+$`L @ (S;T)` of §11.3.6 are the multidimensional structures of Section 2.3.0, the next node
+(`HList` itself is one-dimensional).
 :::
 
 :::proof "list_axioms"
@@ -201,6 +204,45 @@ book leaves out-of-range indexing unspecified. Uses {uses "list_axioms"}[] and
 :::proof "list_derived_laws"
 Unpack to contents and apply the string indexing laws
 (`Str.at_map_of_lt`, `Str.sub_sub`, `Str.sub_append`).
+:::
+
+:::definition "multidimensional_structures" (parent := "data_structures_core") (lean := "LaPToP.DataStructures.arrayA, LaPToP.DataStructures.arrayA_one, LaPToP.DataStructures.arrayA_one_two, LaPToP.DataStructures.arrayA_bunch, LaPToP.DataStructures.arrayA_list, LaPToP.DataStructures.Nested, LaPToP.DataStructures.Nested.child, LaPToP.DataStructures.Nested.idx, LaPToP.DataStructures.Nested.setChild, LaPToP.DataStructures.Nested.modify, LaPToP.DataStructures.Nested.idx_nil, LaPToP.DataStructures.Nested.idx_item, LaPToP.DataStructures.Nested.idx_append, LaPToP.DataStructures.Nested.modify_nil, LaPToP.DataStructures.Nested.modify_append, LaPToP.DataStructures.Nested.exampleB, LaPToP.DataStructures.Nested.exampleB_zero_zero, LaPToP.DataStructures.Nested.exampleB_one, LaPToP.DataStructures.Nested.exampleB_one_one, LaPToP.DataStructures.Nested.exampleB_idx, LaPToP.DataStructures.Nested.modify_example, LaPToP.DataStructures.Nested.ofHList, LaPToP.DataStructures.Nested.child_ofHList")
+"A list is sometimes called an array, especially if it is multidimensional. For
+example, let $`A = [[6; 3; 7; 0]; [4; 9; 2; 5]; [1; 5; 8; 3]]`. Then $`A` is a
+2-dimensional array, or more particularly, a $`3 \times 4` array. Formally,
+$`A : [3{*}[4{*}\mathit{nat}]]`. Indexing $`A` with one index gives a list $`A\,1 = [4; 9; 2; 5]`
+which can then be indexed again to give a number. $`A\,1\,2 = 2`. Warning: The
+notations $`A\,(1, 2)` and $`A\,[1, 2]` are used in several programming languages to
+index a 2-dimensional array. But in this book, $`A\,(1, 2) = A\,1, A\,2 = [4; 9; 2; 5], [1; 5; 8; 3]`,
+$`A\,[1, 2] = [A\,1, A\,2] = [[4; 9; 2; 5], [1; 5; 8; 3]]`. We have just seen a rectangular
+array, a regular structure, which requires two indexes to give a number. Lists
+of lists can also be quite irregular in shape, not just by containing lists of
+different lengths, but in dimensionality. For example, let
+$`B = [[2; 3]; 4; [5; [6; 7]]]`. Now $`B\,0\,0 = 2` and $`B\,1 = 4`, and $`B\,1\,1` is undefined.
+The number of indexes needed to obtain a number varies. We can regain some
+regularity in the following way. Let $`L` be a list, let $`n` be an index, and let $`S`
+and $`T` be strings of indexes. Then $`L @ \mathit{nil} = L`, $`L @ n = L\,n`, $`L @ (S; T) = L @ S @ T`.
+Now we can always “index” with a single string, obtaining the same result as
+indexing by the sequence of items in the string. In the example list,
+$`B @ (2; 1; 0) = B\,2\,1\,0 = 6`. We generalize the notation $`S \to i \mid L` to allow $`S` to be
+a string of indexes. The axioms are $`\mathit{nil} \to i \mid L = i`,
+$`(S; T) \to i \mid L = S \to (T \to i \mid L @ S) \mid L`. Thus $`S \to i \mid L` is a list like $`L` except
+that $`S` points to item $`i`. For example,
+$`(0; 1) \to 6 \mid [[0; 1; 2]; [3; 4; 5]] = [[0; 6; 2]; [3; 4; 5]]`."
+
+Model notes. Rectangular arrays are lists of lists (`HList (HList α)`, the array
+$`A` with $`A\,1`, $`A\,1\,2`, and the bunch- and list-indexed forms $`A\,(1, 2)`, $`A\,[1, 2]`
+of {uses "list_axioms"}[]). Structures irregular "in dimensionality" need a type
+of finitely nested lists, `Nested α` — an item or a list of nested structures —
+which is the typed rendering of the book's $`B`. String indexing $`L @ S` (`idx`)
+and modification $`S \to i \mid L` (`modify`) are defined by recursion on the index
+string, one index at a time; the book's four axioms are then theorems
+(`idx_nil`, `idx_item`, `idx_append`, `modify_nil`, `modify_append`). Where the
+book leaves a result undefined ($`B\,1\,1`: indexing an item, or an index out of
+range) the definitions return a default item, as $`L\,n` does out of range in
+{uses "list_as_function"}[]; a one-dimensional list is a nested structure with the
+same indexing (`ofHList`, `child_ofHList`). Both examples are computed
+($`B @ (2; 1; 0) = 6`, the modification of $`[[0; 1; 2]; [3; 4; 5]]`).
 :::
 
 :::definition "function_as_data" (parent := "data_structures_core") (lean := "LaPToP.FunctionTheory.Fn.comp, LaPToP.FunctionTheory.Fn.comp_domain, LaPToP.FunctionTheory.Fn.comp_apply, LaPToP.FunctionTheory.Fn.map, LaPToP.FunctionTheory.Fn.map_domain, LaPToP.FunctionTheory.Fn.map_apply, LaPToP.FunctionTheory.Fn.values_map, LaPToP.FunctionTheory.Fn.compFns, LaPToP.FunctionTheory.Fn.compFns_union, LaPToP.FunctionTheory.Fn.fnsComp, LaPToP.FunctionTheory.Fn.fnsComp_union, LaPToP.FunctionTheory.Fn.applyList, LaPToP.FunctionTheory.Fn.applyList_example")

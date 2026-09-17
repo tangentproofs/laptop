@@ -128,12 +128,12 @@ definition itself. Counts: total / covered / missing per table at the end.
 - [A]: [B] = A: B (bunches of lists) — `image_pack_subset_image_pack`
 - ☐L = 0,..#L — `domain_eq`/`image_domain`; #L = ¢☐L — `length_eq_size_domain` (added 2026-09-17)
 - nil→i | L = i, n→i | [S] = [S⊲n⊳i], (n→i | L) m = if n=m then i else L m — `modify_pack`,
-  `at_modify_self`, `at_modify_ne`; the string-indexed `nil→i | L` and (S;T)→i | L — not modelled: multi-dimensional
-  lists (recorded in `list_axioms`)
+  `at_modify_self`, `at_modify_ne`; the string-indexed `nil→i | L` and (S;T)→i | L — `Nested.modify_nil`,
+  `Nested.modify_append` (`DS.Multidimensional`, finitely nested lists, added 2026-09-17)
 - [S] T = ST, S[T] = [ST], [S][T] = [ST], L{A} = {LA}, L[S] = [LS], (L M) N = L (M N) — `pack_comp_pack`,
   `comp_assoc`; `L{A} = {LA}` — `HList.toFn_applyBunch`; `L[S] = [LS]` — `HList.comp_pack` (`FT.FinePoints`, added
   2026-09-17)
-- L@nil = L, L@i = L i, L@(S;T) = L@S@T — not modelled: multi-dimensional indexing `@` (recorded in `list_axioms`)
+- L@nil = L, L@i = L i, L@(S;T) = L@S@T — `Nested.idx_nil`, `Nested.idx_item`, `Nested.idx_append` (`DS.Multidimensional`)
 
 ## 11.3.7 Functions — `FT.Functions`, `FT.FinePoints`, `FT.HigherOrder`
 - Renaming — `renaming_axiom`; Application — `apply_lam`; Domain ☐⟨v: D· b⟩ = D — `domain_lam`
@@ -251,7 +251,7 @@ definition itself. Counts: total / covered / missing per table at the end.
 | 11.3.3 Bunches | 52 | 47 | 5 (bunch-valued division and exponentiation) |
 | 11.3.4 Sets | 11 | 10 | 1 (`{A} ⧧ A`: a type distinction) |
 | 11.3.5 Strings | 24 | 19 | 5 (strings of bunches, `S{A}`) |
-| 11.3.6 Lists | 21 | 16 | 5 (multi-dimensional `@` and `(S;T)→i|L`; `[S] ⧧ S`) |
+| 11.3.6 Lists | 21 | 20 | 1 (`[S] ⧧ S`: a type distinction) |
 | 11.3.7 Functions | 26 | 24 | 2 (function bunches as functions, function intersection) |
 | 11.3.8 Quantifiers | ~100 | ~100 | 0 |
 | 11.3.9 Limits | 3 | 3 | 0 |
@@ -262,14 +262,14 @@ definition itself. Counts: total / covered / missing per table at the end.
 
 ## Closing remarks
 Every law of §11.3 is either a Lean theorem (named above) or is not statable in this typed model for one of
-four reasons, each recorded in the Blueprint node of the corresponding theory: (1) *notation* — the decimal
+three reasons, each recorded in the Blueprint node of the corresponding theory: (1) *notation* — the decimal
 Counting laws; (2) *type distinctions* — `{A} ⧧ A` and `[S] ⧧ S`, which the book states because bunches, sets
 and lists share one syntax and Lean separates by type; (3) *bunch-valued operators* — the book's operators
 distribute over bunches (`x/0` is the bunch `∞, –∞`, `x^(y+z)` includes `x^y × x^z`, a bunch of functions
 applies as a function, a string of bunches is a bunch of strings), whereas here arithmetic, application and
 strings are functions of elements and bunches are sets of results (`applyBunch`, `applyFns`, `neg_union`, …
-give the bunch equations that *are* statable); (4) *multi-dimensional lists* — `L@(S;T)` and `(S;T)→i|L`,
-the lists of lists of Section 2.3, which `HList` does not model. Side conditions added by the model (finite
+give the bunch equations that *are* statable). The multi-dimensional list laws (`L@(S;T)`, `(S;T)→i|L`) are
+proved on the finitely nested lists `Nested α` of Section 2.3.0 (`DS.Multidimensional`). Side conditions added by the model (finite
 `n` in the ⇑⇓ arithmetic laws, finite domains for Σ and Π, indices in range) are stated on the theorems and
 in the nodes.
 Survey complete (2026-09-17).
