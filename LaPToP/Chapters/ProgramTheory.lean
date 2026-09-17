@@ -8,6 +8,7 @@ import LaPToP.ProgramTheory.Space
 import LaPToP.ProgramTheory.Search
 import LaPToP.ProgramTheory.FastExp
 import LaPToP.ProgramTheory.Fibonacci
+import LaPToP.ProgramTheory.OldTheory
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -18,10 +19,12 @@ open Informal
 :::group "program_theory_core"
 Programs as predicates on pre- and post-states; refinement as implication;
 sequential composition, conditionals, and assignment in Hehner's theory.
-Sections 4.0–4.3 of the book are formalized in the Lean modules
+Sections 4.0–4.4 of the book are formalized in the Lean modules
 `LaPToP.ProgramTheory.Specifications`, `LaPToP.ProgramTheory.Programs`,
 `LaPToP.ProgramTheory.Time` (Section 4.2) and `LaPToP.ProgramTheory.Space`
-(Section 4.3, the Towers of Hanoi).
+(Section 4.3, the Towers of Hanoi); the old terminology of Section 4.4
+(preconditions, postconditions, invariants, variants) in
+`LaPToP.ProgramTheory.OldTheory`.
 :::
 
 :::definition "program_as_predicate" (parent := "program_theory_core") (lean := "LaPToP.ProgramTheory.Spec, LaPToP.ProgramTheory.Spec.ext, LaPToP.ProgramTheory.Spec.outputs, LaPToP.ProgramTheory.Spec.Satisfiable, LaPToP.ProgramTheory.Spec.Unsatisfiable, LaPToP.ProgramTheory.Spec.Deterministic, LaPToP.ProgramTheory.Spec.Nondeterministic, LaPToP.ProgramTheory.Spec.Implementable, LaPToP.ProgramTheory.Spec.satisfiable_iff, LaPToP.ProgramTheory.Spec.unsatisfiable_iff, LaPToP.ProgramTheory.Spec.deterministic_iff, LaPToP.ProgramTheory.Spec.nondeterministic_iff, LaPToP.ProgramTheory.Spec.implementable_iff")
@@ -523,4 +526,98 @@ $`(n-2) \times 2^n + 2 = (2^n - 1) \times (n + n/(2^n - 1) - 2)`; and the combin
 five-conjunct $`\mathit{MovePile}` refinement, on a state with finite space and
 $`\mathit{xnat}` time and maximum. Uses {uses "recursive_time"}[],
 {uses "refinement_by_steps_parts_cases"}[] and {uses "substitution_law"}[].
+:::
+
+:::theorem "old_program_theory" (parent := "program_theory_core") (tags := "programs, assertions, refinement, hehner-4.4") (effort := "medium") (lean := "LaPToP.ProgramTheory.OldTheory.prePost, LaPToP.ProgramTheory.OldTheory.ok_not_prePost, LaPToP.ProgramTheory.OldTheory.ne_not_prePost, LaPToP.ProgramTheory.OldTheory.and_not_prePost, LaPToP.ProgramTheory.OldTheory.exactPre, LaPToP.ProgramTheory.OldTheory.exactPost, LaPToP.ProgramTheory.OldTheory.refines_iff_exactPre, LaPToP.ProgramTheory.OldTheory.refines_iff_exactPost, LaPToP.ProgramTheory.OldTheory.refines_weaken_pre, LaPToP.ProgramTheory.OldTheory.refines_weaken_post, LaPToP.ProgramTheory.OldTheory.SufficientPre, LaPToP.ProgramTheory.OldTheory.NecessaryPre, LaPToP.ProgramTheory.OldTheory.SufficientPost, LaPToP.ProgramTheory.OldTheory.NecessaryPost, LaPToP.ProgramTheory.OldTheory.exactPre_sufficient_necessary, LaPToP.ProgramTheory.OldTheory.exactPost_sufficient_necessary, LaPToP.ProgramTheory.OldTheory.assignX, LaPToP.ProgramTheory.OldTheory.gt5, LaPToP.ProgramTheory.OldTheory.pre4, LaPToP.ProgramTheory.OldTheory.not_refines_gt5, LaPToP.ProgramTheory.OldTheory.not_implementable_pre4, LaPToP.ProgramTheory.OldTheory.exactPre_gt5, LaPToP.ProgramTheory.OldTheory.exactPost_pre4, LaPToP.ProgramTheory.OldTheory.refines_pre4_gt5, LaPToP.ProgramTheory.OldTheory.refines_gt5_pre4, LaPToP.ProgramTheory.OldTheory.contrapositive_form, LaPToP.ProgramTheory.OldTheory.necessary_not_sufficient_pre, LaPToP.ProgramTheory.OldTheory.sufficient_not_necessary_pre, LaPToP.ProgramTheory.OldTheory.exact_pre, LaPToP.ProgramTheory.OldTheory.necessary_not_sufficient_post, LaPToP.ProgramTheory.OldTheory.sufficient_not_necessary_post, LaPToP.ProgramTheory.OldTheory.exact_post, LaPToP.ProgramTheory.OldTheory.farther, LaPToP.ProgramTheory.OldTheory.abs_sq_gt_iff, LaPToP.ProgramTheory.OldTheory.exactPre_farther, LaPToP.ProgramTheory.OldTheory.exactPost_farther, LaPToP.ProgramTheory.OldTheory.IsInvariant, LaPToP.ProgramTheory.OldTheory.isInvariant_iff₁, LaPToP.ProgramTheory.OldTheory.isInvariant_iff₂, LaPToP.ProgramTheory.OldTheory.XY, LaPToP.ProgramTheory.OldTheory.XY.assignX, LaPToP.ProgramTheory.OldTheory.XY.assignY, LaPToP.ProgramTheory.OldTheory.XY.assignX_seq, LaPToP.ProgramTheory.OldTheory.invariant_304f, LaPToP.ProgramTheory.OldTheory.IsVariant, LaPToP.ProgramTheory.OldTheory.backward_clock, LaPToP.ProgramTheory.OldTheory.timeBound, LaPToP.ProgramTheory.OldTheory.timeBound_refines")
+"The original method of proving properties of a computation was to place
+assertions at strategic points within a program to describe the state of the
+computation at those points. ... An assertion situated at the start of a
+program is called a precondition for that program; an assertion situated at
+the end of a program is called a postcondition for that program. ... An
+assertion situated at the start and end of a program (often a loop) is called
+an invariant for that program. ... We do not present the old theory because
+it is completely superseded by the theory in this book. ... If we have a
+precondition $`P` and postcondition $`R` for a program, we can form a
+specification $`P \Rightarrow R'` for the program. But specifications are not
+necessarily implications with only unprimed variables in the antecedent and
+only primed variables in the consequent, and they are not necessarily
+decomposable into a precondition and postcondition. ... For examples, the
+specifications $`P = R'`, $`P \neq R'`, $`(P \Rightarrow R') \land (Q \Rightarrow S')` cannot be
+written as precondition-postcondition pairs. ... Let $`P` and $`S` be
+specifications. The exact precondition for $`P` to be refined by $`S` is
+$`\forall \sigma' \cdot P \Leftarrow S`. The exact postcondition for $`P` to be refined by $`S` is
+$`\forall \sigma \cdot P \Leftarrow S`. These are the same as refinement except that the
+quantification is over only one state. ... Although $`x' > 5` is not refined by
+$`x := x{+}1`, we can calculate (in one integer variable) (the exact precondition
+for $`x' > 5` to be refined by $`x := x{+}1`) $`= \forall x' \cdot x' > 5 \Leftarrow x' = x{+}1 = x{+}1 > 5 = x > 4`.
+This means that a computation satisfying $`x := x{+}1` will also satisfy $`x' > 5`
+if and only if it starts with $`x > 4`. ... we should weaken our problem
+specification with that antecedent, obtaining the refinement
+$`x > 4 \Rightarrow x' > 5 \Leftarrow x := x{+}1`. ... although $`x > 4` is unimplementable,
+(the exact postcondition for $`x > 4` to be refined by $`x := x{+}1`)
+$`= \forall x \cdot x > 4 \Leftarrow x' = x{+}1 = x' - 1 > 4 = x' > 5` ... obtaining the refinement
+$`x' > 5 \Rightarrow x > 4 \Leftarrow x := x{+}1`. For easier understanding, it may help to use the
+Contrapositive Law to rewrite the specification $`x' > 5 \Rightarrow x > 4` as the
+equivalent specification $`x \leq 4 \Rightarrow x' \leq 5`. ... Any assertion that implies
+the exact precondition is called a sufficient precondition. Any assertion
+implied by the exact precondition is called a necessary precondition. Any
+assertion that implies the exact postcondition is called a sufficient
+postcondition. Any assertion implied by the exact postcondition is called a
+necessary postcondition. The exact precondition is the necessary and
+sufficient precondition, and the exact postcondition is the necessary and
+sufficient postcondition. For examples, $`x > 2` is a necessary (but not
+sufficient) precondition for $`x := x{+}1` to refine $`x' > 5`; $`x > 6` is a sufficient
+(but not necessary) precondition ...; $`x > 4` is the exact (necessary and
+sufficient) precondition ...; for $`x > 4` to be refined by $`x := x{+}1`, a necessary
+(but not sufficient) postcondition is $`x' > 3`; ... a sufficient (but not
+necessary) postcondition is $`x' > 7`; ... the exact (necessary and sufficient)
+postcondition is $`x' > 5`. ... The old theory ... used the words “weakest
+precondition” to mean “exact precondition”, and the words “strongest
+postcondition” to mean “exact postcondition”. Exercise 301(c) asks for the exact
+precondition and exact postcondition for $`x := x^2` to move integer variable $`x`
+farther from zero. ... $`\mathit{abs}\ x' > \mathit{abs}\ x` ... (the exact precondition ...)
+$`= \forall x' \cdot \mathit{abs}\ x' > \mathit{abs}\ x \Leftarrow x' = x^2 = \mathit{abs}\ (x^2) > \mathit{abs}\ x = x \neq -1 \land x \neq 0 \land x \neq 1`.
+If $`x` starts anywhere but $`-1`, $`0`, or $`1`, it will move farther from zero. (the
+exact postcondition ...) $`= \forall x \cdot \mathit{abs}\ x' > \mathit{abs}\ x \Leftarrow x' = x^2 = x' \neq 0 \land x' \neq 1`.
+If $`x` ends anywhere but $`0` or $`1`, it did move farther from zero. Let $`S` be a
+specification, let $`I` be an assertion with all nonlocal variables unprimed, and
+let $`I'` be the same as $`I` but with primes on all nonlocal variables. Then $`I` is an
+invariant for $`S` if $`I \Rightarrow I'` is refined by $`S`. $`\forall \sigma, \sigma' \cdot (I \Rightarrow I') \Leftarrow S`. Here
+are two equivalent definitions. $`\forall \sigma, \sigma' \cdot I \land S \Rightarrow I'`,
+$`\forall \sigma, \sigma' \cdot I \Rightarrow (S \Rightarrow I')`. Executing $`S` in a state where $`I` is true
+creates a state in which $`I` is again true. Exercise 304(f) asks us to prove that
+$`y = x^2` is an invariant for $`(x := x{+}1.\ y := y + 2 \times x - 1)` where the variables are
+$`x` and $`y`. ... $`= \top`. ... In addition to the invariant associated with a loop,
+the old theory had a variant (or bound function, or well-founded relation) for
+the purpose of proving termination. A variant is a natural-valued expression
+whose value decreases each iteration. A variant is really just a time bound,
+using the recursive measure, with a clock that runs backward. It enables proof
+that a computation terminates, but it does not enable proof that a computation
+does not terminate. The theory in this book enables us to prove both
+termination and nontermination."
+
+Model notes. `prePost P R` is $`P \Rightarrow R'`; the three non-decomposable
+specifications are instantiated in one integer variable as $`x' = x` (that is,
+{uses "specification_notations"}[]'s $`ok`), $`x' \neq x` and
+$`(x = 0 \Rightarrow x' = 0) \land (x = 1 \Rightarrow x' = 1)`, each shown not to be any `prePost`.
+`exactPre`/`exactPost` are the two one-state quantifications, with
+{uses "refinement_laws"}[]' refinement recovered by quantifying the other state
+(`refines_iff_exactPre`, `refines_iff_exactPost`) and the "weaken our problem
+specification" refinements proved in general (`refines_weaken_pre/post`). All
+the book's computations in one integer variable are proved as equalities of
+assertions (`exactPre_gt5`, `exactPost_pre4`, `exactPre_farther`,
+`exactPost_farther`, with $`\mathit{abs}\ (x^2) > \mathit{abs}\ x \Leftrightarrow x \neq -1 \land x \neq 0 \land x \neq 1`
+as `abs_sq_gt_iff`), together with the unrefinability of $`x' > 5` by $`x := x{+}1`, the
+unimplementability of $`x > 4`, the two refinements, the Contrapositive form, and
+the six sufficient/necessary examples with their counterexamples ($`x = 3`, $`x = 5`,
+$`x' = 4`, $`x' = 6`). `IsInvariant` and its two equivalent forms are proved, and
+Exercise 304(f) by the {uses "substitution_law"}[]. "A variant is really just a
+time bound": `backward_clock` is the one-step statement $`t' + v' \leq t + v` when
+$`v' < v` and $`t' = t{+}1`, and `timeBound_refines` proves, for the loop
+$`L \Leftarrow \mathbf{if}\ b\ \mathbf{then}\ S.\ t := t{+}1.\ L\ \mathbf{else}\ ok` on the timed state of
+{uses "recursive_time"}[], that a variant of the memory variable decreased by
+$`S` gives the time bound $`t' \leq t + v` (refined by the loop body with the bound as
+the recursive call). The remark that variants cannot prove nontermination, the
+remaining uses of {uses "assertions"}[] and of invariants in {uses "for_loop"}[],
+are prose.
 :::
