@@ -1,5 +1,6 @@
 import LaPToP.ProgramTheory.Programs
 import Mathlib.Data.ENat.Basic
+import Mathlib.Data.ENNReal.Operations
 
 /-!
 # Time and space dependence
@@ -34,10 +35,20 @@ it would turn the clock back), which is the book's "not allowed". The
 busy-wait refinement is proved by cases exactly as the book calculates it,
 using `t < w ⇒ t+1 ≤ w` in `xnat` ("use `t: xnat`") and the Substitution Law.
 
-Not formalized: the remark that time-dependent programs should use the real
-time measure and the modified `wait until` of Exercise 333(b); and the space
-variable `s` — space (Section 4.3) is not modelled in this development, so
-"like `t`, `s` can be read but not written arbitrarily" is prose only.
+Exercise 333(b) — "Now suppose that `t` is a nonnegative extended real time
+variable, and `w` is a nonnegative extended real expression. Redefine
+`wait until w` appropriately, and refine it using the real time measure (assume
+any positive operation time you need)" — is formalized in the section
+`RealTime` below, with the clock in `ℝ≥0∞` and an operation time `δ > 0` per
+iteration of the busy-wait loop: the redefined `wait until w` says that the
+computation ends at the first test after `w`, `w ≤ t′ ≤ w + δ` (and `t′ = t` if
+`t ≥ w` already), which the busy-wait loop `if t≥w then ok else t:= t+δ. wait
+until w` refines. The exact `t′ = t↑w` of the recursive measure is not
+implementable with positive operation times; the tolerance `δ` is the honest
+content of "redefine appropriately". Not formalized: the space variable `s` of
+this section ("like `t`, `s` can be read but not written arbitrarily") — the
+space variable itself is modelled in Section 4.3, its read-only use in programs
+is prose only here.
 -/
 
 namespace LaPToP.ProgramTheory
@@ -138,6 +149,85 @@ theorem waitUntil_whileRefines (w : ℕ∞) :
     Refines (waitUntil w) (cond (fun s => s.t < w) (seq tick (waitUntil w)) ok) := by
   rw [cond_not]
   simpa [not_lt] using waitUntil_refines w
+
+/-! ### Real time (Exercise 333(b)) -/
+
+namespace RealTime
+
+open scoped ENNReal
+
+/-- A state with a nonnegative extended real clock `t` and an ordinary variable `x`. -/
+structure RS where
+  /-- The clock, a nonnegative extended real. -/
+  t : ℝ≥0∞
+  /-- An ordinary variable. -/
+  x : ℤ
+
+/-- `t:= e`. -/
+def assignT (e : RS → ℝ≥0∞) : Spec RS := fun s s' => s' = { s with t := e s }
+
+/-- Substitution Law for `t:= e`. -/
+theorem assignT_seq (e : RS → ℝ≥0∞) (P : Spec RS) : seq (assignT e) P = fun s s' => P { s with t := e s } s' :=
+  Spec.ext fun _ _ => ⟨fun ⟨_, h, hP⟩ => h ▸ hP, fun hP => ⟨_, rfl, hP⟩⟩
+
+variable (δ : ℝ≥0∞) (w : ℝ≥0∞)
+
+/-- One iteration of the busy-wait loop takes the operation time `δ`: `t:= t+δ`. -/
+def tick : Spec RS := assignT fun s => s.t + δ
+
+/-- `wait until w` redefined for real time: if `t ≥ w` nothing happens; otherwise the computation
+ends at the first test after `w`, within one operation time: `w ≤ t′ ≤ w + δ`. Other variables
+are unchanged. -/
+def waitUntil : Spec RS := fun s s' =>
+  s'.x = s.x ∧ (w ≤ s.t → s'.t = s.t) ∧ (s.t < w → w ≤ s'.t ∧ s'.t ≤ w + δ)
+
+/-- Waiting respects the clock. -/
+theorem waitUntil_le {s s' : RS} (h : waitUntil δ w s s') : s.t ≤ s'.t := by
+  obtain ⟨-, hge, hlt⟩ := h
+  rcases le_or_gt w s.t with hw | hw
+  · exact (hge hw).ge
+  · exact (hw.le.trans (hlt hw).1)
+
+/-- The exact `t′ = t↑w` is a special case of the redefined specification: it satisfies it. -/
+theorem waitUntil_of_max {s s' : RS} (hx : s'.x = s.x) (ht : s'.t = max s.t w) : waitUntil δ w s s' := by
+  refine ⟨hx, fun hw => by rw [ht, max_eq_left hw], fun hw => ?_⟩
+  rw [ht, max_eq_right hw.le]
+  exact ⟨le_rfl, le_self_add⟩
+
+/-- `wait until w ⇐ if t≥w then ok else t:= t+δ. wait until w`: the busy-wait loop with operation
+time `δ` per iteration refines the redefined `wait until w` (the refinement holds for any `δ`;
+positivity of `δ` is what makes the loop terminate for finite `w`, which is not part of this
+refinement, as with the book's recursive-time loops). -/
+theorem waitUntil_refines :
+    Refines (waitUntil δ w) (cond (fun s => w ≤ s.t) ok (seq (tick δ) (waitUntil δ w))) := by
+  rintro s s' (⟨hw, hok⟩ | ⟨hw, h⟩)
+  · rw [Spec.ok] at hok
+    subst hok
+    exact ⟨rfl, fun _ => rfl, fun hlt => absurd hw (not_le.mpr hlt)⟩
+  · rw [tick, assignT_seq] at h
+    obtain ⟨hx, hge, hlt⟩ := h
+    simp only at hx hge hlt
+    have hw' : s.t < w := not_le.mp hw
+    refine ⟨hx, fun h => absurd h hw, fun _ => ?_⟩
+    rcases le_or_gt w (s.t + δ) with h1 | h1
+    · -- the next test is already past `w`: the loop exits at time `t + δ ≤ w + δ`
+      rw [hge h1]
+      exact ⟨h1, add_le_add hw'.le le_rfl⟩
+    · exact hlt h1
+
+/-- The recursive-time definition `t:= t↑w` is *not* refined by the real-time loop: with a
+positive operation time the loop may overshoot `w` (start at `t = 0`, `w = 1`, `δ = 2`). -/
+theorem not_exact_refines :
+    ¬ Refines (assignT fun s => max s.t (1 : ℝ≥0∞))
+      (cond (fun s => (1 : ℝ≥0∞) ≤ s.t) ok (seq (tick 2) (assignT fun s => max s.t 1))) := by
+  intro h
+  have := h ⟨0, 0⟩ ⟨2, 0⟩ (Or.inr ⟨by norm_num, ⟨2, 0⟩, by simp [tick, assignT], by
+    simp only [assignT]
+    congr 1
+    exact (max_eq_left (by norm_num : (1 : ℝ≥0∞) ≤ 2)).symm⟩)
+  simp [assignT] at this
+
+end RealTime
 
 end TimeDependence
 

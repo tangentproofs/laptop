@@ -352,7 +352,7 @@ $`n`") is checked on the state of {uses "list_summation"}[]. Uses
 {uses "variable_declaration"}[] and {uses "assignment_spec"}[].
 :::
 
-:::definition "time_dependence" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.TimeDependence.TD, LaPToP.ProgramTheory.TimeDependence.assignT, LaPToP.ProgramTheory.TimeDependence.assignDeadline, LaPToP.ProgramTheory.TimeDependence.tick, LaPToP.ProgramTheory.TimeDependence.assignT_seq, LaPToP.ProgramTheory.TimeDependence.RespectsClock, LaPToP.ProgramTheory.TimeDependence.respectsClock_assignDeadline, LaPToP.ProgramTheory.TimeDependence.respectsClock_tick, LaPToP.ProgramTheory.TimeDependence.respectsClock_cond, LaPToP.ProgramTheory.TimeDependence.respectsClock_seq, LaPToP.ProgramTheory.TimeDependence.not_respectsClock_assignT_const, LaPToP.ProgramTheory.TimeDependence.waitUntil, LaPToP.ProgramTheory.TimeDependence.respectsClock_waitUntil, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_ge, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_lt, LaPToP.ProgramTheory.TimeDependence.waitUntil_refines, LaPToP.ProgramTheory.TimeDependence.waitUntil_whileRefines")
+:::definition "time_dependence" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.TimeDependence.TD, LaPToP.ProgramTheory.TimeDependence.assignT, LaPToP.ProgramTheory.TimeDependence.assignDeadline, LaPToP.ProgramTheory.TimeDependence.tick, LaPToP.ProgramTheory.TimeDependence.assignT_seq, LaPToP.ProgramTheory.TimeDependence.RespectsClock, LaPToP.ProgramTheory.TimeDependence.respectsClock_assignDeadline, LaPToP.ProgramTheory.TimeDependence.respectsClock_tick, LaPToP.ProgramTheory.TimeDependence.respectsClock_cond, LaPToP.ProgramTheory.TimeDependence.respectsClock_seq, LaPToP.ProgramTheory.TimeDependence.not_respectsClock_assignT_const, LaPToP.ProgramTheory.TimeDependence.waitUntil, LaPToP.ProgramTheory.TimeDependence.respectsClock_waitUntil, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_ge, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_lt, LaPToP.ProgramTheory.TimeDependence.waitUntil_refines, LaPToP.ProgramTheory.TimeDependence.waitUntil_whileRefines, LaPToP.ProgramTheory.TimeDependence.RealTime.RS, LaPToP.ProgramTheory.TimeDependence.RealTime.assignT, LaPToP.ProgramTheory.TimeDependence.RealTime.assignT_seq, LaPToP.ProgramTheory.TimeDependence.RealTime.tick, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_le, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_of_max, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_refines, LaPToP.ProgramTheory.TimeDependence.RealTime.not_exact_refines")
 "Some programming languages provide a clock, or a delay, or other
 time-dependent features. Our examples have used the time variable $`t` as a
 ghost, or auxiliary variable, never affecting the course of a computation. ...
@@ -382,11 +382,24 @@ clock back). The busy-wait refinement is proved by the two cases exactly as
 the book calculates them — the second uses $`t < w \Rightarrow t+1 \le w` in $`\mathit{xnat}`
 and the {uses "substitution_law"}[] — and combined by
 {uses "refinement_by_steps_parts_cases"}[]; it is also stated as the
-{uses "while_loop"}[] $`\mathbf{while}\ t < w\ \mathbf{do}\ t := t+1\ \mathbf{od}`. Not formalized:
-the real-time variant (Exercise 333(b)) and the space-dependence analogue of
-this section (the space variable itself is modelled in the `space` node of the
-Program Theory chapter, Section 4.3). Uses {uses "time_variable"}[] and
-{uses "recursive_time"}[].
+{uses "while_loop"}[] $`\mathbf{while}\ t < w\ \mathbf{do}\ t := t+1\ \mathbf{od}`. "In programs
+that depend on time, we should use the real time measure ... And we need a
+slightly different definition of $`\mathbf{wait}\ \mathbf{until}\ w`, but we leave that as
+Exercise 333(b)": "Now suppose that $`t` is a nonnegative extended real time
+variable, and $`w` is a nonnegative extended real expression. Redefine
+$`\mathbf{wait}\ \mathbf{until}\ w` appropriately, and refine it using the real time measure
+(assume any positive operation time you need)." With the clock in $`\mathbb{R}_{\geq 0} \cup \{\infty\}`
+and an operation time $`\delta` per iteration, the redefinition is: nothing
+happens if $`t \geq w`, and otherwise the computation ends at the first test after
+$`w`, $`w \leq t' \leq w + \delta` (`RealTime.waitUntil`); the exact $`t' = t \uparrow w` satisfies
+it (`waitUntil_of_max`) but is not refined by a loop with positive operation
+time (`not_exact_refines`, which overshoots), while the redefined specification
+is: $`\mathbf{wait}\ \mathbf{until}\ w \Leftarrow \mathbf{if}\ t \geq w\ \mathbf{then}\ ok\ \mathbf{else}\ t := t + \delta.\ \mathbf{wait}\ \mathbf{until}\ w`
+(`RealTime.waitUntil_refines`, for any $`\delta`; positivity only matters for
+termination, which the recursive-call reading does not claim). Not formalized:
+the space-dependence analogue of this section (the space variable itself is
+modelled in the `space` node of the Program Theory chapter, Section 4.3). Uses
+{uses "time_variable"}[] and {uses "recursive_time"}[].
 :::
 
 :::definition "assertions" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Assertions.AT, LaPToP.ProgramTheory.Assertions.assignX, LaPToP.ProgramTheory.Assertions.assignY, LaPToP.ProgramTheory.Assertions.assignX_seq, LaPToP.ProgramTheory.Assertions.assert, LaPToP.ProgramTheory.Assertions.assert_of_holds, LaPToP.ProgramTheory.Assertions.assert_of_not, LaPToP.ProgramTheory.Assertions.assert_true, LaPToP.ProgramTheory.Assertions.assert_refines_ensure, LaPToP.ProgramTheory.Assertions.implementable_assert, LaPToP.ProgramTheory.Assertions.implementable_assert', LaPToP.ProgramTheory.Assertions.assert_seq_of_not, LaPToP.ProgramTheory.Assertions.assert_seq_of_holds")
