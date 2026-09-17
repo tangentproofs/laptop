@@ -12,6 +12,7 @@ import LaPToP.ProgramTheory.TimeDependence
 import LaPToP.ProgramTheory.Arrays
 import LaPToP.ProgramTheory.GoTo
 import LaPToP.ProgramTheory.Probabilistic
+import LaPToP.ProgramTheory.RandomNumbers
 import LaPToP.ProgramTheory.Functional
 
 open Verso.Genre
@@ -34,7 +35,8 @@ order: variable declaration and suspension (Section 5.0) are formalized in
 `LaPToP.ProgramTheory.TimeDependence`; assertions and backtracking
 (Section 5.4) in `LaPToP.ProgramTheory.Assertions`; the value expression,
 functions and procedures (Section 5.5) in `LaPToP.ProgramTheory.Subprograms`;
-probabilistic programming (Section 5.7) in `LaPToP.ProgramTheory.Probabilistic`;
+probabilistic programming (Section 5.7) in `LaPToP.ProgramTheory.Probabilistic`
+and random number generators (Section 5.7.0) in `LaPToP.ProgramTheory.RandomNumbers`;
 and functional programming with function refinement (Sections 5.8 and 5.8.0)
 in `LaPToP.ProgramTheory.Functional`.
 :::
@@ -550,6 +552,71 @@ closed form of the second (a finite sum over the final values $`0, 1` of the
 first), its distribution property, the average $`4 + 2/3` and the probability
 $`2/3`, where the average $`(P.\ e)` is `avg` with `pseq_const_eq_avg` relating it to
 $`P.\ e`. Not proved: the average of $`n^2` under $`2^{-n}` ($`= 6`).
+:::
+
+:::theorem "random_number_generators" (parent := "programming_language_core") (tags := "probability, random, time, hehner-5.7.0") (effort := "medium") (lean := "LaPToP.ProgramTheory.Probabilistic.pdet, LaPToP.ProgramTheory.Probabilistic.pdet_pseq, LaPToP.ProgramTheory.Probabilistic.pdet_id_eq_ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.urand, LaPToP.ProgramTheory.Probabilistic.randAssign, LaPToP.ProgramTheory.Probabilistic.hasSum_urand, LaPToP.ProgramTheory.Probabilistic.prob_urand, LaPToP.ProgramTheory.Probabilistic.randAssign_id, LaPToP.ProgramTheory.Probabilistic.sumDist, LaPToP.ProgramTheory.Probabilistic.freshForm, LaPToP.ProgramTheory.Probabilistic.freshForm_eq, LaPToP.ProgramTheory.Probabilistic.twoRand, LaPToP.ProgramTheory.Probabilistic.support_randAssign_two, LaPToP.ProgramTheory.Probabilistic.twoRand_eq, LaPToP.ProgramTheory.Probabilistic.pcond_rand_two, LaPToP.ProgramTheory.Probabilistic.randLt, LaPToP.ProgramTheory.Probabilistic.randLt_eq, LaPToP.ProgramTheory.Probabilistic.randLt_eq', LaPToP.ProgramTheory.Probabilistic.prob_dice_eq, LaPToP.ProgramTheory.Probabilistic.prob_dice_ne, LaPToP.ProgramTheory.Probabilistic.diceBody, LaPToP.ProgramTheory.Probabilistic.tdist, LaPToP.ProgramTheory.Probabilistic.diceBody_tdist, LaPToP.ProgramTheory.Probabilistic.tdist_add, LaPToP.ProgramTheory.Probabilistic.isDistribution_tdist, LaPToP.ProgramTheory.Probabilistic.avg_tdist")
+"Many programming languages provide a random number generator (sometimes
+called a “pseudo-random number generator”). The usual notation is functional,
+and the usual result is a value whose distribution is uniform (constant) over a
+nonempty finite range. If $`n : \mathit{nat}{+}1`, we use the notation $`\mathit{rand}\ n` for a
+generator that produces natural numbers uniformly distributed over the range
+$`0,..n`. So $`\mathit{rand}\ n` has value $`r` with probability $`(r : 0,..n) / n`.
+Functional notation for a random number generator is inconsistent. Since $`x = x`
+is a law, we should be able to simplify $`\mathit{rand}\ n = \mathit{rand}\ n` to $`\top`, but we
+cannot because the two occurrences of $`\mathit{rand}\ n` might generate different
+numbers. ... To restore consistency, we replace each use of $`\mathit{rand}` with a
+fresh variable before we do anything else. We can replace $`\mathit{rand}\ n` with
+integer variable $`r` whose value has probability $`(r : 0,..n) / n`. ... For
+example, in one state variable $`x`,
+$`x := \mathit{rand}\ 2.\ x := x + \mathit{rand}\ 3 = \Sigma r : 0,..2 \cdot \Sigma s : 0,..3 \cdot (x := r)/2.\ (x := x + s)/3`
+$`= (\Sigma r : 0,..2 \cdot \Sigma s : 0,..3 \cdot (x' = r{+}s)) / 6 = (x' = 0)/6 + (x' = 1)/3 + (x' = 2)/3 + (x' = 3)/6`
+which says that $`x'` is $`0` with probability $`1/6`, $`1` with probability $`1/3`, $`2`
+with probability $`1/3`, $`3` with probability $`1/6`, and any other value with
+probability $`0`. Whenever $`\mathit{rand}` occurs in the context of a simple equation,
+such as $`r = \mathit{rand}\ n`, we don't need to introduce a variable for it, since one is
+supplied. We just replace the deceptive equation with $`(r : 0,..n) / n`. For
+example, $`x := \mathit{rand}\ 2.\ x := x + \mathit{rand}\ 3 = (x' : 0,..2)/2.\ (x' : x + (0,..3))/3`
+$`= \Sigma x'' \cdot (x'' : 0,..2)/2 \times (x' : x'' + (0,..3))/3 = \ldots = (x' = 0)/6 + (x' = 1)/3 + (x' = 2)/3 + (x' = 3)/6`
+as before. And $`\mathbf{if}\ \mathit{rand}\ 2\ \mathbf{then}\ A\ \mathbf{else}\ B` can be replaced by
+$`\mathbf{if}\ 1/2\ \mathbf{then}\ A\ \mathbf{else}\ B`. ... $`\mathit{rand}\ 8 < 3` has binary value $`b` with
+distribution $`\Sigma r : 0,..8 \cdot (b = (r < 3)) / 8 = (b = \top) \times 3/8 + (b = \bot) \times 5/8 = 5/8 - b/4`
+which says that $`b` is $`\top` with probability $`3/8`, and $`\bot` with probability
+$`5/8`. ... Exercise 351 asks: If you repeatedly throw a pair of six-sided dice,
+how long does it take until the dice are equal? Using $`u` and $`v` for the dice
+and $`t` for recursive time, the program is
+$`u' = v' \Leftarrow u := (\mathit{rand}\ 6) + 1.\ v := (\mathit{rand}\ 6) + 1.\ \mathbf{if}\ u = v\ \mathbf{then}\ ok\ \mathbf{else}\ t := t{+}1.\ u' = v'`.
+Each iteration, with probability $`5/6` we keep going, and with probability $`1/6`
+we stop. So we offer the hypothesis that (for finite $`t`) the execution time has
+the distribution $`(t' \geq t) \times (5/6)^{t'-t} \times 1/6`. To prove it, let's start with
+the implementation. ... $`= 6 \times (t' = t)/36 + 30 \times (t' \geq t{+}1) \times (5/6)^{t'-t-1} / 6 / 36`
+$`= (t' = t)/6 + (t' \geq t{+}1) \times (5/6)^{t'-t} / 6 = (t' \geq t) \times (5/6)^{t'-t} \times 1/6`
+which is the distribution we hypothesized, and that completes the proof. The
+average value of $`t'` is $`(t' \geq t) \times (5/6)^{t'-t} \times 1/6.\ t = t + 5`, so on
+average it takes $`5` additional throws of the dice (after the first) to get an
+equal pair."
+
+Model notes, on top of {uses "probabilistic_programming"}[]. $`\mathit{rand}\ n` by
+itself is the uniform distribution `urand` on $`0,..n` ({uses "bunch_interval"}[]),
+a distribution for $`n \geq 1`; $`x := e\,(\mathit{rand}\ n)` is the book's replacement by a
+fresh variable summed over $`0,..n` (`randAssign`), and `randAssign_id` is the
+"deceptive equation" reading $`(x' : 0,..n)/n`. Both computations of
+$`x := \mathit{rand}\ 2.\ x := x + \mathit{rand}\ 3` are proved to give the stated distribution: the
+fresh-variable double sum (`freshForm_eq`) and the sequential composition of
+the two replaced assignments (`twoRand_eq`, a finite sum over the final
+values $`0, 1` of the first); the $`\mathbf{if}\ \mathit{rand}\ 2` replacement and the
+$`\mathit{rand}\ 8 < 3` distribution in both forms are proved with $`b` a proposition. For
+the dice, the book's calculation sums out the dice $`u'', v''` and then reads the
+result as a distribution of $`t'` alone, dropping the final values of $`u`, $`v`; this
+is formalized in two layers. The dice layer: a throw of two dice has $`36`
+equiprobable outcomes in $`1,..7 \times 1,..7`, and the probabilities of $`u = v` and
+$`u \neq v` are $`1/6` and $`5/6`. The time layer, on the finite recursive-time variable
+$`t : \mathit{nat}` ({uses "recursive_time"}[]; the book says "for finite $`t`"): the loop
+body with the dice summed out is $`\mathbf{if}\ 1/6\ \mathbf{then}\ ok\ \mathbf{else}\ t := t{+}1.\ H`
+(`diceBody`, using the Substitution Law `pdet_pseq`, {uses "substitution_law"}[]),
+and the hypothesis `tdist` is proved to be its fixed point (`diceBody_tdist`,
+the book's last three lines), a distribution of $`t'` (a shifted geometric
+series), with average $`t + 5` (`avg_tdist`, from $`\Sigma n \cdot n\,(5/6)^n = 30`). The
+blackjack Exercise 344 (pp. 88–89) is not formalized.
 :::
 
 :::theorem "functional_programming" (parent := "programming_language_core") (tags := "functional, refinement, hehner-5.8") (effort := "medium") (lean := "LaPToP.ProgramTheory.Functional.dom, LaPToP.ProgramTheory.Functional.sumFn, LaPToP.ProgramTheory.Functional.zero_mem_sumFn_dom, LaPToP.ProgramTheory.Functional.sum_eq, LaPToP.ProgramTheory.Functional.domain_split, LaPToP.ProgramTheory.Functional.orElse_lam_lam, LaPToP.ProgramTheory.Functional.sumFn_orElse, LaPToP.ProgramTheory.Functional.left_part, LaPToP.ProgramTheory.Functional.right_part, LaPToP.ProgramTheory.Functional.recursion, LaPToP.ProgramTheory.Functional.timeFn, LaPToP.ProgramTheory.Functional.len_eq, LaPToP.ProgramTheory.Functional.timeFn_orElse, LaPToP.ProgramTheory.Functional.time_left, LaPToP.ProgramTheory.Functional.time_right, LaPToP.ProgramTheory.Functional.time_recursion, LaPToP.ProgramTheory.Functional.time_recursive_measure, LaPToP.ProgramTheory.Functional.FSpec, LaPToP.ProgramTheory.Functional.Unsat, LaPToP.ProgramTheory.Functional.Sat, LaPToP.ProgramTheory.Functional.Det, LaPToP.ProgramTheory.Functional.Nondet, LaPToP.ProgramTheory.Functional.sat_iff, LaPToP.ProgramTheory.Functional.Implementable, LaPToP.ProgramTheory.Functional.implementable_iff_ne_null, LaPToP.ProgramTheory.Functional.Refines, LaPToP.ProgramTheory.Functional.occursIn, LaPToP.ProgramTheory.Functional.search₀, LaPToP.ProgramTheory.Functional.not_implementable_search₀, LaPToP.ProgramTheory.Functional.beyond, LaPToP.ProgramTheory.Functional.search, LaPToP.ProgramTheory.Functional.implementable_search, LaPToP.ProgramTheory.Functional.occursFrom, LaPToP.ProgramTheory.Functional.sfBody, LaPToP.ProgramTheory.Functional.searchFrom, LaPToP.ProgramTheory.Functional.search_apply_eq, LaPToP.ProgramTheory.Functional.search_step_refines, LaPToP.ProgramTheory.Functional.timeBound, LaPToP.ProgramTheory.Functional.onePlus, LaPToP.ProgramTheory.Functional.time_top, LaPToP.ProgramTheory.Functional.time_step")
