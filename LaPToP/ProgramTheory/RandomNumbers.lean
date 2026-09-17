@@ -50,7 +50,7 @@ probability of equal dice is `1/6`; and the time layer on the (finite, `ℕ`)
 recursive-time variable, where the loop body is
 `if 1/6 then ok else t:= t+1. H` and the hypothesis `tdist` is proved to be its
 fixed point, a distribution, with average `t+5`. The blackjack Exercise 344 is
-not formalized.
+formalized in `LaPToP.ProgramTheory.Blackjack`.
 -/
 
 namespace LaPToP.ProgramTheory
