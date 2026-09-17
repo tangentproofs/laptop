@@ -8,6 +8,7 @@ import LaPToP.Concurrency.Composition
 import LaPToP.Concurrency.ListConcurrency
 import LaPToP.Concurrency.Transformation
 import LaPToP.Concurrency.InsertionSort
+import LaPToP.Concurrency.DiningPhilosophers
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -23,8 +24,8 @@ definition (Section 6.0) is formalized in `LaPToP.RecursiveDefinition.Nat` and
 (Section 6.1) in `LaPToP.RecursiveDefinition.Programs`, and concurrent
 composition (Section 8.0) in `LaPToP.Concurrency.Composition` and
 `LaPToP.Concurrency.ListConcurrency`, and the sequential-to-concurrent
-transformation (Section 8.1) in `LaPToP.Concurrency.Transformation` and
-`LaPToP.Concurrency.InsertionSort`.
+transformation (Section 8.1) in `LaPToP.Concurrency.Transformation`,
+`LaPToP.Concurrency.InsertionSort` and `LaPToP.Concurrency.DiningPhilosophers`.
 :::
 
 :::definition "recursive_program" (parent := "recursion_concurrency_core") (lean := "LaPToP.RecursiveDefinition.IsFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint, LaPToP.RecursiveDefinition.IsLeastFixedPoint.unique")
@@ -440,4 +441,47 @@ either order gives the same result) and that $`S\,i` leaves $`C\,j` unchanged wh
 $`|i - j| > 1`; the linear-time execution pattern is a picture and is not
 formalized. Uses {uses "concurrent_composition"}[] and
 {uses "specification_laws"}[].
+:::
+
+:::theorem "dining_philosophers" (parent := "recursion_concurrency_core") (tags := "concurrency, transformation, hehner-8.1.2") (effort := "medium") (lean := "LaPToP.Concurrency.Dining.DS, LaPToP.Concurrency.Dining.Var, LaPToP.Concurrency.Dining.stepF, LaPToP.Concurrency.Dining.stepF_seq, LaPToP.Concurrency.Dining.up, LaPToP.Concurrency.Dining.down, LaPToP.Concurrency.Dining.think, LaPToP.Concurrency.Dining.eat, LaPToP.Concurrency.Dining.thinkVars, LaPToP.Concurrency.Dining.upVars, LaPToP.Concurrency.Dining.eatVars, LaPToP.Concurrency.Dining.disjoint_think_think, LaPToP.Concurrency.Dining.disjoint_think_up, LaPToP.Concurrency.Dining.disjoint_think_eat, LaPToP.Concurrency.Dining.disjoint_up_up, LaPToP.Concurrency.Dining.disjoint_eat_up, LaPToP.Concurrency.Dining.disjoint_eat_eat, LaPToP.Concurrency.Dining.think_think_comm, LaPToP.Concurrency.Dining.think_up_comm, LaPToP.Concurrency.Dining.think_down_comm, LaPToP.Concurrency.Dining.think_eat_comm, LaPToP.Concurrency.Dining.up_up_comm, LaPToP.Concurrency.Dining.up_down_comm, LaPToP.Concurrency.Dining.down_down_comm, LaPToP.Concurrency.Dining.eat_up_comm, LaPToP.Concurrency.Dining.eat_down_comm, LaPToP.Concurrency.Dining.eat_eat_comm, LaPToP.Concurrency.Dining.up_down_not_comm, LaPToP.Concurrency.Dining.Pi, LaPToP.Concurrency.Dining.lifeBody, LaPToP.Concurrency.Dining.implementable_Pi, LaPToP.Concurrency.Dining.implementable_lifeBody_ok")
+"Exercise 491: Five philosophers are sitting around a round table, thinking.
+... Between each pair of neighboring philosophers is a chopstick. Whenever a
+philosopher gets hungry, the hungry philosopher reaches for the chopstick on
+the left and the chopstick on the right, because it takes two chopsticks to
+eat. ... A standard solution is to write one process for the life of each
+philosopher, placing them in parallel. ...
+$`\mathit{life} = P\,0 \parallel P\,1 \parallel P\,2 \parallel P\,3 \parallel P\,4`;
+$`P\,i = \mathit{think}\ i.\ (\mathit{up}\ i \parallel \mathit{up}(i \oplus 1)).\ \mathit{eat}\ i.\ (\mathit{down}\ i \parallel \mathit{down}(i \oplus 1)).\ P\,i`;
+$`\mathit{up}\ i = \mathit{chopstick}\ i := \top`; $`\mathit{down}\ i = \mathit{chopstick}\ i := \bot`;
+$`\mathit{eat}\ i = (\text{uses } \mathit{chopstick}\ i \text{ and } \mathit{chopstick}(i \oplus 1))`;
+$`\mathit{think}\ i = (\text{does not use any chopstick})`. This solution is incorrect; it has
+too much concurrency. $`P\,0` cannot be placed in parallel with $`P\,1` because
+they both assign and use $`\mathit{chopstick}\ 1`. ... This solution can deadlock. ...
+We'll start with a one-at-a-time version in which there is no concurrency
+and no deadlock. $`\mathit{life} = (P\,0 \lor P\,1 \lor P\,2 \lor P\,3 \lor P\,4).\ \mathit{life}`;
+$`P\,i = \mathit{think}\ i.\ \mathit{up}\ i.\ \mathit{up}(i \oplus 1).\ \mathit{eat}\ i.\ \mathit{down}\ i.\ \mathit{down}(i \oplus 1)`. ...
+Then we transform to get concurrency. $`(\mathit{think}\ i.\ \mathit{think}\ j)` becomes
+$`(\mathit{think}\ i \parallel \mathit{think}\ j)`. ... If $`i \neq j`, $`(\mathit{up}\ i.\ \mathit{up}\ j)` becomes
+$`(\mathit{up}\ i \parallel \mathit{up}\ j)`. ... If $`i \neq j \land i \oplus 1 \neq j`, $`(\mathit{eat}\ i.\ \mathit{up}\ j)` and
+$`(\mathit{up}\ j.\ \mathit{eat}\ i)` become $`(\mathit{eat}\ i \parallel \mathit{up}\ j)`. ... If
+$`i \neq j \land i \oplus 1 \neq j \land i \neq j \oplus 1`, $`(\mathit{eat}\ i.\ \mathit{eat}\ j)` becomes
+$`(\mathit{eat}\ i \parallel \mathit{eat}\ j)`. Thinking can be done at the same time as anything.
+Different chopsticks can be picked up or put down at the same time. Eating can
+be concurrent with picking up or putting down a chopstick, as long as it isn't
+one of the chopsticks being used for the eating. And finally, two philosophers
+can eat at the same time as long as they are not neighbors. All these
+transformations are immediately seen from the definitions ... Before any
+transformation, there is no possibility of deadlock. No transformation
+introduces the possibility. The result is the maximum concurrency that does
+not lead to deadlock." The five chopsticks and a private variable per
+philosopher form the state; $`\mathit{think}\ i` is an arbitrary deterministic
+computation on the private variable alone and $`\mathit{eat}\ i` one that also reads
+$`\mathit{chopstick}\ i` and $`\mathit{chopstick}(i \oplus 1)`. The variables each action mentions
+are made explicit, and the book's side conditions are proved to be exactly
+the disjointness of these variable sets — the criterion of
+{uses "sequential_to_concurrent"}[]; each transformation is then an equality:
+the two actions commute (and $`\mathit{up}\ 1`, $`\mathit{down}\ 1` do not, the "too much
+concurrency"). The one-at-a-time $`\mathit{life}` uses {uses "backtracking"}[]'s
+$`\lor`, and "no possibility of deadlock" is the totality of each $`P\,i`: every
+action is always possible, nothing waits (contrast {uses "deadlock"}[]).
 :::

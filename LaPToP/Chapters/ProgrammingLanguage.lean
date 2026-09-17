@@ -10,6 +10,7 @@ import LaPToP.ProgramTheory.ExitLoop
 import LaPToP.ProgramTheory.TwoDimSearch
 import LaPToP.ProgramTheory.TimeDependence
 import LaPToP.ProgramTheory.Arrays
+import LaPToP.ProgramTheory.GoTo
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -267,6 +268,25 @@ antecedent $`\# L = N` for a constant $`N`. The body is the list modification of
 The book's calculation: after the Substitution Law, $`\#(i \to L\,i + 1 \mid L) = \# L`;
 divide the domain $`0,..i+1` into $`0,..i` and $`i`; for $`n : 0,..i` and for
 $`n : i+1,..\# L` the modified list agrees with $`L`, and at $`i` it is $`L\,i + 1`.
+:::
+
+:::definition "go_to" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.GoTo.A, LaPToP.ProgramTheory.GoTo.B, LaPToP.ProgramTheory.GoTo.C, LaPToP.ProgramTheory.GoTo.D, LaPToP.ProgramTheory.GoTo.E, LaPToP.ProgramTheory.GoTo.A_refines, LaPToP.ProgramTheory.GoTo.B_refines, LaPToP.ProgramTheory.GoTo.C_refines, LaPToP.ProgramTheory.GoTo.D_refines")
+"Suppose the fast exponentiation program $`z' = x^y` of Subsection 4.2.6
+Exercise 180 were written as follows, using “⦂” for labeling the target of a
+$`\mathbf{go\ to}` (written $`{:}` below):
+$`A{:}\ z := 1.\ \mathbf{if}\ \mathit{even}\ y\ \mathbf{then}\ \mathbf{go\ to}\ C\ \mathbf{else}\ B{:}\ z := z \times x.\ y := y-1.\ C{:}\ \mathbf{if}\ y = 0\ \mathbf{then}\ \mathbf{go\ to}\ E\ \mathbf{else}\ D{:}\ x := x \times x.\ y := y/2.\ \mathbf{if}\ \mathit{even}\ y\ \mathbf{then}\ \mathbf{go\ to}\ D\ \mathbf{else}\ \mathbf{go\ to}\ B`.
+Straight from the program, what needs to be proved is the following:
+$`A \Leftarrow z := 1.\ \mathbf{if}\ \mathit{even}\ y\ \mathbf{then}\ C\ \mathbf{else}\ B`; $`B \Leftarrow z := z \times x.\ y := y-1.\ C`;
+$`C \Leftarrow \mathbf{if}\ y = 0\ \mathbf{then}\ E\ \mathbf{else}\ D`;
+$`D \Leftarrow x := x \times x.\ y := y/2.\ \mathbf{if}\ \mathit{even}\ y\ \mathbf{then}\ D\ \mathbf{else}\ B` for appropriately
+defined $`A`, $`B`, $`C`, $`D`, and $`E`. The difficulty with $`\mathbf{go\ to}`, as with loop
+constructs, is inventing specifications that were not recorded during program
+construction. In this example, the appropriate specifications are:
+$`B = \mathit{odd}\ y \Rightarrow z' = z \times x^y`, $`C = \mathit{even}\ y \Rightarrow z' = z \times x^y`,
+$`D = \mathit{even}\ y \land y > 0 \Rightarrow z' = z \times x^y`." A label is a specification and a
+$`\mathbf{go\ to}` is a call of it; the four refinements are proved on the state of
+{uses "fast_exponentiation"}[] (mostly from its refinements), with $`A = z' = x^y`
+and $`E = \mathit{ok}` — the book leaves those two to the reader. Cf. {uses "exit_loop"}[].
 :::
 
 :::definition "variable_declaration" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.newVar, LaPToP.ProgramTheory.Spec.newVarInit, LaPToP.ProgramTheory.Spec.assignLocal, LaPToP.ProgramTheory.Spec.liftNonlocal, LaPToP.ProgramTheory.Spec.assignLocal_seq, LaPToP.ProgramTheory.Spec.implementable_newVar, LaPToP.ProgramTheory.Spec.not_implementable_newVar, LaPToP.ProgramTheory.Spec.newVar_liftNonlocal, LaPToP.ProgramTheory.Spec.newVarInit_eq, LaPToP.ProgramTheory.Spec.newVar_newVar, LaPToP.ProgramTheory.Spec.newVar_mono, LaPToP.ProgramTheory.Spec.assignNonlocal, LaPToP.ProgramTheory.Spec.assignNonlocal_seq, LaPToP.ProgramTheory.ScopeExamples.YZ, LaPToP.ProgramTheory.ScopeExamples.St, LaPToP.ProgramTheory.ScopeExamples.example₁, LaPToP.ProgramTheory.ScopeExamples.example₂, LaPToP.ProgramTheory.ScopeExamples.example₃")
