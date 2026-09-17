@@ -13,6 +13,7 @@ import LaPToP.TheoryDesign.TakeANumber
 import LaPToP.TheoryDesign.LimitedQueue
 import LaPToP.TheoryDesign.Parsing
 import LaPToP.TheoryDesign.Incompleteness
+import LaPToP.TheoryDesign.ProgramTreeImpl
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -27,7 +28,8 @@ contract between two parties, an implementer and a user". The data theories
 of Section 7.0 are formalized in `LaPToP.TheoryDesign.Stack`, `SimpleStack`,
 `Queue` and `Tree`; program-stack theory (Sections 7.1.0–7.1.3) in
 `LaPToP.TheoryDesign.ProgramStack` and program-queue and program-tree theory
-(Sections 7.1.4–7.1.5) in `LaPToP.TheoryDesign.ProgramQueue`; data
+(Sections 7.1.4–7.1.5) in `LaPToP.TheoryDesign.ProgramQueue`, with the
+implementation of program-trees by `T`, `p` in `LaPToP.TheoryDesign.ProgramTreeImpl`; data
 transformation (Section 7.2) in `LaPToP.TheoryDesign.DataTransformation`, with
 its examples in `SecuritySwitch` (Section 7.2.0), `TakeANumber` (7.2.1),
 `Parsing` (7.2.2) and `LimitedQueue` (7.2.3), and its incompleteness
@@ -239,7 +241,7 @@ $`\mathit{leave} = q := q[1;..\# q]`, $`\mathit{front} = q\,0` — is proved to 
 axioms, using {uses "list_axioms"}[].
 :::
 
-:::definition "program_tree_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.Dir, LaPToP.TheoryDesign.ProgramTreeTheory, LaPToP.TheoryDesign.ProgramTreeTheory.go_assignNode_go, LaPToP.TheoryDesign.ProgramTreeTheory.go_work_work_go")
+:::definition "program_tree_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.Dir, LaPToP.TheoryDesign.ProgramTreeTheory, LaPToP.TheoryDesign.ProgramTreeTheory.go_assignNode_go, LaPToP.TheoryDesign.ProgramTreeTheory.go_work_work_go, LaPToP.TheoryDesign.ProgramTree.Pos, LaPToP.TheoryDesign.ProgramTree.Pos.origin, LaPToP.TheoryDesign.ProgramTree.Pos.left, LaPToP.TheoryDesign.ProgramTree.Pos.right, LaPToP.TheoryDesign.ProgramTree.Pos.up, LaPToP.TheoryDesign.ProgramTree.Pos.childDir, LaPToP.TheoryDesign.ProgramTree.Pos.up_left, LaPToP.TheoryDesign.ProgramTree.Pos.up_right, LaPToP.TheoryDesign.ProgramTree.Pos.childDir_left, LaPToP.TheoryDesign.ProgramTree.Pos.childDir_right, LaPToP.TheoryDesign.ProgramTree.Pos.childDir_ne_up, LaPToP.TheoryDesign.ProgramTree.Pos.child_up, LaPToP.TheoryDesign.ProgramTree.Pos.Below, LaPToP.TheoryDesign.ProgramTree.Pos.below_self, LaPToP.TheoryDesign.ProgramTree.Pos.below_left_subset, LaPToP.TheoryDesign.ProgramTree.Pos.below_right_subset, LaPToP.TheoryDesign.ProgramTree.Pos.not_below_left_self, LaPToP.TheoryDesign.ProgramTree.Pos.not_below_right_self, LaPToP.TheoryDesign.ProgramTree.Pos.not_below_left_right, LaPToP.TheoryDesign.ProgramTree.beyond, LaPToP.TheoryDesign.ProgramTree.not_beyond_self, LaPToP.TheoryDesign.ProgramTree.beyond_disjoint, LaPToP.TheoryDesign.ProgramTree.neighbour, LaPToP.TheoryDesign.ProgramTree.back, LaPToP.TheoryDesign.ProgramTree.neighbour_back, LaPToP.TheoryDesign.ProgramTree.back_back, LaPToP.TheoryDesign.ProgramTree.beyond_neighbour_back, LaPToP.TheoryDesign.ProgramTree.beyond_neighbour_back_iff, LaPToP.TheoryDesign.ProgramTree.St, LaPToP.TheoryDesign.ProgramTree.node, LaPToP.TheoryDesign.ProgramTree.change, LaPToP.TheoryDesign.ProgramTree.assignAim, LaPToP.TheoryDesign.ProgramTree.go, LaPToP.TheoryDesign.ProgramTree.work, LaPToP.TheoryDesign.ProgramTree.aim_go, LaPToP.TheoryDesign.ProgramTree.go_work_go, LaPToP.TheoryDesign.ProgramTree.work_ok, LaPToP.TheoryDesign.ProgramTree.work_change, LaPToP.TheoryDesign.ProgramTree.work_turn, LaPToP.TheoryDesign.ProgramTree.work_work, LaPToP.TheoryDesign.ProgramTree.impl, LaPToP.TheoryDesign.ProgramTree.example_origin")
 "Imagine a binary tree that is infinite in all directions; there are no leaves
 and no root. You are standing at one node in the tree facing one of the three
 directions up (toward the parent of this node), left (toward the left child of
@@ -257,14 +259,35 @@ the start of $`\mathit{work}`). End where you started, facing the way you were
 facing at the start.” Here are the axioms.
 $`(\mathit{aim}' = \mathit{up}) = (\mathit{aim} \neq \mathit{up}) \Leftarrow \mathit{go}`,
 $`\mathit{node}' = \mathit{node} \land \mathit{aim}' = \mathit{aim} \Leftarrow \mathit{go}.\ \mathit{work}.\ \mathit{go}`,
-$`\mathit{work} \Leftarrow \mathit{node} := x`,
+$`\mathit{work} \Leftarrow \mathit{ok}`, $`\mathit{work} \Leftarrow \mathit{node} := x`,
 $`\mathit{work} \Leftarrow a = \mathit{aim} \neq b \land (\mathit{aim} := b.\ \mathit{go}.\ \mathit{work}.\ \mathit{go}.\ \mathit{aim} := a)`,
-$`\mathit{work} \Leftarrow \mathit{work}.\ \mathit{work}`." Only the structure of this first definition is
-given (with the assignments to $`\mathit{node}` and $`\mathit{aim}` as fields), together
-with the derived law $`\mathit{node}' = \mathit{node} \land \mathit{aim}' = \mathit{aim} \Leftarrow \mathit{go}.\ \mathit{node} := x.\ \mathit{go}`.
-No implementation is given, and the book's second definition by implementer's
-variables $`T`, $`p` with $`\mathit{node} = T@(p; 1)` is not formalized. Uses
-{uses "program_queue_theory"}[] and {uses "data_tree_theory"}[].
+$`\mathit{work} \Leftarrow \mathit{work}.\ \mathit{work}`. Here is another way to define program-trees. Let
+$`T` (for tree) and $`p` (for pointer) be implementer's variables. The axioms are
+$`\mathit{tree} = [\mathit{tree}; X; \mathit{tree}]`, $`T : \mathit{tree}`, $`p : {*}(0, 1, 2)`, $`\mathit{node} = T@(p; 1)`,
+$`\mathit{change} = \langle x : X \cdot T := (p; 1) \to x \mid T \rangle`, $`\mathit{goUp} = p := p_{0;..\leftrightarrow p - 1}`,
+$`\mathit{goLeft} = p := p; 0`, $`\mathit{goRight} = p := p; 2`. If strings and the $`@` operator
+are implemented, then this theory is already an implementation. If not, it is
+still a theory, and should be compared to the previous theory for clarity."
+
+The first definition is the structure `ProgramTreeTheory` (the six axioms as
+fields, with the assignments to $`\mathit{node}` and $`\mathit{aim}`), with the derived law
+$`\mathit{node}' = \mathit{node} \land \mathit{aim}' = \mathit{aim} \Leftarrow \mathit{go}.\ \mathit{node} := x.\ \mathit{go}`. The second
+definition is `ProgramTree.impl`: the tree "infinite in all directions; there
+are no leaves and no root" is not a finitely nested list
+({uses "multidimensional_structures"}[]), so $`T` is given by its item at every
+position and $`T@(p; 1)` is $`T` at the position $`p`; a position is a path of
+$`0`s and $`2`s from an origin, extended by the number of ancestors above the origin
+(the origin being the left child of its parent, and so on upward) so that the
+tree has no root, and kept in normal form (`Pos`). $`\mathit{goUp}`, $`\mathit{goLeft}`,
+$`\mathit{goRight}` are the pointer moves (`Pos.up`, `Pos.left`, `Pos.right`, with
+`up_left`, `up_right`, `child_up`), $`\mathit{change}` the pointwise update of $`T`. With
+the direction $`\mathit{aim}` added, $`\mathit{go}` moves in the direction faced and turns
+back, and $`\mathit{work}` is its description made precise — position and aim
+restored, $`T` unchanged beyond the edge faced (`beyond`, the component of the
+neighbour with that edge removed) — and all six axioms are proved
+(`aim_go`, `go_work_go`, `work_ok`, `work_change`, `work_turn`, `work_work`):
+the second definition implements the first. Uses {uses "program_queue_theory"}[]
+and {uses "data_tree_theory"}[].
 :::
 
 
