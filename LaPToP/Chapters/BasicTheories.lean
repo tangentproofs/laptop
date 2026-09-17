@@ -5,6 +5,7 @@ import LaPToP.BasicTheories.Bunch
 import LaPToP.BasicTheories.Numbers
 import LaPToP.BasicTheories.NumberLaws
 import LaPToP.BasicTheories.Calculation
+import LaPToP.BasicTheories.GenericLaws
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -20,7 +21,11 @@ Hehner's Sections 2.0 and 2.1; the formal counterpart lives in the Lean module
 `LaPToP.BasicTheories.Numbers` (named bunches, the interval, distribution).
 The number laws of Section 1.1 (reference §11.3.2) are in
 `LaPToP.BasicTheories.NumberLaws`, and the calculation style of Section 1.0.1
-(`calc`, the Law of Portation) in `LaPToP.BasicTheories.Calculation`.
+(`calc`, the Law of Portation) in `LaPToP.BasicTheories.Calculation`. The
+Generic laws of the Reference chapter (§11.3.0: equality, `if`, and the order
+and `↑ ↓` laws for any linear order) are in `LaPToP.BasicTheories.GenericLaws`;
+the survey of all Reference-chapter law tables against the Lean theorems is
+`.sci/laws-survey.md` in the repository.
 :::
 
 :::definition "bunch_vs_set" (parent := "basic_theories_core") (lean := "LaPToP.BasicTheories.Bunch, LaPToP.BasicTheories.HSet")
@@ -364,4 +369,40 @@ Lean `calc` blocks whose steps are the laws of {uses "binary_laws_algebra"}[]
 under the book's names, and the first is definitionally the law
 $`(a \land b \Rightarrow c) = (a \Rightarrow (b \Rightarrow c))` of that node. Uses
 {uses "calculation_style"}[].
+:::
+
+:::theorem "generic_laws" (parent := "basic_theories_core") (tags := "basic, generic, order, hehner-11.3.0") (effort := "small") (lean := "LaPToP.BasicTheories.Generic.eq_refl', LaPToP.BasicTheories.Generic.eq_symm_iff, LaPToP.BasicTheories.Generic.eq_trans_of, LaPToP.BasicTheories.Generic.transparency, LaPToP.BasicTheories.Generic.ne_iff_not_eq, LaPToP.BasicTheories.Generic.ite_true_base, LaPToP.BasicTheories.Generic.ite_false_base, LaPToP.BasicTheories.Generic.ite_idem, LaPToP.BasicTheories.Generic.ite_reversal, LaPToP.BasicTheories.Generic.le_iff_eq_min, LaPToP.BasicTheories.Generic.min_le_self_le_max, LaPToP.BasicTheories.Generic.le_iff_eq_max, LaPToP.BasicTheories.Generic.le_refl', LaPToP.BasicTheories.Generic.not_lt_self, LaPToP.BasicTheories.Generic.not_lt_and_eq, LaPToP.BasicTheories.Generic.not_gt_and_eq, LaPToP.BasicTheories.Generic.not_lt_and_gt, LaPToP.BasicTheories.Generic.le_iff_lt_or_eq', LaPToP.BasicTheories.Generic.le_le_trans, LaPToP.BasicTheories.Generic.lt_le_trans, LaPToP.BasicTheories.Generic.lt_lt_trans, LaPToP.BasicTheories.Generic.le_lt_trans, LaPToP.BasicTheories.Generic.gt_iff_lt', LaPToP.BasicTheories.Generic.ge_iff_le', LaPToP.BasicTheories.Generic.not_lt_iff_ge, LaPToP.BasicTheories.Generic.not_le_iff_gt, LaPToP.BasicTheories.Generic.le_antisymm_iff', LaPToP.BasicTheories.Generic.trichotomy', LaPToP.BasicTheories.Generic.max_idem, LaPToP.BasicTheories.Generic.min_idem, LaPToP.BasicTheories.Generic.max_symm, LaPToP.BasicTheories.Generic.min_symm, LaPToP.BasicTheories.Generic.max_assoc', LaPToP.BasicTheories.Generic.min_assoc', LaPToP.BasicTheories.Generic.max_min_distrib, LaPToP.BasicTheories.Generic.min_max_distrib, LaPToP.BasicTheories.Generic.max_le_iff', LaPToP.BasicTheories.Generic.min_le_iff', LaPToP.BasicTheories.Generic.le_max_iff', LaPToP.BasicTheories.Generic.le_min_iff', LaPToP.BasicTheories.Generic.max_eq_ite, LaPToP.BasicTheories.Generic.min_eq_ite")
+The Generic table of the Reference chapter (Section 11.3.0). "The operators
+$`= \neq \mathbf{if}\ \mathbf{then}\ \mathbf{else}` apply to every type of expression (but the first
+operand of $`\mathbf{if}\ \mathbf{then}\ \mathbf{else}` must be binary), with the laws" $`x = x`
+Reflexivity, $`x = y = y = x` Symmetry, $`x = y \land y = z \Rightarrow x = z` Transitivity,
+$`x = y \Rightarrow f\,x = f\,y` Transparency, $`x \neq y = \lnot(x = y)` Unequality,
+$`\mathbf{if}\ \top\ \mathbf{then}\ x\ \mathbf{else}\ y = x` and $`\mathbf{if}\ \bot\ \mathbf{then}\ x\ \mathbf{else}\ y = y` Case
+Base, $`\mathbf{if}\ a\ \mathbf{then}\ x\ \mathbf{else}\ x = x` Case Idempotent,
+$`\mathbf{if}\ a\ \mathbf{then}\ x\ \mathbf{else}\ y = \mathbf{if}\ \lnot a\ \mathbf{then}\ y\ \mathbf{else}\ x` Case Reversal.
+"The operators $`\uparrow \downarrow < \leq > \geq` apply to numbers, characters, strings, and
+lists, with the laws" $`x \leq y = x = x \downarrow y`, $`x \downarrow y \leq x \leq x \uparrow y`,
+$`x \leq y = y = x \uparrow y`, Reflexivity $`x \leq x`, Irreflexivity $`\lnot x < x`, Exclusivity
+$`\lnot(x < y \land x = y)`, $`\lnot(x > y \land x = y)`, $`\lnot(x < y \land x > y)`, Inclusivity
+$`x \leq y = x < y \lor x = y`, the four Transitivity laws, Mirror $`x > y = y < x`,
+$`x \geq y = y \leq x`, Totality $`\lnot x < y = x \geq y`, $`\lnot x \leq y = x > y`, Antisymmetry
+$`x \leq y \land y \leq x = x = y`, Trichotomy $`x < y \lor x = y \lor x > y`, Idempotence,
+Symmetry and Associativity of $`\uparrow` and $`\downarrow`, Distributivity
+$`x \uparrow (y \downarrow z) = (x \uparrow y) \downarrow (x \uparrow z)` and
+$`x \downarrow (y \uparrow z) = (x \downarrow y) \uparrow (x \downarrow z)`, the four Connection laws
+$`x \uparrow y \leq z = x \leq z \land y \leq z`, $`x \downarrow y \leq z = x \leq z \lor y \leq z`,
+$`x \leq y \uparrow z = x \leq y \lor x \leq z`, $`x \leq y \downarrow z = x \leq y \land x \leq z`, and
+$`x \uparrow y = \mathbf{if}\ x \geq y\ \mathbf{then}\ x\ \mathbf{else}\ y`,
+$`x \downarrow y = \mathbf{if}\ x \leq y\ \mathbf{then}\ x\ \mathbf{else}\ y`.
+
+Model notes. The equality and $`\mathbf{if}` laws are stated for an arbitrary type,
+with a decidable condition for $`\mathbf{if}` (the binary laws of the same shape are
+{uses "binary_laws_case"}[]). The order laws are stated once for an arbitrary
+linear order, which instantiates to the numbers of this formalization — the
+integers and extended integers of {uses "number_laws_order"}[], $`\mathit{nat}`,
+$`\mathit{xnat}`, the rationals and reals — and to characters; the book's lexicographic
+order on strings and lists is the `List.lt` order of `Str` and `HList`, for which
+no linear-order instance is declared, so those instances are not asserted.
+$`\uparrow`, $`\downarrow` are `max`, `min`. Every law is one theorem, named after the
+book's law name and operator.
 :::

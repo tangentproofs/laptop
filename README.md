@@ -67,6 +67,7 @@ LaPToP/
                              # the Lean modules the chapters point at
 LaPToPMain.lean              # Verso generator entry point
 scripts/ci-pages.sh          # builds the site, then scripts/enhance-site-ux.py
+.sci/laws-survey.md          # §11.3 Reference law tables mapped to Lean theorems / gaps
 ```
 
 Every Blueprint node quotes the book and points at sorry-free Lean
