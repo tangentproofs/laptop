@@ -11,6 +11,7 @@ import LaPToP.ProgramTheory.TwoDimSearch
 import LaPToP.ProgramTheory.TimeDependence
 import LaPToP.ProgramTheory.Arrays
 import LaPToP.ProgramTheory.GoTo
+import LaPToP.ProgramTheory.Probabilistic
 import LaPToP.ProgramTheory.Functional
 
 open Verso.Genre
@@ -33,6 +34,7 @@ order: variable declaration and suspension (Section 5.0) are formalized in
 `LaPToP.ProgramTheory.TimeDependence`; assertions and backtracking
 (Section 5.4) in `LaPToP.ProgramTheory.Assertions`; the value expression,
 functions and procedures (Section 5.5) in `LaPToP.ProgramTheory.Subprograms`;
+probabilistic programming (Section 5.7) in `LaPToP.ProgramTheory.Probabilistic`;
 and functional programming with function refinement (Sections 5.8 and 5.8.0)
 in `LaPToP.ProgramTheory.Functional`.
 :::
@@ -476,6 +478,78 @@ function of the variable name, the two results $`a' = 5 \land b' = 4` and
 $`a' = 3 \land b' = 4`, equal for a fresh argument $`x` but different for the argument
 $`a`. Uses {uses "function_notation"}[], {uses "variable_declaration"}[] and
 {uses "assertions"}[].
+:::
+
+:::theorem "probabilistic_programming" (parent := "programming_language_core") (tags := "probability, distribution, hehner-5.7") (effort := "medium") (lean := "LaPToP.ProgramTheory.Probabilistic.Prob, LaPToP.ProgramTheory.Probabilistic.ind, LaPToP.ProgramTheory.Probabilistic.ind_true, LaPToP.ProgramTheory.Probabilistic.ind_false, LaPToP.ProgramTheory.Probabilistic.prob_ind, LaPToP.ProgramTheory.Probabilistic.ind_not, LaPToP.ProgramTheory.Probabilistic.ind_and, LaPToP.ProgramTheory.Probabilistic.ind_or, LaPToP.ProgramTheory.Probabilistic.PSpec, LaPToP.ProgramTheory.Probabilistic.ofSpec, LaPToP.ProgramTheory.Probabilistic.IsDistribution, LaPToP.ProgramTheory.Probabilistic.pcond, LaPToP.ProgramTheory.Probabilistic.pseq, LaPToP.ProgramTheory.Probabilistic.avg, LaPToP.ProgramTheory.Probabilistic.pseq_const_eq_avg, LaPToP.ProgramTheory.Probabilistic.isDistribution_ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.isDistribution_ofSpec_det, LaPToP.ProgramTheory.Probabilistic.tsum_succ_eq_one, LaPToP.ProgramTheory.Probabilistic.not_summable_succ, LaPToP.ProgramTheory.Probabilistic.geometric_distribution, LaPToP.ProgramTheory.Probabilistic.isDistribution_pcond, LaPToP.ProgramTheory.Probabilistic.pseq_eq_sum, LaPToP.ProgramTheory.Probabilistic.isDistribution_pseq, LaPToP.ProgramTheory.Probabilistic.pok, LaPToP.ProgramTheory.Probabilistic.passign, LaPToP.ProgramTheory.Probabilistic.assignX, LaPToP.ProgramTheory.Probabilistic.ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.ofSpec_assign, LaPToP.ProgramTheory.Probabilistic.ofSpec_cond, LaPToP.ProgramTheory.Probabilistic.passign_pseq, LaPToP.ProgramTheory.Probabilistic.ofSpec_assign_seq, LaPToP.ProgramTheory.Probabilistic.isDistribution_passign, LaPToP.ProgramTheory.Probabilistic.support_passign, LaPToP.ProgramTheory.Probabilistic.ex₁, LaPToP.ProgramTheory.Probabilistic.ex₁_eq, LaPToP.ProgramTheory.Probabilistic.ex₁_zero, LaPToP.ProgramTheory.Probabilistic.ex₁_one, LaPToP.ProgramTheory.Probabilistic.ex₁_two, LaPToP.ProgramTheory.Probabilistic.isDistribution_ex₁, LaPToP.ProgramTheory.Probabilistic.support_ex₁, LaPToP.ProgramTheory.Probabilistic.ex₂body, LaPToP.ProgramTheory.Probabilistic.ex₂, LaPToP.ProgramTheory.Probabilistic.ex₂_eq, LaPToP.ProgramTheory.Probabilistic.isDistribution_ex₂, LaPToP.ProgramTheory.Probabilistic.support_ex₂, LaPToP.ProgramTheory.Probabilistic.avg_ex₂_eq, LaPToP.ProgramTheory.Probabilistic.avg_ex₂_x, LaPToP.ProgramTheory.Probabilistic.prob_ex₂_gt_three")
+"Probability Theory has been developed using the arbitrary convention that a
+probability is a real number between $`0` and $`1` inclusive
+$`\mathit{prob} = \S r : \mathit{real} \cdot 0 \leq r \leq 1` ... Accordingly, for this section only,
+we add the axioms $`\top = 1`, $`\bot = 0`. With these axioms, binary operators can be
+expressed arithmetically: $`\lnot x = 1 - x`, $`x \land y = x \times y`, and
+$`x \lor y = x - x \times y + y`. A distribution is an expression whose value (for all
+assignments of values to its variables) is a probability, and whose sum (over
+all assignments of values to its variables) is $`1`. ... if $`n : \mathit{nat}{+}1`, then
+$`2^{-n}` is a distribution because
+$`(\forall n : \mathit{nat}{+}1 \cdot 2^{-n} : \mathit{prob}) \land (\Sigma n : \mathit{nat}{+}1 \cdot 2^{-n}) = 1`
+... The specification $`n' = n{+}1` is not a distribution of $`n` and $`n'` because
+there are infinitely many pairs of values that give $`n' = n{+}1` the value $`\top` or
+$`1`, and so $`\Sigma n, n' \cdot n' = n{+}1 = \infty`. But for any fixed value of $`n`,
+there is a single value of $`n'` that gives $`n' = n{+}1` the value $`\top` or $`1`, and so
+$`\Sigma n' \cdot n' = n{+}1 = 1`. For any fixed value of $`n`, $`n' = n{+}1` is a one-point
+distribution of $`n'`. Similarly, any implementable deterministic specification
+is a one-point distribution of the final state. We generalize our programming
+notations to allow probabilistic operands as follows.
+$`ok = (x' = x) \times (y' = y) \times \ldots`, $`x := e = (x' = e) \times (y' = y) \times \ldots`,
+$`\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ Q = b \times P + (1 - b) \times Q`,
+$`P.\ Q = \Sigma x'', y'', \ldots \cdot (\text{for } x', y', \ldots \text{ substitute } x'', y'', \ldots \text{ in } P) \times (\text{for } x, y, \ldots \text{ substitute } x'', y'', \ldots \text{ in } Q)`.
+Since $`\bot = 0` and $`\top = 1`, the definitions of $`ok` and assignment have not
+changed; they have just been expressed arithmetically. If $`b`, $`P`, and $`Q` are
+binary, the definitions of $`\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ Q` and $`P.Q` have not
+changed. ... If $`b` is a probability of the initial state, and $`P` and $`Q` are
+distributions of the final state, then $`\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ Q` is a
+distribution of the final state. If $`P` and $`Q` are distributions of the final
+state, then $`P.Q` is a distribution of the final state. For example,
+$`\mathbf{if}\ 1/3\ \mathbf{then}\ x := 0\ \mathbf{else}\ x := 1` means that with probability $`1/3` we
+assign $`x` the value $`0`, and with the remaining probability $`2/3` we assign $`x` the
+value $`1`. In one variable $`x`,
+$`\mathbf{if}\ 1/3\ \mathbf{then}\ x := 0\ \mathbf{else}\ x := 1 = 1/3 \times (x' = 0) + (1 - 1/3) \times (x' = 1)`"
+— evaluated at $`x' = 0, 1, 2` this is $`1/3`, $`2/3`, $`0`. "Here is a slightly more
+elaborate example in one variable $`x`.
+$`\mathbf{if}\ 1/3\ \mathbf{then}\ x := 0\ \mathbf{else}\ x := 1.\ \mathbf{if}\ x = 0\ \mathbf{then}\ \mathbf{if}\ 1/2\ \mathbf{then}\ x := x{+}2\ \mathbf{else}\ x := x{+}3\ \mathbf{else}\ \mathbf{if}\ 1/4\ \mathbf{then}\ x := x{+}4\ \mathbf{else}\ x := x{+}5`
+$`= (x' = 2)/6 + (x' = 3)/6 + (x' = 5)/6 + (x' = 6)/2` ... Let $`P` be any distribution
+of final states, and let $`e` be any number expression over initial states.
+After execution of $`P`, the average value of $`e` is $`(P.\ e)`. ... After execution of
+the previous example, the average value of $`x` is ...
+$`= 1/6 \times 2 + 1/6 \times 3 + 1/6 \times 5 + 1/2 \times 6 = 4 + 2/3`. Let $`P` be any distribution
+of final states, and let $`b` be any binary expression over initial states. After
+execution of $`P`, the probability that $`b` is true is $`(P.\ b)`. Probability is just
+the average value of a binary expression. For example, after execution of the
+previous example, the probability that $`x` is greater than $`3` is ... $`= 2/3`. Most
+of the laws, including all distribution laws and the Substitution Law, apply
+without change to probabilistic specifications and programs."
+
+Model notes. A probabilistic specification is `PSpec σ := σ → σ → ℝ`; the
+axioms $`\top = 1`, $`\bot = 0` are the indicator `ind`, which embeds the binary
+specifications of {uses "specification_notations"}[] (`ofSpec`), and the three
+arithmetic laws for $`\lnot`, $`\land`, $`\lor` are proved for it. Sums over the
+state space are `tsum` ($`\Sigma'`), the numeric quantifier of
+{uses "quantifier_numeric"}[] over an infinite domain. "Distribution of the final
+state" is `IsDistribution`: for each initial state the values are probabilities
+with sum $`1`. Proved: `ok` and every deterministic specification are one-point
+distributions; $`\Sigma n' \cdot n' = n{+}1 = 1`, and "$`\Sigma n, n' \cdot n' = n{+}1 = \infty`" as
+non-summability over the pairs; the geometric distribution $`2^{-n}` on
+$`\mathit{nat}{+}1`; `pcond` preserves distributions when $`b` is a probability; `pseq`
+preserves distributions when $`P` has finitely many possible final states (the
+case of all the examples — the general statement needs an interchange of
+infinite sums and is not proved); "the definitions have not changed" for `ok`,
+assignment and `if` (`ofSpec_cond`), and for $`P.Q` with an assignment as $`P`, via
+the probabilistic Substitution Law `passign_pseq` ({uses "substitution_law"}[],
+{uses "specification_laws"}[]). The state is the book's "one variable $`x`", an
+integer. Both worked examples are computed: the three values of the first, the
+closed form of the second (a finite sum over the final values $`0, 1` of the
+first), its distribution property, the average $`4 + 2/3` and the probability
+$`2/3`, where the average $`(P.\ e)` is `avg` with `pseq_const_eq_avg` relating it to
+$`P.\ e`. Not proved: the average of $`n^2` under $`2^{-n}` ($`= 6`).
 :::
 
 :::theorem "functional_programming" (parent := "programming_language_core") (tags := "functional, refinement, hehner-5.8") (effort := "medium") (lean := "LaPToP.ProgramTheory.Functional.dom, LaPToP.ProgramTheory.Functional.sumFn, LaPToP.ProgramTheory.Functional.zero_mem_sumFn_dom, LaPToP.ProgramTheory.Functional.sum_eq, LaPToP.ProgramTheory.Functional.domain_split, LaPToP.ProgramTheory.Functional.orElse_lam_lam, LaPToP.ProgramTheory.Functional.sumFn_orElse, LaPToP.ProgramTheory.Functional.left_part, LaPToP.ProgramTheory.Functional.right_part, LaPToP.ProgramTheory.Functional.recursion, LaPToP.ProgramTheory.Functional.timeFn, LaPToP.ProgramTheory.Functional.len_eq, LaPToP.ProgramTheory.Functional.timeFn_orElse, LaPToP.ProgramTheory.Functional.time_left, LaPToP.ProgramTheory.Functional.time_right, LaPToP.ProgramTheory.Functional.time_recursion, LaPToP.ProgramTheory.Functional.time_recursive_measure, LaPToP.ProgramTheory.Functional.FSpec, LaPToP.ProgramTheory.Functional.Unsat, LaPToP.ProgramTheory.Functional.Sat, LaPToP.ProgramTheory.Functional.Det, LaPToP.ProgramTheory.Functional.Nondet, LaPToP.ProgramTheory.Functional.sat_iff, LaPToP.ProgramTheory.Functional.Implementable, LaPToP.ProgramTheory.Functional.implementable_iff_ne_null, LaPToP.ProgramTheory.Functional.Refines, LaPToP.ProgramTheory.Functional.occursIn, LaPToP.ProgramTheory.Functional.search₀, LaPToP.ProgramTheory.Functional.not_implementable_search₀, LaPToP.ProgramTheory.Functional.beyond, LaPToP.ProgramTheory.Functional.search, LaPToP.ProgramTheory.Functional.implementable_search, LaPToP.ProgramTheory.Functional.occursFrom, LaPToP.ProgramTheory.Functional.sfBody, LaPToP.ProgramTheory.Functional.searchFrom, LaPToP.ProgramTheory.Functional.search_apply_eq, LaPToP.ProgramTheory.Functional.search_step_refines, LaPToP.ProgramTheory.Functional.timeBound, LaPToP.ProgramTheory.Functional.onePlus, LaPToP.ProgramTheory.Functional.time_top, LaPToP.ProgramTheory.Functional.time_step")
