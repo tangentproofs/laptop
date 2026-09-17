@@ -43,12 +43,13 @@ A probabilistic specification is `PSpec σ := σ → σ → ℝ`. The "axioms" `
 embedded by `ofSpec`. Sums over the (integer) state space are `tsum` (`∑'`).
 "Distribution of the final state" is `IsDistribution`: for every initial
 state, the values are probabilities summing to `1`. The closure of
-distributions under `P. Q` is proved for `P` with finitely many possible final
-states (the case of all the examples; the general case needs an interchange of
-infinite sums and is not proved here). "The definitions have not changed" is
-proved for `ok`, assignment and `if`, and for `P. Q` with an assignment as `P`
-(the Substitution Law); the state is the book's "one variable `x`", an integer.
-The average of `n²` under `2⁻ⁿ` (`= 6`) is not proved.
+distributions under `P. Q` is proved here for `P` with finitely many possible
+final states (the case of all the examples), and in general — by an
+interchange of nonnegative double sums — in
+`LaPToP.ProgramTheory.ProbabilisticSums`, together with the average of `n²`
+under `2⁻ⁿ` (`= 6`). "The definitions have not changed" is proved for `ok`,
+assignment and `if`, and for `P. Q` with an assignment as `P` (the Substitution
+Law); the state is the book's "one variable `x`", an integer.
 -/
 
 namespace LaPToP.ProgramTheory
