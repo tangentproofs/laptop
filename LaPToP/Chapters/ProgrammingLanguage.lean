@@ -11,6 +11,7 @@ import LaPToP.ProgramTheory.TwoDimSearch
 import LaPToP.ProgramTheory.TimeDependence
 import LaPToP.ProgramTheory.Arrays
 import LaPToP.ProgramTheory.GoTo
+import LaPToP.ProgramTheory.Functional
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -30,8 +31,10 @@ order: variable declaration and suspension (Section 5.0) are formalized in
 `LaPToP.ProgramTheory.TwoDimSearch`, the for-loop (Section 5.2.3) in
 `LaPToP.ProgramTheory.ForLoop`; time and space dependence (Section 5.3) in
 `LaPToP.ProgramTheory.TimeDependence`; assertions and backtracking
-(Section 5.4) in `LaPToP.ProgramTheory.Assertions`; and the value expression,
-functions and procedures (Section 5.5) in `LaPToP.ProgramTheory.Subprograms`.
+(Section 5.4) in `LaPToP.ProgramTheory.Assertions`; the value expression,
+functions and procedures (Section 5.5) in `LaPToP.ProgramTheory.Subprograms`;
+and functional programming with function refinement (Sections 5.8 and 5.8.0)
+in `LaPToP.ProgramTheory.Functional`.
 :::
 
 :::definition "data_structures" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Arrays.AS, LaPToP.ProgramTheory.Arrays.assignElem, LaPToP.ProgramTheory.Arrays.assignA, LaPToP.ProgramTheory.Arrays.assignI, LaPToP.ProgramTheory.Arrays.assignA_seq, LaPToP.ProgramTheory.Arrays.assignI_seq, LaPToP.ProgramTheory.Arrays.assignElem_eq_assignA, LaPToP.ProgramTheory.Arrays.orElse_arrow_apply, LaPToP.ProgramTheory.Arrays.example₁, LaPToP.ProgramTheory.Arrays.example₁_naive, LaPToP.ProgramTheory.Arrays.example₂, LaPToP.ProgramTheory.Arrays.example₂_naive, LaPToP.ProgramTheory.Arrays.AS2, LaPToP.ProgramTheory.Arrays.assignElem2, LaPToP.ProgramTheory.Arrays.assignElem2_eq, LaPToP.ProgramTheory.Arrays.Person, LaPToP.ProgramTheory.Arrays.RS, LaPToP.ProgramTheory.Arrays.assignAge, LaPToP.ProgramTheory.Arrays.assignAge_eq")
@@ -473,4 +476,72 @@ function of the variable name, the two results $`a' = 5 \land b' = 4` and
 $`a' = 3 \land b' = 4`, equal for a fresh argument $`x` but different for the argument
 $`a`. Uses {uses "function_notation"}[], {uses "variable_declaration"}[] and
 {uses "assertions"}[].
+:::
+
+:::theorem "functional_programming" (parent := "programming_language_core") (tags := "functional, refinement, hehner-5.8") (effort := "medium") (lean := "LaPToP.ProgramTheory.Functional.dom, LaPToP.ProgramTheory.Functional.sumFn, LaPToP.ProgramTheory.Functional.zero_mem_sumFn_dom, LaPToP.ProgramTheory.Functional.sum_eq, LaPToP.ProgramTheory.Functional.domain_split, LaPToP.ProgramTheory.Functional.orElse_lam_lam, LaPToP.ProgramTheory.Functional.sumFn_orElse, LaPToP.ProgramTheory.Functional.left_part, LaPToP.ProgramTheory.Functional.right_part, LaPToP.ProgramTheory.Functional.recursion, LaPToP.ProgramTheory.Functional.timeFn, LaPToP.ProgramTheory.Functional.len_eq, LaPToP.ProgramTheory.Functional.timeFn_orElse, LaPToP.ProgramTheory.Functional.time_left, LaPToP.ProgramTheory.Functional.time_right, LaPToP.ProgramTheory.Functional.time_recursion, LaPToP.ProgramTheory.Functional.time_recursive_measure, LaPToP.ProgramTheory.Functional.FSpec, LaPToP.ProgramTheory.Functional.Unsat, LaPToP.ProgramTheory.Functional.Sat, LaPToP.ProgramTheory.Functional.Det, LaPToP.ProgramTheory.Functional.Nondet, LaPToP.ProgramTheory.Functional.sat_iff, LaPToP.ProgramTheory.Functional.Implementable, LaPToP.ProgramTheory.Functional.implementable_iff_ne_null, LaPToP.ProgramTheory.Functional.Refines, LaPToP.ProgramTheory.Functional.occursIn, LaPToP.ProgramTheory.Functional.search₀, LaPToP.ProgramTheory.Functional.not_implementable_search₀, LaPToP.ProgramTheory.Functional.beyond, LaPToP.ProgramTheory.Functional.search, LaPToP.ProgramTheory.Functional.implementable_search, LaPToP.ProgramTheory.Functional.occursFrom, LaPToP.ProgramTheory.Functional.sfBody, LaPToP.ProgramTheory.Functional.searchFrom, LaPToP.ProgramTheory.Functional.search_apply_eq, LaPToP.ProgramTheory.Functional.search_step_refines, LaPToP.ProgramTheory.Functional.timeBound, LaPToP.ProgramTheory.Functional.onePlus, LaPToP.ProgramTheory.Functional.time_top, LaPToP.ProgramTheory.Functional.time_step")
+"This section presents an alternative: a program is a function from its input
+to its output. More generally, a specification is a function from possible
+inputs to desired outputs, and programs (as always) are implemented
+specifications. We take away $`ok`, assignment, and sequential composition from
+our programming notations, and we add functions. To illustrate, we look once
+again at the list summation problem (Exercise 174). This time, the
+specification is $`\langle L : [*\mathit{rat}] \cdot \Sigma L \rangle`. ... We introduce
+variable $`n` to indicate how much of the list has been summed; initially $`n` is
+$`0`. $`\Sigma L = \langle n : 0,..\#L{+}1 \cdot \Sigma L\,[n;..\#L] \rangle\ 0` ... the
+domain is really composed of two parts that must be treated differently.
+$`0,..\#L{+}1 = \square L,\ \#L`. We divide the function into a selective union
+$`\langle n : 0,..\#L{+}1 \cdot \Sigma L\,[n;..\#L] \rangle = \langle n : \square L \cdot \Sigma L\,[n;..\#L] \rangle \mid \langle n : \#L \cdot \Sigma L\,[n;..\#L] \rangle`
+... $`\langle n : \square L \cdot \Sigma L\,[n;..\#L] \rangle = \langle n : \square L \cdot L\,n + \Sigma L\,[n{+}1;..\#L] \rangle`,
+$`\langle n : \#L \cdot \Sigma L\,[n;..\#L] \rangle = \langle n : \#L \cdot 0 \rangle`. The one
+remaining problem is solved by recursion.
+$`\Sigma L\,[n{+}1;..\#L] = \langle n : 0,..\#L{+}1 \cdot \Sigma L\,[n;..\#L] \rangle\ (n{+}1)`.
+In place of the selective union we could have used $`\mathbf{if}\ \mathbf{then}\ \mathbf{else}`;
+they are related by the law
+$`\langle v : A \cdot x \rangle \mid \langle v : B \cdot y \rangle = \langle v : A, B \cdot \mathbf{if}\ v : A\ \mathbf{then}\ x\ \mathbf{else}\ y \rangle`.
+When we are interested in the execution time rather than the result, we replace
+the result of each function with its time according to some measure." Both
+measures are formalized: charging $`1` for each addition,
+$`\#L = \langle n : 0,..\#L{+}1 \cdot \#L{-}n \rangle\ 0`,
+$`\langle n : \square L \cdot \#L{-}n \rangle = \langle n : \square L \cdot 1 + \#L{-}n{-}1 \rangle`,
+$`\#L{-}n{-}1 = \langle n : 0,..\#L{+}1 \cdot \#L{-}n \rangle\ (n{+}1)`; and the recursive
+measure $`\#L{-}n = 1 + \langle n : 0,..\#L{+}1 \cdot \#L{-}n \rangle\ (n{+}1)`.
+
+Section 5.8.0, Function Refinement: "In functional programming, a
+nondeterministic specification is a bunch consisting of more than one element.
+... Functional specification $`S` is unsatisfiable for domain element $`x`:
+$`{\rm c\llap{/}} S\,x < 1`; satisfiable: $`{\rm c\llap{/}} S\,x \geq 1`; deterministic:
+$`{\rm c\llap{/}} S\,x \leq 1`; nondeterministic: $`{\rm c\llap{/}} S\,x > 1`; ...
+implementable: $`\forall x \cdot \exists y \cdot y : S\,x`. Implementability can be
+restated as $`\forall x \cdot S\,x \neq \mathit{null}`. Consider the problem of
+searching for an item in a list of integers. Our first attempt at specification
+might be $`\langle L : [*\mathit{int}] \cdot \langle x : \mathit{int} \cdot \S n : \square L \cdot L\,n = x \rangle \rangle`
+... if $`x` does not occur in $`L`, we are left without any possible result, so
+this specification is unimplementable. ...
+$`\langle L : [*\mathit{int}] \cdot \langle x : \mathit{int} \cdot \mathbf{if}\ x : L\,(\square L)\ \mathbf{then}\ \S n : \square L \cdot L\,n = x\ \mathbf{else}\ \#L,..\infty \rangle \rangle`
+This specification is implementable, and often nondeterministic. ... Functional
+specification $`P` (the problem) is refined by functional specification $`S`
+(the solution) if and only if $`S : P`. ... “$`P` is refined by $`S`” is written
+$`P{::}\,S`." Both linear-search refinements are proved as function inclusions
+{uses "function_inclusion"}[]: the first,
+$`\ldots {::}\ \langle i : \mathit{nat} \cdot \mathbf{if}\ x : L\,(i,..\#L)\ \mathbf{then}\ \S n : i,..\#L \cdot L\,n = x\ \mathbf{else}\ \#L,..\infty \rangle\ 0`,
+as the equality of the two sides the book notes, and the second, the step
+$`\mathbf{if}\ i = \#L\ \mathbf{then}\ \#L\ \mathbf{else}\ \mathbf{if}\ x = L\,i\ \mathbf{then}\ i\ \mathbf{else}\ \ldots (i{+}1)`.
+The timing, recursive measure: $`0,..\#L{+}1\ {::}\ \langle i \cdot 0,..\#L{-}i{+}1 \rangle\ 0`
+and $`0,..\#L{-}i{+}1\ {::}\ \mathbf{if}\ i = \#L\ \mathbf{then}\ 0\ \mathbf{else}\ \mathbf{if}\ x = L\,i\ \mathbf{then}\ 0\ \mathbf{else}\ 1 + \langle i \cdot 0,..\#L{-}i{+}1 \rangle\ (i{+}1)`.
+
+Model notes. Lists are the integer lists of {uses "list_summation"}[] with
+integer indices, so the book's rationals are integers, and the intervals are
+the bunches $`x,..y` of {uses "bunch_primitives"}[]; $`\#L,..\infty` is the bunch of
+integers $`\geq \#L`. The domain split and the selective-union law are proved
+for `Fn.orElse` ({uses "selective_union"}[]) with `Fn.ext`; the solution
+quantifier $`\S n : \square L \cdot L\,n = x` is the set of such $`n`
+({uses "solution_quantifier"}[]). The unimplementability of the first search
+specification is witnessed by the empty list, for which no $`x` has a result;
+implementability of functional specifications is the analogue of
+{uses "specification_implementability"}[]. In the second refinement and the
+timing the book writes $`i : \mathit{nat}` and remarks that it "could have been more
+precise about the domain of $`i`"; the step refinement is proved on $`\mathit{nat}` and
+the timing step on the domain $`0,..\#L{+}1` that the bound $`0,..\#L{-}i{+}1` needs
+(for $`i > \#L` the bunch is $`\mathit{null}`). The bunch sum $`1 + B` is the image of
+$`B` under $`1 + {\cdot}`. The imperative counterpart is {uses "linear_search"}[].
 :::
