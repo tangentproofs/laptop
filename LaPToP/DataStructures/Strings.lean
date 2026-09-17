@@ -3,6 +3,7 @@ import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Range
 import Mathlib.Data.List.Flatten
 import Mathlib.Data.ENat.Basic
+import Mathlib.Data.List.Lex
 
 /-!
 # String Theory
@@ -228,6 +229,14 @@ theorem append_lt_append_of_lt (h : i < j) : S ++ item i ++ T < S ++ item j ++ U
   | cons a S ih => exact List.cons_lt_cons_iff.2 (Or.inr ⟨rfl, ih⟩)
 
 end Order
+
+/-- The order on strings is a linear order when the items are linearly ordered (Mathlib's
+lexicographic `LinearOrder (List α)`), and its `<` is the `List.lt` used above: so the Generic laws
+of the Reference chapter (§11.3.0) for `< ≤ > ≥ ↑ ↓` apply to strings, as the book states. -/
+theorem lt_iff_lex [LinearOrder α] (S T : Str α) : S < T ↔ List.Lex (· < ·) S T := Iff.rfl
+
+/-- `S ≤ T = ¬ T < S` (Totality, an instance of the Generic laws for strings). -/
+theorem le_iff_not_lt [LinearOrder α] (S T : Str α) : S ≤ T ↔ ¬ T < S := not_lt.symm
 
 /-! ### The string interval `x;..y` (aPToP §2.2) -/
 

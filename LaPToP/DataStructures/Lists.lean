@@ -87,6 +87,17 @@ def modify (n : ℕ) (i : α) (L : HList α) : HList α := ⟨Str.update L.conte
 /-- Lists are ordered lexicographically, like strings. -/
 instance [LT α] : LT (HList α) := ⟨fun L M => L.contents < M.contents⟩
 
+/-- When the items are linearly ordered, so are the lists (the order lifted from the strings; its
+`<` is the instance above), so the Generic laws of the Reference chapter (§11.3.0) apply to lists. -/
+noncomputable instance [LinearOrder α] : LinearOrder (HList α) :=
+  LinearOrder.lift' HList.contents fun L M h => by cases L; cases M; cases h; rfl
+
+/-- The linear order's `<` is the lexicographic order of the contents. -/
+theorem lt_iff_contents_lt [LinearOrder α] (L M : HList α) : L < M ↔ L.contents < M.contents := Iff.rfl
+
+/-- `L ≤ M = ¬ M < L` (Totality, an instance of the Generic laws for lists). -/
+theorem le_iff_not_lt [LinearOrder α] (L M : HList α) : L ≤ M ↔ ¬ M < L := not_lt.symm
+
 /-! ### Axioms of List Theory (aPToP §2.3)
 
 In the book, `L` and `M` are lists, `S` and `T` strings, `n` an index of `S`,
