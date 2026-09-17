@@ -48,9 +48,11 @@ Do not enable Pages via API from automation; a human should flip that switch.
 ## Coverage
 
 Every section of Chapters 1–9 of the book is formalized, and the law tables of
-the Reference chapter (§11.3) are surveyed law by law. The Blueprint has 167
-nodes; all are formalized and sorry-free except the intentionally open demo
-node `collatz_conjecture`.
+the Reference chapter (§11.3) are surveyed law by law. The Blueprint nodes are
+formalized and sorry-free (the old `collatz_conjecture` demo node was removed;
+Exercise 255 timing remains as `collatz_time`). Chapter 10 exercise *statements*
+are deferred stubs in `LaPToP/Exercises/` (signatures with `sorry` only). What
+is intentionally not formalized is listed in `MISSING.md`.
 
 | Blueprint chapter | Book sections |
 |---|---|
@@ -90,7 +92,8 @@ LaPToP/
     RecursionConcurrency.lean# §6 recursive definition, §8 concurrency
     TheoryDesign.lean        # §7 theory design and data transformation
     Interaction.lean         # §9 interactive variables and communication
-    Collatz.lean             # unfinished demo node
+    Collatz.lean             # Exercise 255 Collatz timing (proved)
+  Exercises/                # Ch.10 statement stubs (sorry; not Blueprint nodes)
   BasicTheories/             # Binary, Bunch, Numbers, NumberLaws, Calculation, GenericLaws
   DataStructures/            # Strings, Lists, Multidimensional
   FunctionTheory/            # Functions, Quantifiers, FinePoints, HigherOrder, Limits, QuantifierDistribution
