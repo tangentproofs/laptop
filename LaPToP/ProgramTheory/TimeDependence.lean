@@ -45,10 +45,20 @@ computation ends at the first test after `w`, `w ≤ t′ ≤ w + δ` (and `t′
 `t ≥ w` already), which the busy-wait loop `if t≥w then ok else t:= t+δ. wait
 until w` refines. The exact `t′ = t↑w` of the recursive measure is not
 implementable with positive operation times; the tolerance `δ` is the honest
-content of "redefine appropriately". Not formalized: the space variable `s` of
-this section ("like `t`, `s` can be read but not written arbitrarily") — the
-space variable itself is modelled in Section 4.3, its read-only use in programs
-is prose only here.
+content of "redefine appropriately". The space variable `s` of this section —
+"if a program has space usage information available to it, there is no harm in
+using that information. Like `t`, `s` can be read but not written arbitrarily.
+All changes to `s` must correspond to changes in space usage" — is the section
+`SpaceDependence`: since space, unlike time, goes up and down, the discipline is
+not a monotonicity property but a closure property, `RespectsSpace`: a
+specification may read `s` freely and change it only by the space-measure
+steps `s:= s+k`, `s:= s–k` with a constant `k` (the declared size of what is
+allocated or released), and is closed under `if` and sequential composition.
+Its semantic content, the analogue of `t ≤ t′`, is that the change of `s` is
+bounded independently of the initial state (`RespectsSpace.bounded`), which an
+arbitrary `s:= 5` violates (`not_respectsSpace_const`). Recursion is not
+included in the closure (the recursive space analyses of Section 4.3 bound `s`
+by other means).
 -/
 
 namespace LaPToP.ProgramTheory
@@ -228,6 +238,115 @@ theorem not_exact_refines :
   simp [assignT] at this
 
 end RealTime
+
+/-! ### Space dependence: the read-only space variable -/
+
+namespace SpaceDependence
+
+/-- A state with the space variable `s` (an extended natural, as in Section 4.3) and an ordinary
+variable `x`. -/
+structure SD where
+  /-- The space variable. -/
+  s : ℕ∞
+  /-- An ordinary variable. -/
+  x : ℤ
+
+/-- `s:= e`. -/
+def assignS (e : SD → ℕ∞) : Spec SD := fun st st' => st' = { st with s := e st }
+
+/-- `x:= e`. -/
+def assignX (e : SD → ℤ) : Spec SD := fun st st' => st' = { st with x := e st }
+
+/-- `s:= s+k`, the space-measure step for allocating `k` units. -/
+def grow (k : ℕ) : Spec SD := assignS fun st => st.s + k
+
+/-- `s:= s–k`, the space-measure step for releasing `k` units. -/
+def shrink (k : ℕ) : Spec SD := assignS fun st => st.s - k
+
+/-- "Like `t`, `s` can be read but not written arbitrarily. All changes to `s` must correspond to
+changes in space usage": a specification respects space if it is built from specifications that
+do not change `s` (they may read it), the space-measure steps `s:= s+k` and `s:= s–k` for constant
+`k`, conditionals (whose conditions may read `s`) and sequential compositions. -/
+inductive RespectsSpace : Spec SD → Prop
+  /-- Anything that leaves `s` unchanged — including reading `s` into other variables. -/
+  | keep {S : Spec SD} (h : ∀ st st', S st st' → st'.s = st.s) : RespectsSpace S
+  /-- Allocation of a constant amount of space. -/
+  | grow (k : ℕ) : RespectsSpace (grow k)
+  /-- Release of a constant amount of space. -/
+  | shrink (k : ℕ) : RespectsSpace (shrink k)
+  /-- `if b then P else Q`; the condition may read `s`. -/
+  | cond (b : SD → Prop) {P Q : Spec SD} (hP : RespectsSpace P) (hQ : RespectsSpace Q) :
+      RespectsSpace (Spec.cond b P Q)
+  /-- `P. Q`. -/
+  | seq {P Q : Spec SD} (hP : RespectsSpace P) (hQ : RespectsSpace Q) : RespectsSpace (Spec.seq P Q)
+
+/-- Reading `s` into an ordinary variable respects space. -/
+theorem respectsSpace_assignX (e : SD → ℤ) : RespectsSpace (assignX e) :=
+  .keep fun _ _ h => by subst h; rfl
+
+/-- `ok` respects space. -/
+theorem respectsSpace_ok : RespectsSpace ok := .keep fun _ _ h => by subst h; rfl
+
+/-- "There is no harm in using that information": `if s ≤ limit then x:= 1 else x:= 0` respects space. -/
+theorem respectsSpace_read_example (limit : ℕ∞) :
+    RespectsSpace (Spec.cond (fun st => st.s ≤ limit) (assignX fun _ => 1) (assignX fun _ => 0)) :=
+  .cond _ (respectsSpace_assignX _) (respectsSpace_assignX _)
+
+/-- Allocating and then releasing the same amount respects space. -/
+theorem respectsSpace_grow_shrink (k : ℕ) : RespectsSpace (Spec.seq (grow k) (shrink k)) :=
+  .seq (.grow k) (.shrink k)
+
+/-- The semantic content of the discipline — the analogue of "time does not decrease": a
+specification that respects space changes `s` by at most a bound `B` fixed in advance,
+independently of the initial state. -/
+theorem RespectsSpace.bounded {S : Spec SD} (h : RespectsSpace S) :
+    ∃ B : ℕ, ∀ st st', S st st' → st'.s ≤ st.s + B ∧ st.s ≤ st'.s + B := by
+  induction h with
+  | keep h => exact ⟨0, fun st st' hS => by rw [h st st' hS]; simp⟩
+  | grow k => exact ⟨k, fun st st' hS => by
+      simp only [SpaceDependence.grow, assignS] at hS; subst hS
+      exact ⟨le_rfl, le_trans le_self_add le_self_add⟩⟩
+  | shrink k => exact ⟨k, fun st st' hS => by
+      simp only [SpaceDependence.shrink, assignS] at hS; subst hS
+      exact ⟨le_trans tsub_le_self le_self_add, le_tsub_add⟩⟩
+  | cond b _ _ ihP ihQ =>
+    obtain ⟨B₁, h₁⟩ := ihP
+    obtain ⟨B₂, h₂⟩ := ihQ
+    refine ⟨max B₁ B₂, fun st st' hS => ?_⟩
+    have hm₁ : (B₁ : ℕ∞) ≤ (max B₁ B₂ : ℕ) := by exact_mod_cast le_max_left B₁ B₂
+    have hm₂ : (B₂ : ℕ∞) ≤ (max B₁ B₂ : ℕ) := by exact_mod_cast le_max_right B₁ B₂
+    rcases hS with ⟨-, hP⟩ | ⟨-, hQ⟩
+    · obtain ⟨a, b⟩ := h₁ st st' hP
+      exact ⟨a.trans (add_le_add le_rfl hm₁), b.trans (add_le_add le_rfl hm₁)⟩
+    · obtain ⟨a, b⟩ := h₂ st st' hQ
+      exact ⟨a.trans (add_le_add le_rfl hm₂), b.trans (add_le_add le_rfl hm₂)⟩
+  | seq _ _ ihP ihQ =>
+    obtain ⟨B₁, h₁⟩ := ihP
+    obtain ⟨B₂, h₂⟩ := ihQ
+    refine ⟨B₁ + B₂, fun st st' hS => ?_⟩
+    obtain ⟨st₁, hP, hQ⟩ := hS
+    obtain ⟨a₁, b₁⟩ := h₁ st st₁ hP
+    obtain ⟨a₂, b₂⟩ := h₂ st₁ st' hQ
+    constructor
+    · calc st'.s ≤ st₁.s + B₂ := a₂
+        _ ≤ st.s + B₁ + B₂ := add_le_add a₁ le_rfl
+        _ = st.s + ((B₁ + B₂ : ℕ) : ℕ∞) := by push_cast; ring
+    · calc st.s ≤ st₁.s + B₁ := b₁
+        _ ≤ st'.s + B₂ + B₁ := add_le_add b₂ le_rfl
+        _ = st'.s + ((B₁ + B₂ : ℕ) : ℕ∞) := by push_cast; ring
+
+/-- "`s` can be read but not written arbitrarily": `s:= 5` does not respect space — from a large
+enough initial space it releases an unbounded amount. -/
+theorem not_respectsSpace_const : ¬ RespectsSpace (assignS fun _ => 5) := by
+  intro h
+  obtain ⟨B, hB⟩ := h.bounded
+  have h1 := (hB ⟨((B + 6 : ℕ) : ℕ∞), 0⟩ ⟨5, 0⟩ rfl).2
+  simp only at h1
+  have h2 : ((B + 6 : ℕ) : ℕ∞) ≤ ((5 + B : ℕ) : ℕ∞) := by exact_mod_cast h1
+  have h3 := ENat.natCast_le_natCast.mp h2
+  omega
+
+end SpaceDependence
 
 end TimeDependence
 

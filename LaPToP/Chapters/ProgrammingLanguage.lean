@@ -352,7 +352,7 @@ $`n`") is checked on the state of {uses "list_summation"}[]. Uses
 {uses "variable_declaration"}[] and {uses "assignment_spec"}[].
 :::
 
-:::definition "time_dependence" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.TimeDependence.TD, LaPToP.ProgramTheory.TimeDependence.assignT, LaPToP.ProgramTheory.TimeDependence.assignDeadline, LaPToP.ProgramTheory.TimeDependence.tick, LaPToP.ProgramTheory.TimeDependence.assignT_seq, LaPToP.ProgramTheory.TimeDependence.RespectsClock, LaPToP.ProgramTheory.TimeDependence.respectsClock_assignDeadline, LaPToP.ProgramTheory.TimeDependence.respectsClock_tick, LaPToP.ProgramTheory.TimeDependence.respectsClock_cond, LaPToP.ProgramTheory.TimeDependence.respectsClock_seq, LaPToP.ProgramTheory.TimeDependence.not_respectsClock_assignT_const, LaPToP.ProgramTheory.TimeDependence.waitUntil, LaPToP.ProgramTheory.TimeDependence.respectsClock_waitUntil, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_ge, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_lt, LaPToP.ProgramTheory.TimeDependence.waitUntil_refines, LaPToP.ProgramTheory.TimeDependence.waitUntil_whileRefines, LaPToP.ProgramTheory.TimeDependence.RealTime.RS, LaPToP.ProgramTheory.TimeDependence.RealTime.assignT, LaPToP.ProgramTheory.TimeDependence.RealTime.assignT_seq, LaPToP.ProgramTheory.TimeDependence.RealTime.tick, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_le, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_of_max, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_refines, LaPToP.ProgramTheory.TimeDependence.RealTime.not_exact_refines")
+:::definition "time_dependence" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.TimeDependence.TD, LaPToP.ProgramTheory.TimeDependence.assignT, LaPToP.ProgramTheory.TimeDependence.assignDeadline, LaPToP.ProgramTheory.TimeDependence.tick, LaPToP.ProgramTheory.TimeDependence.assignT_seq, LaPToP.ProgramTheory.TimeDependence.RespectsClock, LaPToP.ProgramTheory.TimeDependence.respectsClock_assignDeadline, LaPToP.ProgramTheory.TimeDependence.respectsClock_tick, LaPToP.ProgramTheory.TimeDependence.respectsClock_cond, LaPToP.ProgramTheory.TimeDependence.respectsClock_seq, LaPToP.ProgramTheory.TimeDependence.not_respectsClock_assignT_const, LaPToP.ProgramTheory.TimeDependence.waitUntil, LaPToP.ProgramTheory.TimeDependence.respectsClock_waitUntil, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_ge, LaPToP.ProgramTheory.TimeDependence.waitUntil_case_lt, LaPToP.ProgramTheory.TimeDependence.waitUntil_refines, LaPToP.ProgramTheory.TimeDependence.waitUntil_whileRefines, LaPToP.ProgramTheory.TimeDependence.RealTime.RS, LaPToP.ProgramTheory.TimeDependence.RealTime.assignT, LaPToP.ProgramTheory.TimeDependence.RealTime.assignT_seq, LaPToP.ProgramTheory.TimeDependence.RealTime.tick, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_le, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_of_max, LaPToP.ProgramTheory.TimeDependence.RealTime.waitUntil_refines, LaPToP.ProgramTheory.TimeDependence.RealTime.not_exact_refines, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.SD, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.assignS, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.assignX, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.grow, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.shrink, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.RespectsSpace, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.respectsSpace_assignX, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.respectsSpace_ok, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.respectsSpace_read_example, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.respectsSpace_grow_shrink, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.RespectsSpace.bounded, LaPToP.ProgramTheory.TimeDependence.SpaceDependence.not_respectsSpace_const")
 "Some programming languages provide a clock, or a delay, or other
 time-dependent features. Our examples have used the time variable $`t` as a
 ghost, or auxiliary variable, never affecting the course of a computation. ...
@@ -396,9 +396,23 @@ it (`waitUntil_of_max`) but is not refined by a loop with positive operation
 time (`not_exact_refines`, which overshoots), while the redefined specification
 is: $`\mathbf{wait}\ \mathbf{until}\ w \Leftarrow \mathbf{if}\ t \geq w\ \mathbf{then}\ ok\ \mathbf{else}\ t := t + \delta.\ \mathbf{wait}\ \mathbf{until}\ w`
 (`RealTime.waitUntil_refines`, for any $`\delta`; positivity only matters for
-termination, which the recursive-call reading does not claim). Not formalized:
-the space-dependence analogue of this section (the space variable itself is
-modelled in the `space` node of the Program Theory chapter, Section 4.3). Uses
+termination, which the recursive-call reading does not claim). "Our space
+variable $`s`, like the time variable $`t`, has so far been used to prove things
+about space usage, not to affect the computation. But if a program has space
+usage information available to it, there is no harm in using that information.
+Like $`t`, $`s` can be read but not written arbitrarily. All changes to $`s` must
+correspond to changes in space usage." Space, unlike time, goes up and down, so
+the discipline is a closure property rather than a monotonicity property:
+`SpaceDependence.RespectsSpace` holds of specifications that leave $`s`
+unchanged (reading it freely, `respectsSpace_assignX`,
+`respectsSpace_read_example`), of the space-measure steps $`s := s + k` and
+$`s := s - k` for a constant $`k` (`grow`, `shrink`), and is closed under
+$`\mathbf{if}` and sequential composition. Its semantic content, the analogue of
+$`t \leq t'`, is `RespectsSpace.bounded`: the change of $`s` is bounded
+independently of the initial state — which an arbitrary $`s := 5` violates
+(`not_respectsSpace_const`, the counterpart of `not_respectsClock_assignT_const`).
+The space variable itself is modelled in the `space` node of the Program
+Theory chapter (Section 4.3); recursion is not part of this closure. Uses
 {uses "time_variable"}[] and {uses "recursive_time"}[].
 :::
 
