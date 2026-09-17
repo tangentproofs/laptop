@@ -46,6 +46,9 @@ structure HList (α : Type u) where
   contents : Str α
   deriving DecidableEq
 
+/-- The empty list is a default list. -/
+instance {α : Type u} : Inhabited (HList α) := ⟨⟨[]⟩⟩
+
 namespace Str
 
 variable {α : Type u}
