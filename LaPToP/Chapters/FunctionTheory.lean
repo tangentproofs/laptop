@@ -5,6 +5,7 @@ import LaPToP.FunctionTheory.Functions
 import LaPToP.FunctionTheory.Quantifiers
 import LaPToP.FunctionTheory.FinePoints
 import LaPToP.FunctionTheory.HigherOrder
+import LaPToP.FunctionTheory.Limits
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -18,8 +19,9 @@ and the quantifiers built on them: Hehner's Chapter 3, the prerequisite for the
 specifications and refinements of Program Theory. The formal counterparts are the
 Lean modules `LaPToP.FunctionTheory.Functions`,
 `LaPToP.FunctionTheory.Quantifiers`, `LaPToP.FunctionTheory.FinePoints`
-(Section 3.2, function fine points) and `LaPToP.FunctionTheory.HigherOrder`
-(Sections 3.2.1–3.2.2, functions as data).
+(Section 3.2, function fine points), `LaPToP.FunctionTheory.HigherOrder`
+(Sections 3.2.1–3.2.2, functions as data) and `LaPToP.FunctionTheory.Limits`
+(Section 3.4, limits and reals).
 :::
 
 :::definition "function_notation" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn, LaPToP.FunctionTheory.Fn.lam, LaPToP.FunctionTheory.Fn.domain, LaPToP.FunctionTheory.Fn.size, LaPToP.FunctionTheory.Fn.apply, LaPToP.FunctionTheory.Fn.arrow, LaPToP.FunctionTheory.Fn.ext")
@@ -302,4 +304,54 @@ and {uses "quantifier_numeric"}[].
 `HList.toFn L := ⟨n: ☐L· L n⟩`; the coincidences are `rfl` or `Fn.ext`; size via
 `Finset.range`; $`\Sigma L` via `Fin.sum_univ_getElem`; the selective-union law by
 extensionality and `List.getElem?_set_self`/`_ne`.
+:::
+
+:::theorem "limits" (parent := "function_theory_core") (tags := "function, limits, reals, hehner-3.4") (effort := "medium") (lean := "LaPToP.FunctionTheory.Limits.Seq, LaPToP.FunctionTheory.Limits.lowerLimit, LaPToP.FunctionTheory.Limits.upperLimit, LaPToP.FunctionTheory.Limits.IsLimit, LaPToP.FunctionTheory.Limits.lowerLimit_eq_liminf, LaPToP.FunctionTheory.Limits.upperLimit_eq_limsup, LaPToP.FunctionTheory.Limits.lowerLimit_le_upperLimit, LaPToP.FunctionTheory.Limits.exists_isLimit, LaPToP.FunctionTheory.Limits.isLimit_iff_of_eq, LaPToP.FunctionTheory.Limits.isLimit_iff_of_tendsto, LaPToP.FunctionTheory.Limits.inf_le_isLimit_le_sup, LaPToP.FunctionTheory.Limits.sup_toFn, LaPToP.FunctionTheory.Limits.inf_toFn, LaPToP.FunctionTheory.Limits.isLimit_iff_of_monotone, LaPToP.FunctionTheory.Limits.isLimit_iff_of_antitone, LaPToP.FunctionTheory.Limits.invSucc, LaPToP.FunctionTheory.Limits.isLimit_invSucc_iff, LaPToP.FunctionTheory.Limits.altSign, LaPToP.FunctionTheory.Limits.altSign_even, LaPToP.FunctionTheory.Limits.altSign_odd, LaPToP.FunctionTheory.Limits.neg_one_le_one', LaPToP.FunctionTheory.Limits.altSign_bounds, LaPToP.FunctionTheory.Limits.lowerLimit_altSign, LaPToP.FunctionTheory.Limits.upperLimit_altSign, LaPToP.FunctionTheory.Limits.isLimit_altSign_iff, LaPToP.FunctionTheory.Limits.isLimit_altSign_neg_one, LaPToP.FunctionTheory.Limits.isLimit_altSign_one, LaPToP.FunctionTheory.Limits.natSeq, LaPToP.FunctionTheory.Limits.isLimit_natSeq_iff, LaPToP.FunctionTheory.Limits.IsPredLimit, LaPToP.FunctionTheory.Limits.exists_forall_add_iff_eventually, LaPToP.FunctionTheory.Limits.forall_exists_add_iff_frequently, LaPToP.FunctionTheory.Limits.exists_isPredLimit, LaPToP.FunctionTheory.Limits.isPredLimit_of_eventually, LaPToP.FunctionTheory.Limits.not_isPredLimit_of_eventually_not, LaPToP.FunctionTheory.Limits.not_isPredLimit_invSucc_eq_zero, LaPToP.FunctionTheory.Limits.ratApprox, LaPToP.FunctionTheory.Limits.ratApprox_tendsto, LaPToP.FunctionTheory.Limits.exists_rat_seq_isLimit, LaPToP.FunctionTheory.Limits.real_eq_xreal_remove")
+"Let $`f : \mathit{nat} \to \mathit{rat}` so that $`f\,0;\ f\,1;\ f\,2;\ \ldots` is a sequence of
+rationals. The limit of the function (limit of the sequence) is expressed as
+$`\Updownarrow f`. ... We define the limit quantifier $`\Updownarrow` by the following Limit
+Axiom: $`(\Uparrow m \cdot \Downarrow n \cdot f\,(m{+}n)) \leq \Updownarrow f \leq (\Downarrow m \cdot \Uparrow n \cdot f\,(m{+}n))` with
+all domains being $`\mathit{nat}`. This axiom gives a lower bound (limit inferior) and
+an upper bound (limit superior) for $`\Updownarrow f`. When those bounds are equal, the
+Limit Axiom tells us $`\Updownarrow f` exactly. For example, $`\Updownarrow n \cdot 1/(n{+}1) = 0`. For
+some functions, the Limit Axiom tells us a little less. For example,
+$`-1 \leq (\Updownarrow n \cdot (-1)^n) \leq 1`. In general, $`\Downarrow f \leq \Updownarrow f \leq \Uparrow f`. For
+monotonic (nondecreasing) $`f`, $`\Updownarrow f = \Uparrow f`. For antimonotonic (nonincreasing)
+$`f`, $`\Updownarrow f = \Downarrow f`. We define the extended real numbers as the limits of all
+functions with domain at least $`\mathit{nat}` and range at most $`\mathit{rat}`. And we define
+the reals as the extended reals without $`\infty` and $`-\infty`.
+$`x : \mathit{xreal} = \exists f : \mathit{nat} \to \mathit{rat} \cdot x = \Updownarrow f`, $`\mathit{real} = \mathit{xreal} -, (\infty, -\infty)`.
+... Let $`p : \mathit{nat} \to \mathit{bin}` so that $`p` is a predicate and $`p\,0;\ p\,1;\ p\,2;\ \ldots` is
+a sequence of binary expressions. The limit of predicate $`p` is defined by the
+axiom $`\exists m \cdot \forall n \cdot p\,(m{+}n) \Rightarrow \Updownarrow p \Rightarrow \forall m \cdot \exists n \cdot p\,(m{+}n)` with all
+domains being $`\mathit{nat}`. ... $`\exists m \cdot \forall i \cdot i \geq m \Rightarrow p\,i \Rightarrow \Updownarrow p`,
+$`\exists m \cdot \forall i \cdot i \geq m \Rightarrow \lnot p\,i \Rightarrow \lnot \Updownarrow p`. ... For example,
+$`\lnot \Updownarrow n \cdot 1/(n{+}1) = 0`. Even though the limit of $`1/(n{+}1)` is $`0`, the limit of
+$`1/(n{+}1) = 0` is $`\bot`. If, for some particular assignment of values to variables,
+the sentence never settles on one binary value, then the axiom does not
+determine the value of $`\Updownarrow p` for that assignment of values." The Reference
+chapter adds $`\Updownarrow n \cdot n = \infty` (Section 11.3.9).
+
+Model notes. The book's $`\Updownarrow f` is underdetermined — the Limit Axiom only bounds
+it — and the formalization keeps it so: a sequence is $`u : \mathbb{N} \to \mathit{xreal}`
+(the extended reals of {uses "number_domain"}[], so that $`\Uparrow`, $`\Downarrow` of
+{uses "quantifier_numeric"}[] always exist); `lowerLimit u` and `upperLimit u`
+are the two bounds of the axiom, literally $`\Uparrow m \cdot \Downarrow n \cdot u\,(m{+}n)` and
+$`\Downarrow m \cdot \Uparrow n \cdot u\,(m{+}n)` (`sup_toFn`/`inf_toFn` identify $`\Uparrow`, $`\Downarrow` of the book's
+function $`\langle n : \mathit{nat} \cdot f\,n \rangle` with the suprema and infima used); `IsLimit u L`
+says $`L` satisfies the axiom. The bounds are Mathlib's `liminf`/`limsup` along
+`atTop`, so a value always exists, the bounds are consistent, and the value is
+unique exactly when they agree — in particular for convergent sequences
+(`isLimit_iff_of_tendsto`). Proved as stated: $`\Downarrow f \leq \Updownarrow f \leq \Uparrow f`
+({uses "quantifier_laws_numeric"}[]); monotone ⇒ $`\Updownarrow f = \Uparrow f`, antitone ⇒
+$`\Updownarrow f = \Downarrow f`; every value of $`\Updownarrow n \cdot 1/(n{+}1)` is $`0`; the values of
+$`\Updownarrow n \cdot (-1)^n` are exactly the numbers of $`[-1, 1]`, so $`-1` and $`1` both are values
+("a little less"); every value of $`\Updownarrow n \cdot n` is $`\infty`. For predicates,
+`IsPredLimit p b` places $`b` between "eventually $`p`" and "frequently $`p`"
+(the book's two bounds, proved equal to Mathlib's `∀ᶠ`/`∃ᶠ` along `atTop`), with the
+two one-sided forms and the example that every value of
+$`\Updownarrow n \cdot (1/(n{+}1) = 0)` is $`\bot`. Every extended real is a value of the limit of a
+rational sequence ($`n`, $`-n`, and $`\lfloor x(n{+}1) \rfloor/(n{+}1)` for a real $`x`), and the reals
+are the extended reals other than $`\pm\infty`. Not formalized: that
+$`\Updownarrow n \cdot (1 + 1/n)^n` is $`e`.
 :::

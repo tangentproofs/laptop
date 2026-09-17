@@ -1,4 +1,4 @@
-# aPToP §11.3 Laws — survey of Lean coverage (2026-09-17; updated after the Assertions batch)
+# aPToP §11.3 Laws — survey of Lean coverage (2026-09-17; updated after the Assertions and Limits batches)
 
 One line per law of the Reference chapter (pp. 235–244): the Lean theorem stating it (module in
 parentheses; `B.` = `LaPToP.BasicTheories`, `DS.` = `LaPToP.DataStructures`, `FT.` = `LaPToP.FunctionTheory`,
@@ -179,11 +179,15 @@ definition itself. Counts: total / covered / missing per table at the end.
   `le_iff_forall_lt_imp'`
 - Distributive (↑↓+–× with ⇑⇓, n×Σ, (Π)^n) — **MISSING** (12 laws; `neg_sSup`-style lemmas exist for negation only)
 
-## 11.3.9 Limits — **MISSING** (whole table; Section 3.4 Limits and Reals is not yet formalized)
-- (⇑m· ⇓n· f(m+n)) ≤ ⇕f ≤ (⇓m· ⇑n· f(m+n)) (Limit Axiom), ∃m·∀n· p(m+n) ⇒ ⇕p ⇒ ∀m·∃n· p(m+n) (limit of a
-  predicate), ⇕n· n = ∞ — the limit quantifier `⇕` of §3.4 (pp. 33–34) is not modelled. Candidate model:
-  `Filter.liminf`/`limsup atTop` on `ℕ → ℝ`/`EReal` (or `XInt`), with the axiom as the two bounds; the
-  predicate limit as "eventually p" / "frequently p" bounds. This is the natural next book section.
+## 11.3.9 Limits — `FT.Limits` (Section 3.4, added 2026-09-17)
+- (⇑m· ⇓n· f(m+n)) ≤ ⇕f ≤ (⇓m· ⇑n· f(m+n)) (Limit Axiom) — `IsLimit` (def: `lowerLimit u ≤ L ∧ L ≤ upperLimit u`,
+  the bounds being literally the two quantifications; `lowerLimit_eq_liminf`, `upperLimit_eq_limsup`,
+  `exists_isLimit`, `isLimit_iff_of_eq`)
+- ∃m·∀n· p(m+n) ⇒ ⇕p ⇒ ∀m·∃n· p(m+n) — `IsPredLimit` (def), `exists_isPredLimit`,
+  `exists_forall_add_iff_eventually`, `forall_exists_add_iff_frequently`
+- ⇕n· n = ∞ — `isLimit_natSeq_iff`
+- The book's ⇕ is underdetermined (an axiom giving bounds); it is modelled as the set of values satisfying the
+  axiom rather than as a function. Nothing missing.
 
 ## 11.3.10 Specifications and Programs — `PT.Specifications`, `PT.Scope`, `PT.WhileLoop`, `PT.ForLoop`,
 `PT.TimeDependence`, `PT.Assertions`, `PT.Subprograms`, `C.Composition`, `LaPToP.TheoryDesign.DataTransformation`,
@@ -237,11 +241,11 @@ definition itself. Counts: total / covered / missing per table at the end.
 | 11.3.6 Lists | 21 | 13 | 8 |
 | 11.3.7 Functions | 26 | 22 | 4 |
 | 11.3.8 Quantifiers | ~100 | ~86 | 14 (Distributive ⇑⇓, real Extreme) |
-| 11.3.9 Limits | 3 | 0 | 3 |
+| 11.3.9 Limits | 3 | 3 | 0 |
 | 11.3.10 Specs and Programs | 31 | 31 | 0 |
 | 11.3.11 Substitution | 2 | 2 | 0 |
 | 11.3.12 Assertions | 8 | 8 | 0 |
 | 11.3.13 Refinement | 9 | 9 | 0 |
 
-Next batches (in order of value): 11.3.9 Limits (§3.4 Limits and Reals, needs a `⇕` model); 11.3.8 Distributive
-⇑⇓ laws; the remaining small Bunch/Set/List/String/Function gaps.
+Next batches (in order of value): 11.3.8 Distributive ⇑⇓ laws (12) and the real Extreme laws; the remaining
+small Bunch/Set/List/String/Function gaps.
