@@ -1,4 +1,4 @@
-# aPToP §11.3 Laws — survey of Lean coverage (2026-09-17; updated after the Assertions and Limits batches)
+# aPToP §11.3 Laws — survey of Lean coverage (2026-09-17; updated after the Assertions, Limits and Quantifier-distributive batches)
 
 One line per law of the Reference chapter (pp. 235–244): the Lean theorem stating it (module in
 parentheses; `B.` = `LaPToP.BasicTheories`, `DS.` = `LaPToP.DataStructures`, `FT.` = `LaPToP.FunctionTheory`,
@@ -174,10 +174,14 @@ definition itself. Counts: total / covered / missing per table at the end.
 - Domain Change ×4 — `all_of_subset`, `ex_of_subset`, `all_mem_imp`, `ex_mem_and`
 - Bounding ×8 — `forall_lt_of_sup_lt`, `forall_lt_of_lt_inf`, `sup_le_iff`, `le_inf_iff`, `inf_le_of_exists`,
   `le_sup_of_exists`, `inf_lt_iff`, `lt_sup_iff`
-- Extreme (⇓n: int· n) = –∞, (⇑n: int· n) = ∞ — `inf_int`, `sup_int` (real versions — **MISSING**)
+- Extreme (⇓n: int· n) = –∞, (⇑n: int· n) = ∞ — `inf_int`, `sup_int`; real versions — `inf_real`, `sup_real`
+  (`FT.QuantifierDistribution`, added 2026-09-17)
 - Connection ×4 — `le_iff_forall_le_imp`, `le_iff_forall_lt_imp`, `le_iff_forall_le_imp'`,
   `le_iff_forall_lt_imp'`
-- Distributive (↑↓+–× with ⇑⇓, n×Σ, (Π)^n) — **MISSING** (12 laws; `neg_sSup`-style lemmas exist for negation only)
+- Distributive (↑↓ with ⇑⇓) — `sup_sup_distrib`, `inf_inf_distrib`, `sup_inf_distrib`, `inf_sup_distrib`; (+ – with ⇑⇓, finite
+  n) — `add_sup`, `add_inf`, `sub_sup`, `sub_inf`, `sup_sub`, `inf_sub`; (× with ⇑⇓, finite n) — `mul_sup_of_nonneg`,
+  `mul_inf_of_nonneg`, `mul_sup_of_nonpos`, `mul_inf_of_nonpos`; n×Σ (finite D, 0 ≤ n < ∞) — `mul_sum`; (Π)^n (finite D,
+  n : ℕ) — `prod_pow` (`FT.QuantifierDistribution`, added 2026-09-17; side conditions recorded in the node)
 
 ## 11.3.9 Limits — `FT.Limits` (Section 3.4, added 2026-09-17)
 - (⇑m· ⇓n· f(m+n)) ≤ ⇕f ≤ (⇓m· ⇑n· f(m+n)) (Limit Axiom) — `IsLimit` (def: `lowerLimit u ≤ L ∧ L ≤ upperLimit u`,
@@ -240,12 +244,11 @@ definition itself. Counts: total / covered / missing per table at the end.
 | 11.3.5 Strings | 24 | 17 | 7 |
 | 11.3.6 Lists | 21 | 13 | 8 |
 | 11.3.7 Functions | 26 | 22 | 4 |
-| 11.3.8 Quantifiers | ~100 | ~86 | 14 (Distributive ⇑⇓, real Extreme) |
+| 11.3.8 Quantifiers | ~100 | ~100 | 0 |
 | 11.3.9 Limits | 3 | 3 | 0 |
 | 11.3.10 Specs and Programs | 31 | 31 | 0 |
 | 11.3.11 Substitution | 2 | 2 | 0 |
 | 11.3.12 Assertions | 8 | 8 | 0 |
 | 11.3.13 Refinement | 9 | 9 | 0 |
 
-Next batches (in order of value): 11.3.8 Distributive ⇑⇓ laws (12) and the real Extreme laws; the remaining
-small Bunch/Set/List/String/Function gaps.
+Next batches: the remaining small Bunch/Set/List/String/Function gaps (see the per-table MISSING marks).

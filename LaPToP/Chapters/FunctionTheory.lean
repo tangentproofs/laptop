@@ -6,6 +6,7 @@ import LaPToP.FunctionTheory.Quantifiers
 import LaPToP.FunctionTheory.FinePoints
 import LaPToP.FunctionTheory.HigherOrder
 import LaPToP.FunctionTheory.Limits
+import LaPToP.FunctionTheory.QuantifierDistribution
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -20,8 +21,9 @@ specifications and refinements of Program Theory. The formal counterparts are th
 Lean modules `LaPToP.FunctionTheory.Functions`,
 `LaPToP.FunctionTheory.Quantifiers`, `LaPToP.FunctionTheory.FinePoints`
 (Section 3.2, function fine points), `LaPToP.FunctionTheory.HigherOrder`
-(Sections 3.2.1–3.2.2, functions as data) and `LaPToP.FunctionTheory.Limits`
-(Section 3.4, limits and reals).
+(Sections 3.2.1–3.2.2, functions as data), `LaPToP.FunctionTheory.Limits`
+(Section 3.4, limits and reals) and `LaPToP.FunctionTheory.QuantifierDistribution`
+(the distributive laws of §11.3.8).
 :::
 
 :::definition "function_notation" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn, LaPToP.FunctionTheory.Fn.lam, LaPToP.FunctionTheory.Fn.domain, LaPToP.FunctionTheory.Fn.size, LaPToP.FunctionTheory.Fn.apply, LaPToP.FunctionTheory.Fn.arrow, LaPToP.FunctionTheory.Fn.ext")
@@ -180,6 +182,46 @@ $`\Uparrow \Downarrow` are deferred. Uses {uses "quantifier_numeric"}[] and
 `le_sSup`/`sInf_le`, `sSup_le_iff`/`le_sInf_iff`, `lt_sSup_iff`/`sInf_lt_iff`;
 Duality by antisymmetry using $`a \le -b = b \le -a`; Extreme by `sInf_eq_bot`/
 `sSup_eq_top` with $`\lfloor r \rfloor - 1` and $`\lceil r \rceil + 1` as witnesses.
+:::
+
+:::theorem "quantifier_distributive_laws" (parent := "function_theory_core") (tags := "function, quantifier, distributive, hehner-11.3.8") (effort := "medium") (lean := "LaPToP.FunctionTheory.Fn.sup_lam_eq_iSup, LaPToP.FunctionTheory.Fn.inf_lam_eq_iInf, LaPToP.FunctionTheory.Fn.sup_sup_distrib, LaPToP.FunctionTheory.Fn.inf_inf_distrib, LaPToP.FunctionTheory.Fn.sup_inf_distrib, LaPToP.FunctionTheory.Fn.inf_sup_distrib, LaPToP.FunctionTheory.Fn.monotone_sup, LaPToP.FunctionTheory.Fn.monotone_inf, LaPToP.FunctionTheory.Fn.antitone_sup, LaPToP.FunctionTheory.Fn.antitone_inf, LaPToP.FunctionTheory.Fn.continuousAt_add_left, LaPToP.FunctionTheory.Fn.continuousAt_sub_left, LaPToP.FunctionTheory.Fn.continuousAt_sub_right, LaPToP.FunctionTheory.Fn.continuousAt_mul_left, LaPToP.FunctionTheory.Fn.add_sup, LaPToP.FunctionTheory.Fn.add_inf, LaPToP.FunctionTheory.Fn.sub_sup, LaPToP.FunctionTheory.Fn.sub_inf, LaPToP.FunctionTheory.Fn.sup_sub, LaPToP.FunctionTheory.Fn.inf_sub, LaPToP.FunctionTheory.Fn.mul_sup_of_nonneg, LaPToP.FunctionTheory.Fn.mul_inf_of_nonneg, LaPToP.FunctionTheory.Fn.mul_sup_of_nonpos, LaPToP.FunctionTheory.Fn.mul_inf_of_nonpos, LaPToP.FunctionTheory.Fn.mulLeftHom, LaPToP.FunctionTheory.Fn.mul_sum, LaPToP.FunctionTheory.Fn.prod_pow, LaPToP.FunctionTheory.Fn.realBunch, LaPToP.FunctionTheory.Fn.inf_real, LaPToP.FunctionTheory.Fn.sup_real")
+The Distributive laws of the Quantifiers table (Section 11.3.8): "Distributive
+— if $`D \neq \mathit{null}` and $`v` does not appear in $`n`:
+$`n \uparrow (\Uparrow v : D \cdot m) = (\Uparrow v : D \cdot n \uparrow m)`,
+$`n \downarrow (\Downarrow v : D \cdot m) = (\Downarrow v : D \cdot n \downarrow m)`,
+$`n \uparrow (\Downarrow v : D \cdot m) = (\Downarrow v : D \cdot n \uparrow m)`,
+$`n \downarrow (\Uparrow v : D \cdot m) = (\Uparrow v : D \cdot n \downarrow m)`,
+$`n + (\Uparrow v : D \cdot m) = (\Uparrow v : D \cdot n + m)`,
+$`n + (\Downarrow v : D \cdot m) = (\Downarrow v : D \cdot n + m)`,
+$`n - (\Uparrow v : D \cdot m) = (\Downarrow v : D \cdot n - m)`,
+$`n - (\Downarrow v : D \cdot m) = (\Uparrow v : D \cdot n - m)`,
+$`(\Uparrow v : D \cdot m) - n = (\Uparrow v : D \cdot m - n)`,
+$`(\Downarrow v : D \cdot m) - n = (\Downarrow v : D \cdot m - n)`,
+$`n \geq 0 \Rightarrow n \times (\Uparrow v : D \cdot m) = (\Uparrow v : D \cdot n \times m)`,
+$`n \geq 0 \Rightarrow n \times (\Downarrow v : D \cdot m) = (\Downarrow v : D \cdot n \times m)`,
+$`n \leq 0 \Rightarrow n \times (\Uparrow v : D \cdot m) = (\Downarrow v : D \cdot n \times m)`,
+$`n \leq 0 \Rightarrow n \times (\Downarrow v : D \cdot m) = (\Uparrow v : D \cdot n \times m)`,
+$`n \times (\Sigma v : D \cdot m) = (\Sigma v : D \cdot n \times m)`,
+$`(\Pi v : D \cdot m)^n = (\Pi v : D \cdot m^n)`." And the Extreme laws for the reals:
+"$`(\Downarrow n : \mathit{real} \cdot n) = -\infty`, $`(\Uparrow n : \mathit{real} \cdot n) = \infty`" (the integer
+versions are in {uses "quantifier_laws_numeric"}[]).
+
+Model notes. $`\Uparrow`, $`\Downarrow` are the suprema and infima of
+{uses "quantifier_numeric"}[] in the extended reals of {uses "number_domain"}[],
+and $`\uparrow`, $`\downarrow` are the lattice `⊔`, `⊓`. The four lattice laws hold in the
+complete linear order ($`D \neq \mathit{null}` is needed for $`n \uparrow \Uparrow` and $`n \downarrow \Downarrow`,
+as the book says; the two mixed ones hold unconditionally). The ten arithmetic
+laws are proved from a single principle — a monotone (antitone) operation that
+is continuous on the extended reals commutes with $`\Uparrow` and $`\Downarrow` (turns them
+into each other) over a nonempty domain — applied to $`n + \cdot`, $`n - \cdot`,
+$`\cdot - n` and $`n \times \cdot`, for a *finite* $`n`: the book's $`n` ranges over all its
+numbers, but $`\infty + (\Uparrow v : D \cdot m)` with $`\Uparrow v : D \cdot m = -\infty` is $`\infty + -\infty`,
+which the book's number theory leaves undetermined, so finiteness of $`n` is the
+honest side condition (the case $`n = 0` of the $`\times` laws is handled separately,
+since $`0 \times \pm\infty = 0` is not continuous). $`n \times \Sigma` is proved for finite $`D` and
+$`0 \leq n < \infty` (multiplication by such an $`n` is additive on the extended reals,
+`mulLeftHom`), and $`(\Pi)^n` for finite $`D` and natural $`n` — the domains for which
+{uses "quantifier_numeric_axioms"}[] define $`\Sigma` and $`\Pi`.
 :::
 
 :::theorem "quantifier_laws_logical" (parent := "function_theory_core") (tags := "function, quantifier, hehner-11.3.8") (effort := "small") (lean := "LaPToP.FunctionTheory.Fn.all_lam, LaPToP.FunctionTheory.Fn.ex_lam, LaPToP.FunctionTheory.Fn.all_top, LaPToP.FunctionTheory.Fn.not_ex_bot, LaPToP.FunctionTheory.Fn.all_const, LaPToP.FunctionTheory.Fn.ex_const, LaPToP.FunctionTheory.Fn.not_all, LaPToP.FunctionTheory.Fn.not_ex, LaPToP.FunctionTheory.Fn.and_all, LaPToP.FunctionTheory.Fn.and_ex, LaPToP.FunctionTheory.Fn.or_all, LaPToP.FunctionTheory.Fn.or_ex, LaPToP.FunctionTheory.Fn.imp_all, LaPToP.FunctionTheory.Fn.imp_ex, LaPToP.FunctionTheory.Fn.ex_imp, LaPToP.FunctionTheory.Fn.all_imp, LaPToP.FunctionTheory.Fn.apply_and_ex, LaPToP.FunctionTheory.Fn.apply_or_all, LaPToP.FunctionTheory.Fn.apply_and_all, LaPToP.FunctionTheory.Fn.apply_or_ex, LaPToP.FunctionTheory.Fn.all_and, LaPToP.FunctionTheory.Fn.ex_and, LaPToP.FunctionTheory.Fn.all_or, LaPToP.FunctionTheory.Fn.ex_or, LaPToP.FunctionTheory.Fn.all_imp_all, LaPToP.FunctionTheory.Fn.all_imp_ex, LaPToP.FunctionTheory.Fn.all_beq_all, LaPToP.FunctionTheory.Fn.all_beq_ex, LaPToP.FunctionTheory.Fn.forall_forall_comm, LaPToP.FunctionTheory.Fn.exists_exists_comm, LaPToP.FunctionTheory.Fn.exists_forall_imp, LaPToP.FunctionTheory.Fn.forall_exists_iff_exists_fun, LaPToP.FunctionTheory.Fn.all_image, LaPToP.FunctionTheory.Fn.ex_image")
