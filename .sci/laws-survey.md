@@ -207,9 +207,10 @@ definition itself. Counts: total / covered / missing per table at the end.
 - ok, x:= e, P. Q, if — `ok` (def), `assign`/`assign_iff`, `seq` (def), `cond`/`cond_eq_or`/`cond_eq_and`
 - P||Q with time (∃tP, tQ· … t′ = tP↑tQ) — `parT` (def; `parT_finish`)
 - new x: T· P = ∃x, x′: T· P; frame x· P — `newVar` (def, `Scope`), `frame` (def)
-- while b do P od = t′≥t ∧ if … (fixed-point equation) and the while proof rule — `WhileRefines`,
-  `whileRefines_iff`, `whileRefines_iff_cases` (the loop is modelled by its proof rule; the equation as
-  a definition — recorded in `while_loop`)
+- while b do P od = t′≥t ∧ if … (fixed-point equation) and the while proof rule — the §5.2.0 proof-rule
+  reading is `WhileRefines`/`whileRefines_iff`/`whileRefines_iff_cases` (`PT.WhileLoop`); the equation itself
+  and the proof rule as axioms are `LoopDefinition.WhileAxioms`, `WhileAxioms.fixedPoint`,
+  `WhileAxioms.fixedPoint_induction` (`LaPToP.RecursiveDefinition.Programs`, §6.1.1)
 - for-loop proof rules (F m ⇐ for … with F i ⇐ i: m,..n ∧ (P. F(i+1)), F n ⇐ ok; invariant form) —
   `ForRefines.step`, `ForRefines.exit`, `forRefines_invariant`
 - wait until w = t:= t↑w — `waitUntil` (def, `TimeDependence`); assert, ensure — `assert`, `ensure` (defs)

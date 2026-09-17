@@ -103,7 +103,9 @@ $`W \Leftarrow b \land (P.\ W)` together with $`W \Leftarrow \neg b \land \mathi
 be refined in place; and a loop whose condition never holds is $`\mathit{ok}`. The
 least-fixed-point account of loops and the reference-section law
 $`\mathbf{while}\ b\ \mathbf{do}\ P\ \mathbf{od} = t' \ge t \land \mathbf{if}\ b\ \mathbf{then}\ P.\ t := t+1.\ \mathbf{while} \ldots\ \mathbf{else}\ \mathit{ok}`
-belong to Section 6.1.1 and are not formalized here. Uses
+belong to Section 6.1.1 and are formalized in the `loop_definition` node of the
+Recursion and Concurrency chapter (which builds on this one), where the two
+accounts are also compared. Uses
 {uses "specification_notations"}[] and {uses "refinement_by_steps_parts_cases"}[].
 :::
 
@@ -381,9 +383,10 @@ the book calculates them — the second uses $`t < w \Rightarrow t+1 \le w` in $
 and the {uses "substitution_law"}[] — and combined by
 {uses "refinement_by_steps_parts_cases"}[]; it is also stated as the
 {uses "while_loop"}[] $`\mathbf{while}\ t < w\ \mathbf{do}\ t := t+1\ \mathbf{od}`. Not formalized:
-the real-time variant (Exercise 333(b)), and the space variable, since space
-(Section 4.3) is not modelled in this development. Uses {uses "time_variable"}[]
-and {uses "recursive_time"}[].
+the real-time variant (Exercise 333(b)) and the space-dependence analogue of
+this section (the space variable itself is modelled in the `space` node of the
+Program Theory chapter, Section 4.3). Uses {uses "time_variable"}[] and
+{uses "recursive_time"}[].
 :::
 
 :::definition "assertions" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Assertions.AT, LaPToP.ProgramTheory.Assertions.assignX, LaPToP.ProgramTheory.Assertions.assignY, LaPToP.ProgramTheory.Assertions.assignX_seq, LaPToP.ProgramTheory.Assertions.assert, LaPToP.ProgramTheory.Assertions.assert_of_holds, LaPToP.ProgramTheory.Assertions.assert_of_not, LaPToP.ProgramTheory.Assertions.assert_true, LaPToP.ProgramTheory.Assertions.assert_refines_ensure, LaPToP.ProgramTheory.Assertions.implementable_assert, LaPToP.ProgramTheory.Assertions.implementable_assert', LaPToP.ProgramTheory.Assertions.assert_seq_of_not, LaPToP.ProgramTheory.Assertions.assert_seq_of_holds")
