@@ -31,8 +31,9 @@ proved (it says nothing about termination: the specification `n′=1` is what
 the recursive call is assumed to establish). The book's time function is
 characterized by its three equations, `IsCollatzTime f`, with values in
 `xnat` so that `∞` is allowed; for any such `f` the timing refinement is
-proved. Nothing is claimed about finiteness — that is the Collatz conjecture,
-which the Blueprint's demo chapter keeps as its intentionally open node.
+proved. Nothing is claimed about finiteness — that is the open Collatz
+conjecture (not a Blueprint node; see `MISSING.md` and exercise stub
+`LaPToP.Exercises.Ch4.exercise_255`).
 -/
 
 namespace LaPToP.ProgramTheory

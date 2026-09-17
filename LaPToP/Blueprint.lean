@@ -39,9 +39,10 @@ multi-dimensional lists).
 Every node quotes the book and points at sorry-free Lean declarations; where
 the model departs from the book, adds a side condition, or corrects the book's
 argument, the node prose and the module docstrings say so — nothing is
-asserted that is not proved. A separate Collatz-style chapter is
-intentionally unfinished so the generated graph and summary show an
-in-progress goal.
+asserted that is not proved. Chapter 10 exercise *statements* live as deferred
+stubs in `LaPToP/Exercises/` (signatures with `sorry` only; not Blueprint nodes).
+Gaps that are not formalized on purpose are listed in `MISSING.md`. The Collatz
+chapter records the proved Exercise 255 timing development only.
 
 {include 0 LaPToP.Chapters.Prelude}
 {include 0 LaPToP.Chapters.BasicTheories}
