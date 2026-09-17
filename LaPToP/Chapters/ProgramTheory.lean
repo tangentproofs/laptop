@@ -9,6 +9,7 @@ import LaPToP.ProgramTheory.Search
 import LaPToP.ProgramTheory.FastExp
 import LaPToP.ProgramTheory.Fibonacci
 import LaPToP.ProgramTheory.OldTheory
+import LaPToP.ProgramTheory.AssertionLaws
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -24,7 +25,8 @@ Sections 4.0–4.4 of the book are formalized in the Lean modules
 `LaPToP.ProgramTheory.Time` (Section 4.2) and `LaPToP.ProgramTheory.Space`
 (Section 4.3, the Towers of Hanoi); the old terminology of Section 4.4
 (preconditions, postconditions, invariants, variants) in
-`LaPToP.ProgramTheory.OldTheory`.
+`LaPToP.ProgramTheory.OldTheory`, and the assertion laws of the Reference
+chapter (§11.3.12) in `LaPToP.ProgramTheory.AssertionLaws`.
 
 Section 4.2.3 (Soundness and Completeness) is not formalized. It makes two
 meta-statements about the theory: soundness — if P is implementable and the
@@ -634,4 +636,32 @@ $`S` gives the time bound $`t' \leq t + v` (refined by the loop body with the bo
 the recursive call). The remark that variants cannot prove nontermination, the
 remaining uses of {uses "assertions"}[] and of invariants in {uses "for_loop"}[],
 are prose.
+:::
+
+:::theorem "assertion_laws" (parent := "program_theory_core") (tags := "programs, assertions, laws, hehner-11.3.12") (effort := "small") (lean := "LaPToP.ProgramTheory.Spec.pre, LaPToP.ProgramTheory.Spec.post, LaPToP.ProgramTheory.Spec.pre_and_seq, LaPToP.ProgramTheory.Spec.pre_imp_seq_refines, LaPToP.ProgramTheory.Spec.seq_and_post, LaPToP.ProgramTheory.Spec.seq_post_imp_refines, LaPToP.ProgramTheory.Spec.seq_pre_and, LaPToP.ProgramTheory.Spec.seq_refines_and_post_imp, LaPToP.ProgramTheory.Spec.sufficientPre_iff, LaPToP.ProgramTheory.Spec.sufficientPost_iff, LaPToP.ProgramTheory.Spec.seq_cond_eq_or, LaPToP.ProgramTheory.Spec.det, LaPToP.ProgramTheory.Spec.det_seq, LaPToP.ProgramTheory.Spec.det_seq_cond")
+The Assertions table of the Reference chapter (Section 11.3.12): "Let $`P` and
+$`Q` be specifications. Let $`A` be an assertion and let $`A'` be the same as $`A` but
+with primes on all the variables. $`A \land (P.\ Q) = A \land P.\ Q`;
+$`A \Rightarrow (P.Q) \Leftarrow A \Rightarrow P.\ Q`; $`(P.Q) \land A' = P.\ Q \land A'`;
+$`(P.Q) \Leftarrow A' \Leftarrow P.\ Q \Leftarrow A'`; $`P.\ A \land Q = P \land A'.\ Q`;
+$`P.\ Q \Leftarrow P \land A'.\ A \Rightarrow Q`. $`A` is a sufficient precondition for $`P` to
+be refined by $`S` if and only if $`A \Rightarrow P` is refined by $`S`. $`A` is a sufficient
+postcondition for $`P` to be refined by $`S` if and only if $`A' \Rightarrow P` is refined by
+$`S`." And from Section 11.3.10 the last distributivity law of
+{uses "sequential_composition"}[]:
+"$`P.\ \mathbf{if}\ b\ \mathbf{then}\ Q\ \mathbf{else}\ R = \mathbf{if}\ P.\ b\ \mathbf{then}\ P.\ Q\ \mathbf{else}\ P.\ R` distributivity
+(unprimed $`b`)".
+
+Model notes. An assertion is a predicate on states; `pre A` reads it on the
+prestate and `post A` ($`A'`) on the poststate. The six laws are equalities and
+refinements of specifications, proved by unfolding sequential composition (the
+assertion on the intermediate state moves across the dot). The two "sufficient"
+characterizations connect the {uses "old_program_theory"}[] definitions with
+refinement ({uses "specification_laws"}[]). For the distributivity law, $`P.\ b`
+with $`b` a binary expression of the intermediate state is not itself a
+specification: the law is proved for deterministic $`P` (`det e`, covering the
+assignments of {uses "assertions"}[]' examples), where $`P.\ b` is $`b` at the unique
+intermediate state, and in general in the form
+$`P.\ \mathbf{if}\ b\ \mathbf{then}\ Q\ \mathbf{else}\ R = (P \land b'.\ Q) \lor (P \land \lnot b'.\ R)`, which is
+its content when the intermediate state is nondeterministic.
 :::

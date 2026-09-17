@@ -4,6 +4,7 @@ import VersoBlueprint
 import LaPToP.FunctionTheory.Functions
 import LaPToP.FunctionTheory.Quantifiers
 import LaPToP.FunctionTheory.FinePoints
+import LaPToP.FunctionTheory.HigherOrder
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -52,12 +53,15 @@ All definitional: substitution is β-reduction and Extension is structure eta,
 so every axiom is `rfl`.
 :::
 
-:::definition "selective_union" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn.orElse, LaPToP.FunctionTheory.Fn.domain_orElse, LaPToP.FunctionTheory.Fn.apply_orElse, LaPToP.FunctionTheory.Fn.apply_orElse_left, LaPToP.FunctionTheory.Fn.apply_orElse_right")
+:::definition "selective_union" (parent := "function_theory_core") (lean := "LaPToP.FunctionTheory.Fn.orElse, LaPToP.FunctionTheory.Fn.domain_orElse, LaPToP.FunctionTheory.Fn.apply_orElse, LaPToP.FunctionTheory.Fn.apply_orElse_left, LaPToP.FunctionTheory.Fn.apply_orElse_right, LaPToP.FunctionTheory.Fn.orElse_self, LaPToP.FunctionTheory.Fn.orElse_assoc, LaPToP.FunctionTheory.Fn.orElse_comp")
 $`f \mid g`, "$`f` otherwise $`g`", "behaves like $`f` when applied to an
 argument in the domain of $`f`, and otherwise behaves like $`g`". Its axioms are
 $`\square(f \mid g) = \square f, \square g` and
 $`(f \mid g)\,x = \mathbf{if}\ x : \square f\ \mathbf{then}\ f\,x\ \mathbf{else}\ g\,x`,
-with the two cases spelled out as corollaries. Uses {uses "function_notation"}[]
+with the two cases spelled out as corollaries. The Reference chapter's laws
+$`f \mid f = f`, $`f \mid (g \mid h) = (f \mid g) \mid h` and $`(g \mid h)\,f = g\,f \mid h\,f`
+(§11.3.7) are `orElse_self`, `orElse_assoc` and `orElse_comp` (the last in the
+higher-order module, with composition). Uses {uses "function_notation"}[]
 and {uses "bunch_axioms_membership"}[].
 :::
 

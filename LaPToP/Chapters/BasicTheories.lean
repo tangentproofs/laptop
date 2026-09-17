@@ -120,7 +120,7 @@ Uses {uses "bunch_primitives"}[] and {uses "bunch_axioms_size"}[].
 $`\mathit{null}` is the empty set; all five are standard `Set` and `encard` facts.
 :::
 
-:::theorem "bunch_derived_laws" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.union_inter_self, LaPToP.BasicTheories.Bunch.inter_union_self, LaPToP.BasicTheories.Bunch.union_subset_union_right, LaPToP.BasicTheories.Bunch.inter_subset_inter_right, LaPToP.BasicTheories.Bunch.subset_iff_union_eq, LaPToP.BasicTheories.Bunch.union_eq_iff_inter_eq, LaPToP.BasicTheories.Bunch.union_union_distrib, LaPToP.BasicTheories.Bunch.inter_inter_distrib, LaPToP.BasicTheories.Bunch.union_subset_union, LaPToP.BasicTheories.Bunch.inter_subset_inter")
+:::theorem "bunch_derived_laws" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.union_inter_self, LaPToP.BasicTheories.Bunch.inter_union_self, LaPToP.BasicTheories.Bunch.union_subset_union_right, LaPToP.BasicTheories.Bunch.inter_subset_inter_right, LaPToP.BasicTheories.Bunch.subset_iff_union_eq, LaPToP.BasicTheories.Bunch.union_eq_iff_inter_eq, LaPToP.BasicTheories.Bunch.union_union_distrib, LaPToP.BasicTheories.Bunch.inter_inter_distrib, LaPToP.BasicTheories.Bunch.union_subset_union, LaPToP.BasicTheories.Bunch.inter_subset_inter, LaPToP.BasicTheories.Bunch.union_remove")
 Laws Hehner lists as provable from the axioms:
 $`A, (A \mathbin{\lq} B) = A` and $`A \mathbin{\lq} (A, B) = A` (absorption);
 $`A : B \Rightarrow C, A : C, B` and $`A : B \Rightarrow C \mathbin{\lq} A : C \mathbin{\lq} B` (monotonicity);
@@ -129,6 +129,8 @@ $`A, (B, C) = (A, B), (A, C)` and $`A \mathbin{\lq} (B \mathbin{\lq} C) = (A \ma
 $`A : B \land C : D \Rightarrow A, C : B, D` and
 $`A : B \land C : D \Rightarrow A \mathbin{\lq} C : B \mathbin{\lq} D` (conflation).
 Uses {uses "bunch_axioms_algebra"}[] and {uses "bunch_axioms_inclusion"}[].
+The third union-removal law of the Reference chapter (§11.3.3),
+$`(A, B) -, C = A -, C,\ B -, C`, is `union_remove`.
 :::
 
 :::proof "bunch_derived_laws"
@@ -148,13 +150,14 @@ $`\mathit{xnat}` and $`\mathit{xint}` are bunches of `XInt`; `toXInt` embeds
 $`\mathit{int}` into them. Builds on {uses "bunch_primitives"}[].
 :::
 
-:::theorem "bunch_named_bunch_laws" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.bin_eq, LaPToP.BasicTheories.Bunch.int_eq, LaPToP.BasicTheories.Bunch.xnat_eq, LaPToP.BasicTheories.Bunch.xint_eq")
+:::theorem "bunch_named_bunch_laws" (parent := "basic_theories_core") (tags := "basic, bunch, hehner-2.0") (effort := "small") (lean := "LaPToP.BasicTheories.Bunch.bin_eq, LaPToP.BasicTheories.Bunch.int_eq, LaPToP.BasicTheories.Bunch.xnat_eq, LaPToP.BasicTheories.Bunch.xint_eq, LaPToP.BasicTheories.Bunch.size_nat")
 The book's defining equations for the named bunches:
 $`\mathit{bin} = \top, \bot`, $`\mathit{int} = \mathit{nat}, -\mathit{nat}`,
 $`\mathit{xnat} = \mathit{nat}, \infty`, $`\mathit{xint} = -\infty, \mathit{int}, \infty`.
 Here $`-\mathit{nat}` is pointwise negation (see {uses "bunch_operator_distribution"}[]),
 and the extended equations go through the embedding of
 {uses "bunch_named_bunches"}[].
+The size law $`{\rm c\llap{/}}\mathit{nat} = \infty` of the Reference chapter (§11.3.3) is `size_nat`.
 :::
 
 :::proof "bunch_named_bunch_laws"

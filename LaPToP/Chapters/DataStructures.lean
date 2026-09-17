@@ -152,7 +152,7 @@ structure around a `Str α`, exactly as `HSet` packages a bunch in
 {uses "string_syntax"}[].
 :::
 
-:::theorem "list_axioms" (parent := "data_structures_core") (tags := "data, lists, hehner-2.3") (effort := "small") (lean := "LaPToP.DataStructures.HList.pack_contents, LaPToP.DataStructures.HList.contents_pack, LaPToP.DataStructures.HList.length_pack, LaPToP.DataStructures.HList.domain_eq, LaPToP.DataStructures.HList.image_domain, LaPToP.DataStructures.HList.pack_join_pack, LaPToP.DataStructures.HList.at_pack, LaPToP.DataStructures.HList.pack_comp_pack, LaPToP.DataStructures.HList.modify_pack, LaPToP.DataStructures.HList.pack_inj, LaPToP.DataStructures.HList.pack_lt_pack, LaPToP.DataStructures.HList.image_pack_subset_image_pack, LaPToP.DataStructures.Str.pack_injective, LaPToP.DataStructures.HList.contents_example, LaPToP.DataStructures.HList.length_example, LaPToP.DataStructures.HList.at_example, LaPToP.DataStructures.HList.comp_example, LaPToP.DataStructures.HList.join_example, LaPToP.DataStructures.HList.modify_example, LaPToP.DataStructures.HList.modify_modify_example, LaPToP.DataStructures.HList.modify_swap_example")
+:::theorem "list_axioms" (parent := "data_structures_core") (tags := "data, lists, hehner-2.3") (effort := "small") (lean := "LaPToP.DataStructures.HList.pack_contents, LaPToP.DataStructures.HList.contents_pack, LaPToP.DataStructures.HList.length_pack, LaPToP.DataStructures.HList.domain_eq, LaPToP.DataStructures.HList.image_domain, LaPToP.DataStructures.HList.pack_join_pack, LaPToP.DataStructures.HList.at_pack, LaPToP.DataStructures.HList.pack_comp_pack, LaPToP.DataStructures.HList.modify_pack, LaPToP.DataStructures.HList.pack_inj, LaPToP.DataStructures.HList.pack_lt_pack, LaPToP.DataStructures.HList.image_pack_subset_image_pack, LaPToP.DataStructures.Str.pack_injective, LaPToP.DataStructures.HList.contents_example, LaPToP.DataStructures.HList.length_example, LaPToP.DataStructures.HList.at_example, LaPToP.DataStructures.HList.comp_example, LaPToP.DataStructures.HList.join_example, LaPToP.DataStructures.HList.modify_example, LaPToP.DataStructures.HList.modify_modify_example, LaPToP.DataStructures.HList.modify_swap_example, LaPToP.DataStructures.HList.length_eq_size_domain")
 Hehner's List Theory axioms, for lists $`L`, strings $`S, T`, an index $`n` of
 $`S`, an item $`i`, and bunches of strings $`A, B`:
 $`[\sim L] = L` (list formation), $`\sim[S] = S` (contents),
@@ -169,6 +169,7 @@ records. The book's worked examples ($`\sim[3;5;7;4]`, $`\#[3;5;7;4]`,
 $`[3;5;7;4]\,2`, $`[3;5;7;4]\,[2;1;2]`, $`[3;5;7;4];;[2;1;2]`,
 $`2 \to 22 \mid [10;..15]`, and the item swap) are checked by evaluation.
 Uses {uses "list_packaging"}[] and {uses "string_axioms_indexing"}[].
+The Reference chapter's $`\#L = {\rm c\llap{/}}\square L` (§11.3.6) is `length_eq_size_domain`.
 :::
 
 :::proof "list_axioms"

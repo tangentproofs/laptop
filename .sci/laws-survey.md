@@ -1,4 +1,4 @@
-# aPToP §11.3 Laws — survey of Lean coverage (2026-09-17)
+# aPToP §11.3 Laws — survey of Lean coverage (2026-09-17; updated after the Assertions batch)
 
 One line per law of the Reference chapter (pp. 235–244): the Lean theorem stating it (module in
 parentheses; `B.` = `LaPToP.BasicTheories`, `DS.` = `LaPToP.DataStructures`, `FT.` = `LaPToP.FunctionTheory`,
@@ -77,12 +77,12 @@ definition itself. Counts: total / covered / missing per table at the end.
   `subset_refl`, `subset_antisymm_iff`, `subset_trans`, `superset_iff`
 - Size: ¢null = 0, ¢x = 1, ¢(A,B)+¢(A‘B) = ¢A+¢B, ¬x:A = ¢(A‘x)=0, A:B ⇒ ¢A≤¢B, ¢A=0 = A=null — `size_null`,
   `size_elem`, `size_union_add_size_inter`, `not_mem_iff_size_inter_elem`, `size_le_size`, `size_eq_zero_iff`;
-  ¢nat = ∞ — **MISSING** (`Bunch.nat` is `Set.univ`-like; `encard` of ℕ is ⊤: easy)
+  ¢nat = ∞ — `size_nat` (`B.Numbers`, added 2026-09-17)
 - Absorption ×2, Inclusion ×2, Distributivity ×4 — `union_inter_self`, `inter_union_self`,
   `subset_iff_union_eq`, `union_eq_iff_inter_eq`, `union_union_distrib`, `union_inter_distrib`,
   `inter_union_distrib`, `inter_inter_distrib`
 - Union Removal ×2, Intersection Removal — `remove_union`, `remove_remove`, `inter_remove`,
-  `inter_remove_comm` (the form `(A, B)–, C = A–, C , B–, C` — **MISSING**)
+  `inter_remove_comm`, `(A, B)–, C = A–, C , B–, C` — `union_remove` (added 2026-09-17)
 - Conflation/Monotonicity ×2 — `union_subset_union`, `inter_subset_inter`
 - Induction null: A, Identity, Base — `null_subset`, `union_null`, `inter_null` (the symmetric forms
   `null, A = A`, `null‘A = null` follow by `union_comm`/`inter_comm`; not separately stated)
@@ -121,7 +121,7 @@ definition itself. Counts: total / covered / missing per table at the end.
 - [S]⧧S (type distinction, not statable), [~L] = L, [S];;[T] = [S;T], [S]=[T] = S=T, [S]<[T] = S<T,
   #[S] = ↔S — `pack_contents`/`contents_pack`, `pack_join_pack`, `pack_inj`, `pack_lt_pack`, `length_pack`
 - [A]: [B] = A: B (bunches of lists) — `image_pack_subset_image_pack`
-- ☐L = 0,..#L — `domain_eq`/`image_domain`; #L = ¢☐L — **MISSING** (easy: `encard (Iio n) = n`)
+- ☐L = 0,..#L — `domain_eq`/`image_domain`; #L = ¢☐L — `length_eq_size_domain` (added 2026-09-17)
 - nil→i | L = i, n→i | [S] = [S⊲n⊳i], (n→i | L) m = if n=m then i else L m — `modify_pack`,
   `at_modify_self`, `at_modify_ne` (the `nil→i | L` string-indexed form and the (S;T)→i | L law — **MISSING**;
   multi-dimensional modification not modelled)
@@ -133,7 +133,7 @@ definition itself. Counts: total / covered / missing per table at the end.
 - Renaming — `renaming_axiom`; Application — `apply_lam`; Domain ☐⟨v: D· b⟩ = D — `domain_lam`
 - Function Composition ☐(g f), (g f) x = g (f x) — `comp_domain`, `comp_apply`
 - Selective Union ☐(f|g), (f|g)x, f|f = f, f|(g|h) = (f|g)|h, (g|h) f = g f | h f — `domain_orElse`,
-  `apply_orElse`; the last three — **MISSING**
+  `apply_orElse`, `orElse_self`, `orElse_assoc`, `orElse_comp` (`FT.HigherOrder`, added 2026-09-17)
 - Function Union/Intersection (f, g) — `applyFns_union`/`applyFns_elem` (bunches of functions applied);
   ☐(f,g) = ☐f‘☐g and (f‘g) — **MISSING** (function bunches as functions not modelled)
 - Distributive f null = null, f (A,B) = f A, f B, f (§g), f if b then x else y, (if b then f else g) x —
@@ -202,8 +202,9 @@ definition itself. Counts: total / covered / missing per table at the end.
 - c?, c, c! e, √c, new x: time→T· S, new c?! T· S — `Channel.input`, `Channel.lastRead`, `Channel.output`,
   `Channel.check`, interactive variable declaration (`InteractiveVariables`), `newChannel` (defs)
 - P. ok = P = ok. P, associativity, ∨-distributivity, if-distributivity ×2 — `seq_ok`, `ok_seq`,
-  `seq_assoc`, `or_seq_or`, `cond_seq`; `P. if b then Q else R = if P. b then P. Q else P. R` — **MISSING**
-  (needs `P. b` as a spec-applied binary expression; the deterministic case is the Substitution Law)
+  `seq_assoc`, `or_seq_or`, `cond_seq`; `P. if b then Q else R = if P. b then P. Q else P. R` — `det_seq_cond`
+  (deterministic `P`) and `seq_cond_eq_or` (general form, the case split on the intermediate state) in
+  `PT.AssertionLaws` (added 2026-09-17)
 - P||Q = Q||P, associativity, ∨-distributivity, if-distributivity ×2 — `par_comm`, `par_assoc`, `par_or`,
   `par_cond`, `cond_par` (with the product-state relabelling recorded in `concurrent_composition_laws`)
 - functional-imperative x:= if b then e else f = if b then x:= e else x:= f — `assign_ite`
@@ -212,13 +213,12 @@ definition itself. Counts: total / covered / missing per table at the end.
 - x:= e. S = (substitute e for x in S) — `assign_seq`
 - (x:= e || y:= f). S = (substitute concurrently) — `par_assignF_seq`, `parWith_assignF_seq`
 
-## 11.3.12 Assertions — **MISSING** (the six laws)
-- A ∧ (P. Q) = A∧P. Q; A ⇒ (P.Q) ⇐ A⇒P. Q; (P.Q) ∧ A′ = P. Q∧A′; (P.Q) ⇐ A′ ⇐ P. Q⇐A′; P. A∧Q = P∧A′. Q;
-  P. Q ⇐ P∧A′. A⇒Q — all six **MISSING** (easy `Spec.ext` proofs; A a prestate assertion, A′ its
-  poststate form)
-- A is a sufficient precondition for P ⇐ S iff A⇒P ⇐ S; sufficient postcondition iff A′⇒P ⇐ S — via
-  `PT.OldTheory.SufficientPre`/`SufficientPost` — the iff with `Refines (fun s s' => A s → P s s') S` — **MISSING**
-  (immediate from the definitions; add)
+## 11.3.12 Assertions — `PT.AssertionLaws` (added 2026-09-17)
+- A ∧ (P. Q) = A∧P. Q — `pre_and_seq`; A ⇒ (P.Q) ⇐ A⇒P. Q — `pre_imp_seq_refines`; (P.Q) ∧ A′ = P. Q∧A′ —
+  `seq_and_post`; (P.Q) ⇐ A′ ⇐ P. Q⇐A′ — `seq_post_imp_refines`; P. A∧Q = P∧A′. Q — `seq_pre_and`;
+  P. Q ⇐ P∧A′. A⇒Q — `seq_refines_and_post_imp`
+- A is a sufficient precondition for P ⇐ S iff A⇒P ⇐ S — `sufficientPre_iff`; sufficient postcondition iff
+  A′⇒P ⇐ S — `sufficientPost_iff`
 
 ## 11.3.13 Refinement — `PT.Programs`, `C.Composition`
 - Refinement by Steps ×4 — `steps_cond`, `steps_seq`, `steps_par`, `steps_trans`
@@ -231,17 +231,17 @@ definition itself. Counts: total / covered / missing per table at the end.
 | 11.3.0 Generic | 46 | 46 (new) | 0 |
 | 11.3.1 Binary | ~110 | ~110 | 0 |
 | 11.3.2 Numbers | 61 | 51 | 10 (Counting) |
-| 11.3.3 Bunches | 52 | 44 | 8 |
+| 11.3.3 Bunches | 52 | 46 | 6 |
 | 11.3.4 Sets | 11 | 9 | 2 |
 | 11.3.5 Strings | 24 | 17 | 7 |
-| 11.3.6 Lists | 21 | 12 | 9 |
-| 11.3.7 Functions | 26 | 19 | 7 |
+| 11.3.6 Lists | 21 | 13 | 8 |
+| 11.3.7 Functions | 26 | 22 | 4 |
 | 11.3.8 Quantifiers | ~100 | ~86 | 14 (Distributive ⇑⇓, real Extreme) |
 | 11.3.9 Limits | 3 | 0 | 3 |
-| 11.3.10 Specs and Programs | 31 | 30 | 1 |
+| 11.3.10 Specs and Programs | 31 | 31 | 0 |
 | 11.3.11 Substitution | 2 | 2 | 0 |
-| 11.3.12 Assertions | 8 | 0 | 8 |
+| 11.3.12 Assertions | 8 | 8 | 0 |
 | 11.3.13 Refinement | 9 | 9 | 0 |
 
-Next batches (in order of value): 11.3.12 Assertions (8 easy laws) + the `P. if` distributivity; 11.3.8
-Distributive ⇑⇓ laws; 11.3.9 Limits (needs a `LIM` model); the small Bunch/Set/List/String gaps.
+Next batches (in order of value): 11.3.9 Limits (§3.4 Limits and Reals, needs a `⇕` model); 11.3.8 Distributive
+⇑⇓ laws; the remaining small Bunch/Set/List/String/Function gaps.
