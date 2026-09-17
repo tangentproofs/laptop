@@ -11,8 +11,10 @@ import LaPToP.ProgramTheory.TwoDimSearch
 import LaPToP.ProgramTheory.TimeDependence
 import LaPToP.ProgramTheory.Arrays
 import LaPToP.ProgramTheory.GoTo
+import LaPToP.ProgramTheory.Alias
 import LaPToP.ProgramTheory.Probabilistic
 import LaPToP.ProgramTheory.RandomNumbers
+import LaPToP.ProgramTheory.Information
 import LaPToP.ProgramTheory.Functional
 
 open Verso.Genre
@@ -35,8 +37,10 @@ order: variable declaration and suspension (Section 5.0) are formalized in
 `LaPToP.ProgramTheory.TimeDependence`; assertions and backtracking
 (Section 5.4) in `LaPToP.ProgramTheory.Assertions`; the value expression,
 functions and procedures (Section 5.5) in `LaPToP.ProgramTheory.Subprograms`;
-probabilistic programming (Section 5.7) in `LaPToP.ProgramTheory.Probabilistic`
-and random number generators (Section 5.7.0) in `LaPToP.ProgramTheory.RandomNumbers`;
+aliasing (Section 5.6) in `LaPToP.ProgramTheory.Alias`; probabilistic
+programming (Section 5.7) in `LaPToP.ProgramTheory.Probabilistic`, random
+number generators (Section 5.7.0) in `LaPToP.ProgramTheory.RandomNumbers` and
+information (Section 5.7.1) in `LaPToP.ProgramTheory.Information`;
 and functional programming with function refinement (Sections 5.8 and 5.8.0)
 in `LaPToP.ProgramTheory.Functional`.
 :::
@@ -482,6 +486,52 @@ $`a`. Uses {uses "function_notation"}[], {uses "variable_declaration"}[] and
 {uses "assertions"}[].
 :::
 
+:::definition "alias" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Alias.Memory, LaPToP.ProgramTheory.Alias.Memory.read, LaPToP.ProgramTheory.Alias.Memory.assign, LaPToP.ProgramTheory.Alias.Memory.retarget, LaPToP.ProgramTheory.Alias.Memory.Aliased, LaPToP.ProgramTheory.Alias.Memory.read_assign_self, LaPToP.ProgramTheory.Alias.Memory.read_assign_of_addr_ne, LaPToP.ProgramTheory.Alias.Memory.read_assign_alias, LaPToP.ProgramTheory.Alias.Memory.aliased_retarget, LaPToP.ProgramTheory.Alias.Memory.no_alias_iff_injective, LaPToP.ProgramTheory.Alias.Memory.read_assign_of_injective, LaPToP.ProgramTheory.Alias.assignSpec, LaPToP.ProgramTheory.Alias.readEq, LaPToP.ProgramTheory.Alias.twoNames, LaPToP.ProgramTheory.Alias.twoNames_aliased, LaPToP.ProgramTheory.Alias.assign_law_fails, LaPToP.ProgramTheory.Alias.substitution_law_fails, LaPToP.ProgramTheory.Alias.toMemory, LaPToP.ProgramTheory.Alias.toMemory_read, LaPToP.ProgramTheory.Alias.toMemory_assign, LaPToP.ProgramTheory.Alias.toMemory_not_aliased, LaPToP.ProgramTheory.Alias.alias_free_assign_law, LaPToP.ProgramTheory.Alias.alias_free_substitution_law")
+"Many popular programming languages present us with a model of computation in
+which there is a memory consisting of a large number of individual storage
+cells. Each cell contains a value. Via the programming language, cells have
+names. ... In the picture, $`p` is a pointer variable that currently points to
+array element $`A\,1`, and $`{*}p` is $`p` dereferenced; so $`{*}p` and $`A\,1` refer to the
+same memory cell. Since variable $`i` currently has value $`2`, $`A\,i` and $`A\,2` refer
+to the same cell. And $`r` is a variable parameter for which variable $`i` has been
+supplied as argument, so $`r` and $`i` refer to the same cell. We see that a cell
+may have zero, one, two, or more names. When a cell has two or more names that
+are visible at the same time, the names are said to be “aliases”. As we have
+seen with arrays, with value expressions, and with variable parameters,
+aliasing prevents us from applying our theory of programming; neither the
+definition of assignment nor the substitution law work. Chapter 4 introduced
+our computing model with the deterministic function $`\mathit{address}` that maps
+different names to different addresses, saying where each state variable is.
+But aliasing maps more than one name to an address, breaking the model. ... If
+we redraw our picture slightly, we see that there are two mappings: one from
+names to cells, and one from cells to values. An assignment such as
+$`p := (\mathit{address\ of}\ A\,3)` or $`i := 4` can change both mappings at once. An
+assignment to one name can change the value indirectly referred to by another
+name. To simplify the picture and eliminate the possibility of aliasing, we
+eliminate the cells and allow a richer space of values. ... Pointer variables
+can be replaced by index variables dedicated to one structure so that they can
+be implemented as addresses. Variable parameters are unnecessary if functions
+can return structured values. The simpler picture is perfectly adequate, and
+the problem of aliasing disappears."
+
+The two-mapping picture is `Memory Name Cell Val` (`addr`, `store`), with
+reading and assignment through a name, pointer assignment `retarget` (which
+creates an alias: after $`p := (\mathit{address\ of}\ a)`, $`{*}p` and $`a` are aliases),
+and `Aliased`. Proved: an assignment to one alias changes the value read
+through the other, so on a concrete memory with two names and one cell both
+the definition of assignment $`x := e = x' = e \land y' = y` of
+{uses "assignment_spec"}[] and the {uses "substitution_law"}[] fail
+(`assign_law_fails`, `substitution_law_fails`: $`x := 1.\ (y = 1)` is $`\top` there,
+not $`y = 1`). "Different names to different addresses" is `addr` injective,
+equivalent to the absence of aliases, and then the assignment law holds. The
+alias-free picture — "eliminate the cells", every name its own cell — is
+exactly the state of {uses "state_as_variables"}[] (`toMemory`), on which the
+Chapter 4 laws hold (`alias_free_assign_law`, `alias_free_substitution_law`).
+The "richer space of values" — a list variable with an index variable in place
+of a pointer, $`A\,i := e` as $`A := i \to e \mid A` — is the array model of
+{uses "data_structures"}[] and is not repeated.
+:::
+
 :::theorem "probabilistic_programming" (parent := "programming_language_core") (tags := "probability, distribution, hehner-5.7") (effort := "medium") (lean := "LaPToP.ProgramTheory.Probabilistic.Prob, LaPToP.ProgramTheory.Probabilistic.ind, LaPToP.ProgramTheory.Probabilistic.ind_true, LaPToP.ProgramTheory.Probabilistic.ind_false, LaPToP.ProgramTheory.Probabilistic.prob_ind, LaPToP.ProgramTheory.Probabilistic.ind_not, LaPToP.ProgramTheory.Probabilistic.ind_and, LaPToP.ProgramTheory.Probabilistic.ind_or, LaPToP.ProgramTheory.Probabilistic.PSpec, LaPToP.ProgramTheory.Probabilistic.ofSpec, LaPToP.ProgramTheory.Probabilistic.IsDistribution, LaPToP.ProgramTheory.Probabilistic.pcond, LaPToP.ProgramTheory.Probabilistic.pseq, LaPToP.ProgramTheory.Probabilistic.avg, LaPToP.ProgramTheory.Probabilistic.pseq_const_eq_avg, LaPToP.ProgramTheory.Probabilistic.isDistribution_ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.isDistribution_ofSpec_det, LaPToP.ProgramTheory.Probabilistic.tsum_succ_eq_one, LaPToP.ProgramTheory.Probabilistic.not_summable_succ, LaPToP.ProgramTheory.Probabilistic.geometric_distribution, LaPToP.ProgramTheory.Probabilistic.isDistribution_pcond, LaPToP.ProgramTheory.Probabilistic.pseq_eq_sum, LaPToP.ProgramTheory.Probabilistic.isDistribution_pseq, LaPToP.ProgramTheory.Probabilistic.pok, LaPToP.ProgramTheory.Probabilistic.passign, LaPToP.ProgramTheory.Probabilistic.assignX, LaPToP.ProgramTheory.Probabilistic.ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.ofSpec_assign, LaPToP.ProgramTheory.Probabilistic.ofSpec_cond, LaPToP.ProgramTheory.Probabilistic.passign_pseq, LaPToP.ProgramTheory.Probabilistic.ofSpec_assign_seq, LaPToP.ProgramTheory.Probabilistic.isDistribution_passign, LaPToP.ProgramTheory.Probabilistic.support_passign, LaPToP.ProgramTheory.Probabilistic.ex₁, LaPToP.ProgramTheory.Probabilistic.ex₁_eq, LaPToP.ProgramTheory.Probabilistic.ex₁_zero, LaPToP.ProgramTheory.Probabilistic.ex₁_one, LaPToP.ProgramTheory.Probabilistic.ex₁_two, LaPToP.ProgramTheory.Probabilistic.isDistribution_ex₁, LaPToP.ProgramTheory.Probabilistic.support_ex₁, LaPToP.ProgramTheory.Probabilistic.ex₂body, LaPToP.ProgramTheory.Probabilistic.ex₂, LaPToP.ProgramTheory.Probabilistic.ex₂_eq, LaPToP.ProgramTheory.Probabilistic.isDistribution_ex₂, LaPToP.ProgramTheory.Probabilistic.support_ex₂, LaPToP.ProgramTheory.Probabilistic.avg_ex₂_eq, LaPToP.ProgramTheory.Probabilistic.avg_ex₂_x, LaPToP.ProgramTheory.Probabilistic.prob_ex₂_gt_three")
 "Probability Theory has been developed using the arbitrary convention that a
 probability is a real number between $`0` and $`1` inclusive
@@ -617,6 +667,51 @@ and the hypothesis `tdist` is proved to be its fixed point (`diceBody_tdist`,
 the book's last three lines), a distribution of $`t'` (a shifted geometric
 series), with average $`t + 5` (`avg_tdist`, from $`\Sigma n \cdot n\,(5/6)^n = 30`). The
 blackjack Exercise 344 (pp. 88–89) is not formalized.
+:::
+
+:::theorem "information" (parent := "programming_language_core") (tags := "probability, information, entropy, hehner-5.7.1") (effort := "small") (lean := "LaPToP.ProgramTheory.Probabilistic.info, LaPToP.ProgramTheory.Probabilistic.entro, LaPToP.ProgramTheory.Probabilistic.prob_even_rand_eight, LaPToP.ProgramTheory.Probabilistic.prob_rand_eight_eq_five, LaPToP.ProgramTheory.Probabilistic.prob_rand_eight_lt_eight, LaPToP.ProgramTheory.Probabilistic.info_half, LaPToP.ProgramTheory.Probabilistic.info_eighth, LaPToP.ProgramTheory.Probabilistic.info_one, LaPToP.ProgramTheory.Probabilistic.info_seven_eighths, LaPToP.ProgramTheory.Probabilistic.info_seven_eighths_bounds, LaPToP.ProgramTheory.Probabilistic.entro_eq_binEntropy_div, LaPToP.ProgramTheory.Probabilistic.entro_half, LaPToP.ProgramTheory.Probabilistic.entro_symm, LaPToP.ProgramTheory.Probabilistic.entro_eighth_eq, LaPToP.ProgramTheory.Probabilistic.entro_eighth_bounds, LaPToP.ProgramTheory.Probabilistic.entro_le_one, LaPToP.ProgramTheory.Probabilistic.entro_eq_one_iff")
+"There is a close connection between information and probability. If a binary
+expression has probability $`p` of being true, and you evaluate it, and it turns
+out to be true, then the amount of information in bits that you have just
+learned is $`\mathit{info}\ p`, defined as $`\mathit{info}\ p = -\log p` where $`\log` is the binary
+(base $`2`) logarithm. For example, $`\mathit{even}\ (\mathit{rand}\ 8)` has probability $`1/2` of
+being true. If we evaluate it and find that it is true, we have just learned
+$`\mathit{info}\ (1/2) = -\log (1/2) = \log 2 = 1` bit of information; we have learned that
+the rightmost bit of the random number we were given is $`0`. ... If we test
+$`\mathit{rand}\ 8 = 5`, which has probability $`1/8` of being true, and we find that it is
+true, we learn $`\mathit{info}\ (1/8) = -\log (1/8) = \log 8 = 3` bits, which is the entire
+random number in binary. If we find that $`\mathit{rand}\ 8 = 5` is false, we learn
+$`\mathit{info}\ (7/8) = -\log (7/8) = \log 8 - \log 7 = 3 - 2.80736 = 0.19264` approximately
+bits; we learn that the random number isn't $`5`, but it could be any of $`7`
+others. Suppose we test $`\mathit{rand}\ 8 < 8`. Since it is certain to be true, there is
+really no point in making this test; we learn $`\mathit{info}\ 1 = -\log 1 = -0 = 0`. In
+$`\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ Q`, suppose $`b` has probability $`p` of being true.
+When it is true, we learn $`\mathit{info}\ p` bits, and this happens with probability $`p`.
+When it is false, we learn $`\mathit{info}\ (1-p)` bits, and this happens with probability
+$`(1-p)`. The average amount of information gained, called the entropy, is
+$`\mathit{entro}\ p = p \times \mathit{info}\ p + (1-p) \times \mathit{info}\ (1-p)`. For examples,
+$`\mathit{entro}\ (1/2) = 1`, and $`\mathit{entro}\ (1/8) = \mathit{entro}\ (7/8) = 0.54356` approximately.
+Since $`\mathit{entro}\ p` is at its maximum when $`p = 1/2`, we learn most on average, and
+make the most efficient use of the test, if its probability is near $`1/2`. For
+example, in the binary search problem of Subsection 4.2.5, we could have divided
+the remaining search interval anywhere, but for the best average execution
+time, we split it into two parts having equal probabilities of finding the item
+we seek. And in the fast exponentiation problem of Subsection 4.1.2, it is
+better on average to test $`\mathit{even}\ y` rather than $`y = 0` if we have a choice."
+
+Model notes. `info` is $`-\log_2` (`Real.logb 2`) and `entro` is its average as
+defined; `entro_eq_binEntropy_div` identifies it with Mathlib's binary entropy
+in nats divided by $`\log 2`. The three test probabilities are computed from the
+uniform distribution of {uses "random_number_generators"}[] on
+{uses "probabilistic_programming"}[]; $`\mathit{info}\ (1/2) = 1`, $`\mathit{info}\ (1/8) = 3`,
+$`\mathit{info}\ 1 = 0` and $`\mathit{info}\ (7/8) = \log 8 - \log 7` are exact, and the
+approximate values are proved as bounds $`0.19 < \mathit{info}\ (7/8) < 0.2` (from
+$`2^{19} < (8/7)^{100}` and $`(8/7)^5 < 2`) and $`0.54 < \mathit{entro}\ (1/8) < 0.55`;
+$`\mathit{entro}\ (1/2) = 1`, $`\mathit{entro}\ p = \mathit{entro}\ (1-p)`, and the maximum:
+$`\mathit{entro}\ p \leq 1` for every $`p`, with equality exactly at $`p = 1/2`
+(`Real.binEntropy_le_log_two`, `Real.binEntropy_eq_log_two`). The remarks on
+{uses "binary_search"}[] and {uses "fast_exponentiation"}[] are not
+formalized.
 :::
 
 :::theorem "functional_programming" (parent := "programming_language_core") (tags := "functional, refinement, hehner-5.8") (effort := "medium") (lean := "LaPToP.ProgramTheory.Functional.dom, LaPToP.ProgramTheory.Functional.sumFn, LaPToP.ProgramTheory.Functional.zero_mem_sumFn_dom, LaPToP.ProgramTheory.Functional.sum_eq, LaPToP.ProgramTheory.Functional.domain_split, LaPToP.ProgramTheory.Functional.orElse_lam_lam, LaPToP.ProgramTheory.Functional.sumFn_orElse, LaPToP.ProgramTheory.Functional.left_part, LaPToP.ProgramTheory.Functional.right_part, LaPToP.ProgramTheory.Functional.recursion, LaPToP.ProgramTheory.Functional.timeFn, LaPToP.ProgramTheory.Functional.len_eq, LaPToP.ProgramTheory.Functional.timeFn_orElse, LaPToP.ProgramTheory.Functional.time_left, LaPToP.ProgramTheory.Functional.time_right, LaPToP.ProgramTheory.Functional.time_recursion, LaPToP.ProgramTheory.Functional.time_recursive_measure, LaPToP.ProgramTheory.Functional.FSpec, LaPToP.ProgramTheory.Functional.Unsat, LaPToP.ProgramTheory.Functional.Sat, LaPToP.ProgramTheory.Functional.Det, LaPToP.ProgramTheory.Functional.Nondet, LaPToP.ProgramTheory.Functional.sat_iff, LaPToP.ProgramTheory.Functional.Implementable, LaPToP.ProgramTheory.Functional.implementable_iff_ne_null, LaPToP.ProgramTheory.Functional.Refines, LaPToP.ProgramTheory.Functional.occursIn, LaPToP.ProgramTheory.Functional.search₀, LaPToP.ProgramTheory.Functional.not_implementable_search₀, LaPToP.ProgramTheory.Functional.beyond, LaPToP.ProgramTheory.Functional.search, LaPToP.ProgramTheory.Functional.implementable_search, LaPToP.ProgramTheory.Functional.occursFrom, LaPToP.ProgramTheory.Functional.sfBody, LaPToP.ProgramTheory.Functional.searchFrom, LaPToP.ProgramTheory.Functional.search_apply_eq, LaPToP.ProgramTheory.Functional.search_step_refines, LaPToP.ProgramTheory.Functional.timeBound, LaPToP.ProgramTheory.Functional.onePlus, LaPToP.ProgramTheory.Functional.time_top, LaPToP.ProgramTheory.Functional.time_step")
