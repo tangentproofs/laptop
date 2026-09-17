@@ -133,6 +133,18 @@ theorem double_two_three : double.applyBunch (Bunch.elem 2 ∪ Bunch.elem 3) = B
     · exact ⟨2, by norm_num, Or.inl rfl, by norm_num⟩
     · exact ⟨3, by norm_num, Or.inr rfl, by norm_num⟩
 
+/-- `f (if b then x else y) = if b then f x else f y` (Reference §11.3.7), for `x`, `y` in the domain. -/
+theorem apply_ite (b : Prop) [Decidable b] (y : α) (hx : x ∈ f.domain) (hy : y ∈ f.domain)
+    (h : (if b then x else y) ∈ f.domain) :
+    f.apply (if b then x else y) h = if b then f.apply x hx else f.apply y hy := by
+  split_ifs <;> rfl
+
+/-- `(if b then f else g) x = if b then f x else g x` (Reference §11.3.7), for `x` in both domains. -/
+theorem ite_apply (g : Fn α β) (b : Prop) [Decidable b] (hf : x ∈ f.domain) (hg : x ∈ g.domain)
+    (h : x ∈ (if b then f else g).domain) :
+    (if b then f else g).apply x h = if b then f.apply x hf else g.apply x hg := by
+  split_ifs <;> rfl
+
 end Distribution
 
 /-! ### Partial, total, deterministic, nondeterministic (aPToP §3.2) -/
@@ -338,6 +350,18 @@ theorem toFn_comp (N : HList ℕ) (hm : m ∈ N.domain) (hL : N.at m ∈ L.domai
     (L.comp N).toFn.apply m (by show m < (N.contents.map _).length; rw [List.length_map]; exact hm) =
       L.toFn.apply (N.toFn.apply m hm) hL :=
   comp_at L N hm
+
+/-- `L {A} = {L A}` (Reference §11.3.6): a list applied to a bunch of indices gives the bunch of the
+items at those indices (in the domain); packaging both sides is the book's law. -/
+theorem toFn_applyBunch (A : Bunch ℕ) : L.toFn.applyBunch A = L.at '' (A ∩ L.domain) := by
+  ext y
+  simp only [Fn.applyBunch, toFn, Fn.lam, Fn.apply, Set.mem_ofPred_eq, Set.mem_image, Set.mem_inter_iff]
+  constructor
+  · rintro ⟨n, hn, hA, rfl⟩; exact ⟨n, ⟨hA, hn⟩, rfl⟩
+  · rintro ⟨n, ⟨hA, hn⟩, rfl⟩; exact ⟨n, hn, hA, rfl⟩
+
+/-- `L [S] = [L S]` (Reference §11.3.6): a list applied to a list of indices. -/
+theorem comp_pack (T : Str ℕ) : L.comp (Str.pack T) = Str.pack (Str.sub L.contents T) := rfl
 
 /-- `L = M = ⟨n: ☐L· L n⟩ = ⟨n: ☐M· M n⟩`: list equality is function equality. -/
 theorem toFn_inj : L.toFn = M.toFn ↔ L = M := by

@@ -83,10 +83,13 @@ theorem nat_induction (B : Bunch ℤ) (h : elem 0 ∪ (B + elem 1) ⊆ B) : nat 
   have hs : ∀ m, m ∈ B → m + 1 ∈ B := fun m hm => h (Or.inr ⟨m, hm, 1, rfl, rfl⟩)
   exact Int.leInduction h0 (fun m _ hm => hs m hm) n hn
 
+/-- `nat = 0,..∞` (Reference §11.3.3): the naturals are the integers from `0` on. The bunch
+interval `x,..y` of this formalization has integer bounds, so `∞` as a bound is rendered by `Set.Ici`. -/
+theorem nat_eq_Ici : nat = Set.Ici (0 : ℤ) := by ext n; simp [nat]
+
 /-- `¢nat = ∞`. -/
 theorem size_nat : size nat = ⊤ := by
-  have : nat = Set.Ici (0 : ℤ) := by ext n; simp [nat]
-  rw [this, size, Set.encard_eq_top_iff]
+  rw [nat_eq_Ici, size, Set.encard_eq_top_iff]
   exact Set.Ici_infinite 0
 
 /-- `int = nat, –nat`. -/

@@ -160,6 +160,23 @@ theorem copies_zero : copies 0 S = nil := rfl
 theorem copies_succ : copies (n + 1) S = copies n S ++ S := by
   simp [copies, List.replicate_succ', List.flatten_append]
 
+/-- `(a+b)*S = a*S; b*S`. -/
+theorem copies_add (a b : ℕ) (S : Str α) : copies (a + b) S = copies a S ++ copies b S := by
+  induction b with
+  | zero => simp [copies_zero]
+  | succ b ih => rw [Nat.add_succ, copies_succ, copies_succ, ih, List.append_assoc]
+
+/-- `n*(k*S) = (n×k)*S`: copies of copies are copies, the elementwise content of `**S = *S`. -/
+theorem copies_copies (n k : ℕ) (S : Str α) : copies n (copies k S) = copies (n * k) S := by
+  induction n with
+  | zero => simp [copies_zero]
+  | succ n ih => rw [copies_succ, ih, Nat.succ_mul, copies_add]
+
+/-- `**S = *S` elementwise: a string of copies of a string of copies of `S` is a string of copies of `S`. -/
+theorem copies_mem_star {T : Str α} (hT : T ∈ star S) (n : ℕ) : copies n T ∈ star S := by
+  obtain ⟨k, rfl⟩ := hT
+  exact ⟨n * k, (copies_copies n k S).symm⟩
+
 /-- `3*(0; 1) = 0; 1; 0; 1; 0; 1`, the book's example. -/
 theorem copies_three_example : copies 3 [0, 1] = [0, 1, 0, 1, 0, 1] := rfl
 
@@ -170,6 +187,13 @@ theorem mem_star : T ∈ star S ↔ ∃ n : ℕ, copies n S = T := Iff.rfl
 theorem update_append_item_append :
     update (S ++ item i ++ T) S.length j = S ++ item j ++ T := by
   simp [update, List.append_assoc, List.set_append_right _ _ le_rfl]
+
+/-- `(S⊲n⊳i)m = if n=m then i else Sm` (Reference §11.3.5), for an index `n` of `S`. -/
+theorem at_update [Inhabited α] (S : Str α) {n : ℕ} (hn : n < S.length) (i : α) (m : ℕ) :
+    «at» (update S n i) m = if n = m then i else «at» S m := by
+  by_cases hnm : n = m
+  · subst hnm; simp [«at», update, List.getD_eq_getElem?_getD, hn]
+  · simp [«at», update, List.getD_eq_getElem?_getD, List.getElem?_set_ne hnm, hnm]
 
 /-- `3; 5; 9⊲2⊳8 = 3; 5; 8`, the book's example. -/
 theorem update_example : update [3, 5, 9] 2 8 = [3, 5, 8] := rfl
