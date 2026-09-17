@@ -12,6 +12,7 @@ import LaPToP.TheoryDesign.SecuritySwitch
 import LaPToP.TheoryDesign.TakeANumber
 import LaPToP.TheoryDesign.LimitedQueue
 import LaPToP.TheoryDesign.Parsing
+import LaPToP.TheoryDesign.Incompleteness
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -29,7 +30,8 @@ of Section 7.0 are formalized in `LaPToP.TheoryDesign.Stack`, `SimpleStack`,
 (Sections 7.1.4–7.1.5) in `LaPToP.TheoryDesign.ProgramQueue`; data
 transformation (Section 7.2) in `LaPToP.TheoryDesign.DataTransformation`, with
 its examples in `SecuritySwitch` (Section 7.2.0), `TakeANumber` (7.2.1),
-`Parsing` (7.2.2) and `LimitedQueue` (7.2.3).
+`Parsing` (7.2.2) and `LimitedQueue` (7.2.3), and its incompleteness
+(Section 7.2.4, Exercise 465) in `LaPToP.TheoryDesign.Incompleteness`.
 :::
 
 :::definition "data_stack_theory" (parent := "theory_design_core") (lean := "LaPToP.TheoryDesign.DataStackTheory, LaPToP.TheoryDesign.DataStackTheory.construction, LaPToP.TheoryDesign.DataStackTheory.construction_pred, LaPToP.TheoryDesign.DataStackTheory.induction_bunch, LaPToP.TheoryDesign.DataStackTheory.eq_empty_or_push, LaPToP.TheoryDesign.DataStackTheory.push_inj_of_lifo, LaPToP.TheoryDesign.WeakStackTheory, LaPToP.TheoryDesign.DataStackTheory.toWeak, LaPToP.TheoryDesign.unitStack, LaPToP.TheoryDesign.unitStack_push_eq_empty")
@@ -501,4 +503,59 @@ analysis over the two modes and the wrap-around $`(f+k) \bmod n`; the
 "opportunity to rotate the queue within $`R`" is declined as in the book. The
 book's intermediate equalities ("several omitted steps") are not reproduced. Uses {uses "data_transformation"}[], {uses "program_queue_theory"}[],
 {uses "data_queue_theory"}[] and {uses "specification_laws"}[].
+:::
+
+:::theorem "data_transformation_incompleteness" (parent := "theory_design_core") (tags := "theory design, transformation, completeness, hehner-7.2.4") (effort := "medium") (lean := "LaPToP.TheoryDesign.Incompleteness.IJ, LaPToP.TheoryDesign.Incompleteness.init, LaPToP.TheoryDesign.Incompleteness.step, LaPToP.TheoryDesign.Incompleteness.initZero, LaPToP.TheoryDesign.Incompleteness.init_refines, LaPToP.TheoryDesign.Incompleteness.Dz, LaPToP.TheoryDesign.Incompleteness.isTransformer_Dz, LaPToP.TheoryDesign.Incompleteness.transform_initZero, LaPToP.TheoryDesign.Incompleteness.transform_step, LaPToP.TheoryDesign.Incompleteness.IB, LaPToP.TheoryDesign.Incompleteness.initB, LaPToP.TheoryDesign.Incompleteness.stepB, LaPToP.TheoryDesign.Incompleteness.no_transformer")
+"Data transformation is sound in the sense that a user cannot tell that a
+transformation has been made; that was the criterion of its design. But it is
+possible to find two specifications of identical behavior (from a user's point
+of view) for which there is no data transformer to transform one into the
+other. In that sense, data transformation is incomplete. Exercise 465
+illustrates the problem. The user's variable is $`i` and the implementer's
+variable is $`j`, both of type $`0, 1, 2`. The operations are:
+$`\mathit{initialize} = i' = 0`,
+$`\mathit{step} = \mathbf{if}\ j > 0\ \mathbf{then}\ i := i{+}1.\ j := j{-}1\ \mathbf{else}\ ok`. The user
+can look at $`i` but not at $`j`. The user can $`\mathit{initialize}`, which starts $`i` at $`0`
+and starts $`j` at any of $`3` values. The user can then repeatedly $`\mathit{step}` and
+observe that $`i` increases $`0` or $`1` or $`2` times and then stops increasing, which
+effectively tells the user what value $`j` started with. If this were a practical
+problem, we would notice that $`\mathit{initialize}` can be refined, resolving the
+nondeterminism. For example, $`\mathit{initialize} \Leftarrow i := 0.\ j := 0`. We could then
+transform $`\mathit{initialize}` and $`\mathit{step}` to get rid of $`j`, replacing it with
+nothing. The transformer is $`j = 0`. It transforms the implementation of
+$`\mathit{initialize}` as follows: $`\forall j \cdot j = 0 \Rightarrow \exists j' \cdot j' = 0 \land i' = j' = 0 = i := 0`.
+And it transforms $`\mathit{step}` as follows:
+$`\forall j \cdot j = 0 \Rightarrow \exists j' \cdot j' = 0 \land \mathbf{if}\ j > 0\ \mathbf{then}\ i := i{+}1.\ j := j{-}1\ \mathbf{else}\ ok = ok`.
+If this were a practical problem, we would be done. But the theoretical
+problem is to replace $`j` with binary variable $`b` without resolving the
+nondeterminism, so that $`\mathit{initialize}` is transformed to $`i' = 0` and
+$`\mathit{step}` is transformed to $`\mathbf{if}\ b \land i < 2\ \mathbf{then}\ i' = i{+}1\ \mathbf{else}\ ok`. Now
+the transformed $`\mathit{initialize}` starts $`b` either at $`\top`, meaning that $`i` will be
+increased, or at $`\bot`, meaning that $`i` will not be increased. Each use of the
+transformed $`\mathit{step}` tests $`b` to see if we might increase $`i`, and checks $`i < 2` to
+ensure that the increased value of $`i` will not exceed $`2`. If $`i` is increased, $`b` is
+again assigned either of its two values. The user will see $`i` start at $`0` and
+increase $`0` or $`1` or $`2` times and then stop increasing, exactly as in the original
+specification. The nondeterminism is maintained. But there is no transformer in
+variables $`i`, $`j`, and $`b` to do the job. That's because the initial value of $`j`
+gives us $`3` different behaviors, but the initial value of binary variable $`b` cannot
+distinguish among these $`3` behaviors."
+
+Model notes. $`i`, $`j` are `Fin 3`; $`i := i{+}1` and $`j := j{-}1` are written on the
+values, so $`\mathit{step}` is unsatisfiable at $`i = 2 \land j > 0`, a state the user cannot
+reach. Soundness is `transform_spec` of {uses "data_transformation"}[]. The
+practical resolution is proved with the transformer $`j = 0` and the new
+implementer's type `Unit` ("replacing it with nothing"): $`\mathit{initialize} \Leftarrow i := 0.\ j := 0`,
+the transformed $`i := 0.\ j := 0` is $`i := 0`, and the transformed $`\mathit{step}` is $`ok`, in the
+style of {uses "data_transformation_examples"}[]. The theoretical claim is the
+theorem `no_transformer`: for every transformer $`D` in the variables $`i`, $`j`, $`b`
+(`transformU`, which may mention the user's variable) satisfying $`\forall b \cdot \exists j \cdot D`,
+the transformed $`\mathit{initialize}` and $`\mathit{step}` are not both equal to $`i' = 0` and
+$`\mathbf{if}\ b \land i < 2\ \mathbf{then}\ i' = i{+}1\ \mathbf{else}\ ok` (read with $`b'` arbitrary when $`i` is
+increased and $`ok` fixing $`b' = b`). The proof follows the book's reason with four
+instances of the $`\mathit{step}` equation: from $`(1, \bot)` to $`(1, \bot)` every $`j` related to
+$`(1, \bot)` is $`0`; from $`(0, \top)` to $`(1, \bot)` every $`j` related to $`(0, \top)` is $`1`; from
+$`(0, \top)` to $`(1, \top)` then $`D\,1\,0\,\top`; but from $`(1, \top)` to $`(2, \top)` every $`j` related to
+$`(1, \top)` is positive — a contradiction, since some $`j` is related to $`(0, \top)`
+({uses "specification_implementability"}[] of the transformer, $`\forall b \cdot \exists j \cdot D`).
 :::

@@ -25,6 +25,20 @@ Sections 4.0–4.4 of the book are formalized in the Lean modules
 (Section 4.3, the Towers of Hanoi); the old terminology of Section 4.4
 (preconditions, postconditions, invariants, variants) in
 `LaPToP.ProgramTheory.OldTheory`.
+
+Section 4.2.3 (Soundness and Completeness) is not formalized. It makes two
+meta-statements about the theory: soundness — if P is implementable and the
+refinement of P by something possibly involving recursive calls to P is
+proved, then "observations of the corresponding computation(s) (at finite
+times) will not contradict P" — and a weak completeness: when such a
+refinement is true of the observations but unprovable, "there is another
+implementable specification Q such that the refinements P ⇐ Q and Q ⇐ (the
+same thing with Q for P) are both provable", together with the remark that
+"there cannot be a theory of programming that is both sound and complete in
+the stronger sense". Observations of computations are outside the object
+theory formalized here; the recursive refinements of Section 4.2 are given
+their meaning in Chapter 6 (least fixed points, in the Recursion and
+Concurrency chapter).
 :::
 
 :::definition "program_as_predicate" (parent := "program_theory_core") (lean := "LaPToP.ProgramTheory.Spec, LaPToP.ProgramTheory.Spec.ext, LaPToP.ProgramTheory.Spec.outputs, LaPToP.ProgramTheory.Spec.Satisfiable, LaPToP.ProgramTheory.Spec.Unsatisfiable, LaPToP.ProgramTheory.Spec.Deterministic, LaPToP.ProgramTheory.Spec.Nondeterministic, LaPToP.ProgramTheory.Spec.Implementable, LaPToP.ProgramTheory.Spec.satisfiable_iff, LaPToP.ProgramTheory.Spec.unsatisfiable_iff, LaPToP.ProgramTheory.Spec.deterministic_iff, LaPToP.ProgramTheory.Spec.nondeterministic_iff, LaPToP.ProgramTheory.Spec.implementable_iff")
