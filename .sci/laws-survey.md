@@ -28,10 +28,10 @@ definition itself. Counts: total / covered / missing per table at the end.
 - Distributivity ×2 — `max_min_distrib`, `min_max_distrib`
 - Connection ×4 — `max_le_iff'`, `min_le_iff'`, `le_max_iff'`, `le_min_iff'`
 - x↑y = if x≥y then x else y; x↓y = if x≤y then x else y — `max_eq_ite`, `min_eq_ite`
-- Coverage: the order laws are for any `LinearOrder` (ℤ, ℕ, ℚ, ℝ, `Char`, and `ℕ∞`/`XInt` as used in the
-  formalization); the book's lexicographic order on strings/lists is `List.lt` (`DS.Strings` `[LT]`,
-  `HList` `LT` instance) — a `LinearOrder` on `Str α` is not declared, so the string/list instances of these
-  laws are not asserted here.
+- Coverage: the order laws are for any `LinearOrder` (ℤ, ℕ, ℚ, ℝ, `Char`, `ℕ∞`/`XInt`), and — as the book
+  states — strings and lists: `Str α` has Mathlib's lexicographic `LinearOrder (List α)` (its `<` is the
+  `List.lt` of the string axioms, `Str.lt_iff_lex`) and `HList α` the lifted one (`HList.lt_iff_contents_lt`);
+  `Str.le_iff_not_lt`, `HList.le_iff_not_lt` instantiate Totality (added 2026-09-17).
 
 ## 11.3.1 Binary — `B.Binary`
 - All laws of the table are theorems of `B.Binary` (101 theorems): ⊤, ¬⊥, ⊤⧧⊥ (`top_eq`, `not_bot`,

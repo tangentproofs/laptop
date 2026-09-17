@@ -113,13 +113,16 @@ $`S; A; T : S; B; T = A : B`, and $`S\{A\}` (a string applied to a set of indice
 the update law; the examples are by evaluation.
 :::
 
-:::theorem "string_axioms_order" (parent := "data_structures_core") (tags := "data, strings, hehner-2.2") (effort := "small") (lean := "LaPToP.DataStructures.Str.nil_le, LaPToP.DataStructures.Str.lt_append_item_append, LaPToP.DataStructures.Str.append_lt_append_of_lt")
+:::theorem "string_axioms_order" (parent := "data_structures_core") (tags := "data, strings, hehner-2.2") (effort := "small") (lean := "LaPToP.DataStructures.Str.nil_le, LaPToP.DataStructures.Str.lt_append_item_append, LaPToP.DataStructures.Str.append_lt_append_of_lt, LaPToP.DataStructures.Str.lt_iff_lex, LaPToP.DataStructures.Str.le_iff_not_lt")
 "The order of two strings is determined by the items at the first index where
 they differ. ... If there is no index where they differ, the shorter string
 comes before the longer one." The axioms:
 $`\mathit{nil} \le S < S; i; T` and
 $`i < j \Rightarrow S; i; T < S; j; U`.
-Lean's lexicographic order on lists is exactly this ordering. Uses
+Lean's lexicographic order on lists is exactly this ordering, and for linearly
+ordered items it is a linear order (Mathlib's `LinearOrder (List α)`, whose
+`<` is the same relation: `lt_iff_lex`), so the Generic order laws of the
+Reference chapter apply to strings; `le_iff_not_lt` is one of them. Uses
 {uses "list_as_string"}[].
 :::
 

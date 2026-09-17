@@ -6,6 +6,7 @@ import LaPToP.BasicTheories.Numbers
 import LaPToP.BasicTheories.NumberLaws
 import LaPToP.BasicTheories.Calculation
 import LaPToP.BasicTheories.GenericLaws
+import LaPToP.DataStructures.Lists
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -384,7 +385,7 @@ $`(a \land b \Rightarrow c) = (a \Rightarrow (b \Rightarrow c))` of that node. U
 {uses "calculation_style"}[].
 :::
 
-:::theorem "generic_laws" (parent := "basic_theories_core") (tags := "basic, generic, order, hehner-11.3.0") (effort := "small") (lean := "LaPToP.BasicTheories.Generic.eq_refl', LaPToP.BasicTheories.Generic.eq_symm_iff, LaPToP.BasicTheories.Generic.eq_trans_of, LaPToP.BasicTheories.Generic.transparency, LaPToP.BasicTheories.Generic.ne_iff_not_eq, LaPToP.BasicTheories.Generic.ite_true_base, LaPToP.BasicTheories.Generic.ite_false_base, LaPToP.BasicTheories.Generic.ite_idem, LaPToP.BasicTheories.Generic.ite_reversal, LaPToP.BasicTheories.Generic.le_iff_eq_min, LaPToP.BasicTheories.Generic.min_le_self_le_max, LaPToP.BasicTheories.Generic.le_iff_eq_max, LaPToP.BasicTheories.Generic.le_refl', LaPToP.BasicTheories.Generic.not_lt_self, LaPToP.BasicTheories.Generic.not_lt_and_eq, LaPToP.BasicTheories.Generic.not_gt_and_eq, LaPToP.BasicTheories.Generic.not_lt_and_gt, LaPToP.BasicTheories.Generic.le_iff_lt_or_eq', LaPToP.BasicTheories.Generic.le_le_trans, LaPToP.BasicTheories.Generic.lt_le_trans, LaPToP.BasicTheories.Generic.lt_lt_trans, LaPToP.BasicTheories.Generic.le_lt_trans, LaPToP.BasicTheories.Generic.gt_iff_lt', LaPToP.BasicTheories.Generic.ge_iff_le', LaPToP.BasicTheories.Generic.not_lt_iff_ge, LaPToP.BasicTheories.Generic.not_le_iff_gt, LaPToP.BasicTheories.Generic.le_antisymm_iff', LaPToP.BasicTheories.Generic.trichotomy', LaPToP.BasicTheories.Generic.max_idem, LaPToP.BasicTheories.Generic.min_idem, LaPToP.BasicTheories.Generic.max_symm, LaPToP.BasicTheories.Generic.min_symm, LaPToP.BasicTheories.Generic.max_assoc', LaPToP.BasicTheories.Generic.min_assoc', LaPToP.BasicTheories.Generic.max_min_distrib, LaPToP.BasicTheories.Generic.min_max_distrib, LaPToP.BasicTheories.Generic.max_le_iff', LaPToP.BasicTheories.Generic.min_le_iff', LaPToP.BasicTheories.Generic.le_max_iff', LaPToP.BasicTheories.Generic.le_min_iff', LaPToP.BasicTheories.Generic.max_eq_ite, LaPToP.BasicTheories.Generic.min_eq_ite")
+:::theorem "generic_laws" (parent := "basic_theories_core") (tags := "basic, generic, order, hehner-11.3.0") (effort := "small") (lean := "LaPToP.BasicTheories.Generic.eq_refl', LaPToP.BasicTheories.Generic.eq_symm_iff, LaPToP.BasicTheories.Generic.eq_trans_of, LaPToP.BasicTheories.Generic.transparency, LaPToP.BasicTheories.Generic.ne_iff_not_eq, LaPToP.BasicTheories.Generic.ite_true_base, LaPToP.BasicTheories.Generic.ite_false_base, LaPToP.BasicTheories.Generic.ite_idem, LaPToP.BasicTheories.Generic.ite_reversal, LaPToP.BasicTheories.Generic.le_iff_eq_min, LaPToP.BasicTheories.Generic.min_le_self_le_max, LaPToP.BasicTheories.Generic.le_iff_eq_max, LaPToP.BasicTheories.Generic.le_refl', LaPToP.BasicTheories.Generic.not_lt_self, LaPToP.BasicTheories.Generic.not_lt_and_eq, LaPToP.BasicTheories.Generic.not_gt_and_eq, LaPToP.BasicTheories.Generic.not_lt_and_gt, LaPToP.BasicTheories.Generic.le_iff_lt_or_eq', LaPToP.BasicTheories.Generic.le_le_trans, LaPToP.BasicTheories.Generic.lt_le_trans, LaPToP.BasicTheories.Generic.lt_lt_trans, LaPToP.BasicTheories.Generic.le_lt_trans, LaPToP.BasicTheories.Generic.gt_iff_lt', LaPToP.BasicTheories.Generic.ge_iff_le', LaPToP.BasicTheories.Generic.not_lt_iff_ge, LaPToP.BasicTheories.Generic.not_le_iff_gt, LaPToP.BasicTheories.Generic.le_antisymm_iff', LaPToP.BasicTheories.Generic.trichotomy', LaPToP.BasicTheories.Generic.max_idem, LaPToP.BasicTheories.Generic.min_idem, LaPToP.BasicTheories.Generic.max_symm, LaPToP.BasicTheories.Generic.min_symm, LaPToP.BasicTheories.Generic.max_assoc', LaPToP.BasicTheories.Generic.min_assoc', LaPToP.BasicTheories.Generic.max_min_distrib, LaPToP.BasicTheories.Generic.min_max_distrib, LaPToP.BasicTheories.Generic.max_le_iff', LaPToP.BasicTheories.Generic.min_le_iff', LaPToP.BasicTheories.Generic.le_max_iff', LaPToP.BasicTheories.Generic.le_min_iff', LaPToP.BasicTheories.Generic.max_eq_ite, LaPToP.BasicTheories.Generic.min_eq_ite, LaPToP.DataStructures.Str.lt_iff_lex, LaPToP.DataStructures.Str.le_iff_not_lt, LaPToP.DataStructures.HList.lt_iff_contents_lt, LaPToP.DataStructures.HList.le_iff_not_lt")
 The Generic table of the Reference chapter (Section 11.3.0). "The operators
 $`= \neq \mathbf{if}\ \mathbf{then}\ \mathbf{else}` apply to every type of expression (but the first
 operand of $`\mathbf{if}\ \mathbf{then}\ \mathbf{else}` must be binary), with the laws" $`x = x`
@@ -413,9 +414,12 @@ with a decidable condition for $`\mathbf{if}` (the binary laws of the same shape
 {uses "binary_laws_case"}[]). The order laws are stated once for an arbitrary
 linear order, which instantiates to the numbers of this formalization — the
 integers and extended integers of {uses "number_laws_order"}[], $`\mathit{nat}`,
-$`\mathit{xnat}`, the rationals and reals — and to characters; the book's lexicographic
-order on strings and lists is the `List.lt` order of `Str` and `HList`, for which
-no linear-order instance is declared, so those instances are not asserted.
+$`\mathit{xnat}`, the rationals and reals — to characters, and, as the book says, to
+strings and lists: the lexicographic order of `Str` is Mathlib's linear order on
+lists (`Str.lt_iff_lex`), and `HList` carries the lifted linear order
+(`HList.lt_iff_contents_lt`), both agreeing with the `<` of the string and list
+axioms; `Str.le_iff_not_lt` and `HList.le_iff_not_lt` are the Totality law
+instantiated.
 $`\uparrow`, $`\downarrow` are `max`, `min`. Every law is one theorem, named after the
 book's law name and operator.
 :::
