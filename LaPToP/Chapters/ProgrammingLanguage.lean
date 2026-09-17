@@ -13,6 +13,7 @@ import LaPToP.ProgramTheory.Arrays
 import LaPToP.ProgramTheory.GoTo
 import LaPToP.ProgramTheory.Alias
 import LaPToP.ProgramTheory.Probabilistic
+import LaPToP.ProgramTheory.ProbabilisticSums
 import LaPToP.ProgramTheory.RandomNumbers
 import LaPToP.ProgramTheory.Blackjack
 import LaPToP.ProgramTheory.Information
@@ -39,7 +40,8 @@ order: variable declaration and suspension (Section 5.0) are formalized in
 (Section 5.4) in `LaPToP.ProgramTheory.Assertions`; the value expression,
 functions and procedures (Section 5.5) in `LaPToP.ProgramTheory.Subprograms`;
 aliasing (Section 5.6) in `LaPToP.ProgramTheory.Alias`; probabilistic
-programming (Section 5.7) in `LaPToP.ProgramTheory.Probabilistic`, random
+programming (Section 5.7) in `LaPToP.ProgramTheory.Probabilistic` (its infinite
+sums in `LaPToP.ProgramTheory.ProbabilisticSums`), random
 number generators (Section 5.7.0) in `LaPToP.ProgramTheory.RandomNumbers` (with
 the blackjack Exercise 344 in `LaPToP.ProgramTheory.Blackjack`) and
 information (Section 5.7.1) in `LaPToP.ProgramTheory.Information`;
@@ -534,7 +536,7 @@ of a pointer, $`A\,i := e` as $`A := i \to e \mid A` — is the array model of
 {uses "data_structures"}[] and is not repeated.
 :::
 
-:::theorem "probabilistic_programming" (parent := "programming_language_core") (tags := "probability, distribution, hehner-5.7") (effort := "medium") (lean := "LaPToP.ProgramTheory.Probabilistic.Prob, LaPToP.ProgramTheory.Probabilistic.ind, LaPToP.ProgramTheory.Probabilistic.ind_true, LaPToP.ProgramTheory.Probabilistic.ind_false, LaPToP.ProgramTheory.Probabilistic.prob_ind, LaPToP.ProgramTheory.Probabilistic.ind_not, LaPToP.ProgramTheory.Probabilistic.ind_and, LaPToP.ProgramTheory.Probabilistic.ind_or, LaPToP.ProgramTheory.Probabilistic.PSpec, LaPToP.ProgramTheory.Probabilistic.ofSpec, LaPToP.ProgramTheory.Probabilistic.IsDistribution, LaPToP.ProgramTheory.Probabilistic.pcond, LaPToP.ProgramTheory.Probabilistic.pseq, LaPToP.ProgramTheory.Probabilistic.avg, LaPToP.ProgramTheory.Probabilistic.pseq_const_eq_avg, LaPToP.ProgramTheory.Probabilistic.isDistribution_ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.isDistribution_ofSpec_det, LaPToP.ProgramTheory.Probabilistic.tsum_succ_eq_one, LaPToP.ProgramTheory.Probabilistic.not_summable_succ, LaPToP.ProgramTheory.Probabilistic.geometric_distribution, LaPToP.ProgramTheory.Probabilistic.isDistribution_pcond, LaPToP.ProgramTheory.Probabilistic.pseq_eq_sum, LaPToP.ProgramTheory.Probabilistic.isDistribution_pseq, LaPToP.ProgramTheory.Probabilistic.pok, LaPToP.ProgramTheory.Probabilistic.passign, LaPToP.ProgramTheory.Probabilistic.assignX, LaPToP.ProgramTheory.Probabilistic.ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.ofSpec_assign, LaPToP.ProgramTheory.Probabilistic.ofSpec_cond, LaPToP.ProgramTheory.Probabilistic.passign_pseq, LaPToP.ProgramTheory.Probabilistic.ofSpec_assign_seq, LaPToP.ProgramTheory.Probabilistic.isDistribution_passign, LaPToP.ProgramTheory.Probabilistic.support_passign, LaPToP.ProgramTheory.Probabilistic.ex₁, LaPToP.ProgramTheory.Probabilistic.ex₁_eq, LaPToP.ProgramTheory.Probabilistic.ex₁_zero, LaPToP.ProgramTheory.Probabilistic.ex₁_one, LaPToP.ProgramTheory.Probabilistic.ex₁_two, LaPToP.ProgramTheory.Probabilistic.isDistribution_ex₁, LaPToP.ProgramTheory.Probabilistic.support_ex₁, LaPToP.ProgramTheory.Probabilistic.ex₂body, LaPToP.ProgramTheory.Probabilistic.ex₂, LaPToP.ProgramTheory.Probabilistic.ex₂_eq, LaPToP.ProgramTheory.Probabilistic.isDistribution_ex₂, LaPToP.ProgramTheory.Probabilistic.support_ex₂, LaPToP.ProgramTheory.Probabilistic.avg_ex₂_eq, LaPToP.ProgramTheory.Probabilistic.avg_ex₂_x, LaPToP.ProgramTheory.Probabilistic.prob_ex₂_gt_three")
+:::theorem "probabilistic_programming" (parent := "programming_language_core") (tags := "probability, distribution, hehner-5.7") (effort := "medium") (lean := "LaPToP.ProgramTheory.Probabilistic.Prob, LaPToP.ProgramTheory.Probabilistic.ind, LaPToP.ProgramTheory.Probabilistic.ind_true, LaPToP.ProgramTheory.Probabilistic.ind_false, LaPToP.ProgramTheory.Probabilistic.prob_ind, LaPToP.ProgramTheory.Probabilistic.ind_not, LaPToP.ProgramTheory.Probabilistic.ind_and, LaPToP.ProgramTheory.Probabilistic.ind_or, LaPToP.ProgramTheory.Probabilistic.PSpec, LaPToP.ProgramTheory.Probabilistic.ofSpec, LaPToP.ProgramTheory.Probabilistic.IsDistribution, LaPToP.ProgramTheory.Probabilistic.pcond, LaPToP.ProgramTheory.Probabilistic.pseq, LaPToP.ProgramTheory.Probabilistic.avg, LaPToP.ProgramTheory.Probabilistic.pseq_const_eq_avg, LaPToP.ProgramTheory.Probabilistic.isDistribution_ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.isDistribution_ofSpec_det, LaPToP.ProgramTheory.Probabilistic.tsum_succ_eq_one, LaPToP.ProgramTheory.Probabilistic.not_summable_succ, LaPToP.ProgramTheory.Probabilistic.geometric_distribution, LaPToP.ProgramTheory.Probabilistic.isDistribution_pcond, LaPToP.ProgramTheory.Probabilistic.pseq_eq_sum, LaPToP.ProgramTheory.Probabilistic.isDistribution_pseq, LaPToP.ProgramTheory.Probabilistic.pok, LaPToP.ProgramTheory.Probabilistic.passign, LaPToP.ProgramTheory.Probabilistic.assignX, LaPToP.ProgramTheory.Probabilistic.ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.ofSpec_assign, LaPToP.ProgramTheory.Probabilistic.ofSpec_cond, LaPToP.ProgramTheory.Probabilistic.passign_pseq, LaPToP.ProgramTheory.Probabilistic.ofSpec_assign_seq, LaPToP.ProgramTheory.Probabilistic.isDistribution_passign, LaPToP.ProgramTheory.Probabilistic.support_passign, LaPToP.ProgramTheory.Probabilistic.ex₁, LaPToP.ProgramTheory.Probabilistic.ex₁_eq, LaPToP.ProgramTheory.Probabilistic.ex₁_zero, LaPToP.ProgramTheory.Probabilistic.ex₁_one, LaPToP.ProgramTheory.Probabilistic.ex₁_two, LaPToP.ProgramTheory.Probabilistic.isDistribution_ex₁, LaPToP.ProgramTheory.Probabilistic.support_ex₁, LaPToP.ProgramTheory.Probabilistic.ex₂body, LaPToP.ProgramTheory.Probabilistic.ex₂, LaPToP.ProgramTheory.Probabilistic.ex₂_eq, LaPToP.ProgramTheory.Probabilistic.isDistribution_ex₂, LaPToP.ProgramTheory.Probabilistic.support_ex₂, LaPToP.ProgramTheory.Probabilistic.avg_ex₂_eq, LaPToP.ProgramTheory.Probabilistic.avg_ex₂_x, LaPToP.ProgramTheory.Probabilistic.prob_ex₂_gt_three, LaPToP.ProgramTheory.Probabilistic.isDistribution_pseq', LaPToP.ProgramTheory.Probabilistic.geomDist, LaPToP.ProgramTheory.Probabilistic.geomDist_succ, LaPToP.ProgramTheory.Probabilistic.isDistribution_geomDist, LaPToP.ProgramTheory.Probabilistic.hasSum_sq_geometric, LaPToP.ProgramTheory.Probabilistic.avg_geomDist_sq")
 "Probability Theory has been developed using the arbitrary convention that a
 probability is a real number between $`0` and $`1` inclusive
 $`\mathit{prob} = \S r : \mathit{real} \cdot 0 \leq r \leq 1` ... Accordingly, for this section only,
@@ -593,9 +595,10 @@ with sum $`1`. Proved: `ok` and every deterministic specification are one-point
 distributions; $`\Sigma n' \cdot n' = n{+}1 = 1`, and "$`\Sigma n, n' \cdot n' = n{+}1 = \infty`" as
 non-summability over the pairs; the geometric distribution $`2^{-n}` on
 $`\mathit{nat}{+}1`; `pcond` preserves distributions when $`b` is a probability; `pseq`
-preserves distributions when $`P` has finitely many possible final states (the
-case of all the examples — the general statement needs an interchange of
-infinite sums and is not proved); "the definitions have not changed" for `ok`,
+preserves distributions — first for $`P` with finitely many possible final states
+(`isDistribution_pseq`, the case of all the examples), then in general
+(`isDistribution_pseq'`, by interchanging the nonnegative double sum
+$`\Sigma x'', x' \cdot P \times Q`); "the definitions have not changed" for `ok`,
 assignment and `if` (`ofSpec_cond`), and for $`P.Q` with an assignment as $`P`, via
 the probabilistic Substitution Law `passign_pseq` ({uses "substitution_law"}[],
 {uses "specification_laws"}[]). The state is the book's "one variable $`x`", an
@@ -603,7 +606,10 @@ integer. Both worked examples are computed: the three values of the first, the
 closed form of the second (a finite sum over the final values $`0, 1` of the
 first), its distribution property, the average $`4 + 2/3` and the probability
 $`2/3`, where the average $`(P.\ e)` is `avg` with `pseq_const_eq_avg` relating it to
-$`P.\ e`. Not proved: the average of $`n^2` under $`2^{-n}` ($`= 6`).
+$`P.\ e`. The average of $`n^2` under $`2^{-n}` is $`6` (`avg_geomDist_sq`, from Mathlib's
+$`\Sigma n \cdot \binom{n+k}{k} r^n = 1/(1-r)^{k+1}` for $`k = 1, 2` and
+$`(n{+}1)^2 = 2\binom{n+2}{2} - (n{+}1)`), with $`2^{-n}` on $`\mathit{nat}{+}1` as the
+distribution `geomDist`.
 :::
 
 :::theorem "random_number_generators" (parent := "programming_language_core") (tags := "probability, random, time, hehner-5.7.0") (effort := "medium") (lean := "LaPToP.ProgramTheory.Probabilistic.pdet, LaPToP.ProgramTheory.Probabilistic.pdet_pseq, LaPToP.ProgramTheory.Probabilistic.pdet_id_eq_ofSpec_ok, LaPToP.ProgramTheory.Probabilistic.urand, LaPToP.ProgramTheory.Probabilistic.randAssign, LaPToP.ProgramTheory.Probabilistic.hasSum_urand, LaPToP.ProgramTheory.Probabilistic.prob_urand, LaPToP.ProgramTheory.Probabilistic.randAssign_id, LaPToP.ProgramTheory.Probabilistic.sumDist, LaPToP.ProgramTheory.Probabilistic.freshForm, LaPToP.ProgramTheory.Probabilistic.freshForm_eq, LaPToP.ProgramTheory.Probabilistic.twoRand, LaPToP.ProgramTheory.Probabilistic.support_randAssign_two, LaPToP.ProgramTheory.Probabilistic.twoRand_eq, LaPToP.ProgramTheory.Probabilistic.pcond_rand_two, LaPToP.ProgramTheory.Probabilistic.randLt, LaPToP.ProgramTheory.Probabilistic.randLt_eq, LaPToP.ProgramTheory.Probabilistic.randLt_eq', LaPToP.ProgramTheory.Probabilistic.prob_dice_eq, LaPToP.ProgramTheory.Probabilistic.prob_dice_ne, LaPToP.ProgramTheory.Probabilistic.diceBody, LaPToP.ProgramTheory.Probabilistic.tdist, LaPToP.ProgramTheory.Probabilistic.diceBody_tdist, LaPToP.ProgramTheory.Probabilistic.tdist_add, LaPToP.ProgramTheory.Probabilistic.isDistribution_tdist, LaPToP.ProgramTheory.Probabilistic.avg_tdist")
