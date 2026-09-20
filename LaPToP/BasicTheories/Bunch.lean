@@ -1,4 +1,3 @@
-import VersoBlueprint
 import Mathlib.Data.Set.Card
 
 /-!

@@ -1,4 +1,3 @@
-import VersoBlueprint
 
 /-!
 # Binary Theory

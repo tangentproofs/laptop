@@ -1,4 +1,3 @@
-import VersoBlueprint
 import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Range
 import Mathlib.Data.List.Flatten
@@ -110,7 +109,7 @@ theorem len_item : len (item i) = 1 := rfl
 
 /-- `↔(S; T) = ↔S + ↔T`. -/
 theorem len_append : len (S ++ T) = len S + len T := by
-  simp [len]
+  simpa [len] using (ENat.natCast_add (List.length S) (List.length T))
 
 /-- `i = j = (S; i; T = S; j; T)`: equal strings have equal items at each index.
 (Listed with the order axioms in the book; it needs no order.) -/
@@ -253,7 +252,8 @@ theorem interval_self (x : ℤ) : interval x x = nil := by
 
 /-- `x;..x+1 = x`. -/
 theorem interval_succ (x : ℤ) : interval x (x + 1) = item x := by
-  simp [interval]
+  have h : (x + 1 - x).toNat = 1 := by omega
+  simp [interval, item, h]
 
 /-- `(x;..y); (y;..z) = x;..z` for `x ≤ y ≤ z`. -/
 theorem interval_append_interval {x y z : ℤ} (hxy : x ≤ y) (hyz : y ≤ z) :
