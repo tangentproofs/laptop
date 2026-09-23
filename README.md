@@ -54,6 +54,45 @@ when there is no poststate. Building the executable links the whole import
 chain, so it is a separate target: plain `lake build` and the Blueprint site do
 not build it.
 
+## Prove a theorem by calculation (`lake exe netty`)
+
+Netty is a prover's assistant for calculational proofs — the tool described in
+[the Netty document](https://www.cs.toronto.edu/~naiman/Netty_document.pdf) by
+Eric Hehner, Robert Will, Lev Naiman and David Kordalewski. It keeps the proof,
+its direction, the context and the law lists, and suggests the next line by
+*showing what applying each law would write*. `Netty/` is its kernel: the
+document model, the law matching, the suggestions and the save format, with no
+user interface but a script language.
+
+```bash
+lake build netty                      # a few seconds: it needs neither Mathlib nor LaPToP
+lake exe netty --help                 # options and the script language
+lake exe netty --demo=portation       # the example proof from page 0 of the document
+lake exe netty --demo=discharge       # zooming in, and the context a zoom in supplies
+lake exe netty --demo=gap             # a gap left by direct entry, and closing it
+lake exe netty --list-laws            # the boolean laws in force
+lake exe netty --selftest             # laws, law file and demonstrations
+printf 'start ⇐ a ⇒ (b ⇒ a)\nsuggest\n' | lake exe netty
+```
+
+The `portation` demonstration replays the document's own first example and
+prints its proof pane:
+
+```
+    0   [⇐] a ⇒ (b ⇒ a)   portation
+    1    =  a ∧ b ⇒ a     specialization
+>   2    =  ⊤
+proves a ⇒ (b ⇒ a) = ⊤, that is, proves a ⇒ (b ⇒ a)
+```
+
+Laws are plain text files (`Netty/laws/boolean.laws` holds the Binary laws of
+aPToP §11.3.1); add your own with `--laws=FILE`. `Netty/Laws.lean` reads the
+shipped file at compile time and `Netty.boolean_isTautology` checks in Lean's
+kernel that every law in it is a tautology; `Netty/Replay.lean` replays all
+three demonstrations in Lean and proves that each ends with no gaps, fully
+zoomed out, and proving the formula it claims. Exit status is 1 when a `check`
+fails and 2 for a bad script or law file.
+
 ## GitHub Pages
 
 Workflows:
@@ -140,8 +179,16 @@ LaPToP/
   Concurrency/               # Composition, ListConcurrency, Transformation, InsertionSort, DiningPhilosophers
   Interaction/               # InteractiveVariables, GrowSlow, Communication, CommunicationTiming, Merge,
                              #   MergeInterleave, ChannelDeclaration, Deadlock, PowerSeries, Thermostat
+Netty/                       # the Netty proof-assistant kernel (no Mathlib, no LaPToP)
+  Expr.lean Parser.lean      #   the boolean/number fragment of aPToP, and reading it
+  Law.lean Laws.lean         #   laws, their variants, matching; the shipped law list
+  laws/boolean.laws          #   the Binary laws of §11.3.1, as a Netty law file
+  Doc.lean Render.lean       #   the proof document, zoom stack, context, suggestions
+  Json.lean Script.lean      #   saving a proof; the script language and the demos
+  Replay.lean                #   the document's examples, replayed and checked in Lean
 LaPToPMain.lean              # Verso generator entry point (`lake exe vbp`)
 InterpMain.lean              # interpreter command line (`lake exe interp`)
+NettyMain.lean               # Netty command line (`lake exe netty`)
 scripts/ci-pages.sh          # builds the site, then scripts/enhance-site-ux.py
 .sci/laws-survey.md          # §11.3 Reference law tables mapped to Lean theorems
 ```

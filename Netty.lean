@@ -5,6 +5,8 @@ import Netty.Laws
 import Netty.Doc
 import Netty.Render
 import Netty.Json
+import Netty.Script
+import Netty.Replay
 
 /-!
 # Netty
@@ -16,7 +18,7 @@ the direction, the context and the law lists, and it offers *the results of
 applying laws* as the suggestions for the next line.
 
 What is here is the document model and the machinery under those three panes,
-with no user interface yet:
+with no user interface but a script language and `lake exe netty`:
 
 * `Netty.Expr` — the boolean and number fragment of the aPToP grammar, with
   the operand positions and types the direction machinery needs;
@@ -28,7 +30,8 @@ with no user interface yet:
   suggestions, the commands, and what a finished proof proves;
 * `Netty.Render` — the three panes as text;
 * `Netty.Json` — saving and loading a proof;
-The script language and the command line follow.
+* `Netty.Script` — a session and the script language `lake exe netty` runs;
+* `Netty.Replay` — the document's own example, replayed and checked in Lean.
 
 It is deliberately independent of the rest of this repository: it imports
 neither Mathlib nor `LaPToP`, so it builds in seconds. The laws it ships with

@@ -31,3 +31,7 @@ lean_lib «LaPToPBlueprint» where
 -- Mathlib and of LaPToP, so `lake build Netty` is fast and the kernel's own
 -- soundness checks are self-contained.
 lean_lib «Netty» where
+
+-- The headless Netty command line (`lake exe netty`).
+lean_exe «netty» where
+  root := `NettyMain
