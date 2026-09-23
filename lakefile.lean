@@ -15,6 +15,11 @@ package «LaPToP» where
 @[default_target]
 lean_lib «LaPToP» where
 
+-- The interpreter command line (`lake exe interp`). `LaPToPMain` stays the Verso
+-- blueprint generator; this is a separate root and a separate executable.
+lean_exe «interp» where
+  root := `InterpMain
+
 -- Blueprint/docs target (Verso docs path). Also covered by default via LaPToP.lean.
 lean_lib «LaPToPBlueprint» where
   globs := #[
