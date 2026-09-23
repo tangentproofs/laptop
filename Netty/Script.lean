@@ -193,7 +193,7 @@ start ⇐ (a ⇒ b) ⇒ (a ⇒ a ∧ b)
 zoom 1
 context
 apply discharge : = a ⇒ b
-apply context
+apply context : = ⊤
 out
 proof
 apply base : = ⊤
@@ -214,9 +214,23 @@ proof
 check ¬¬a ≡ a
 "
 
+/-- A law applied to a *part* of a line: idempotence matches the second main
+operand of `x ∧ (y ∨ y)` and folds it in place, which before a law could be
+applied to a part took a zoom in, an application and a zoom out. -/
+def minimize : String :=
+"# A law applied to a part of a line, as a result of minimization: idempotence
+# matches y ∨ y, the second main operand, and folds it where it stands.
+start = x ∧ (y ∨ y)
+suggest
+apply idempotent : = x ∧ y
+proof
+check x ∧ (y ∨ y) ≡ x ∧ y
+"
+
 /-- The demonstrations, by name. -/
 def all : List (String × String) :=
-  [("portation", portation), ("discharge", discharge), ("gap", gap)]
+  [("portation", portation), ("discharge", discharge), ("gap", gap),
+   ("minimize", minimize)]
 
 end Demo
 end Netty

@@ -47,7 +47,7 @@ usage: netty [options] [script]
 
   script              run this file of commands (default: standard input)
   --demo=NAME         run a built-in demonstration instead: portation,
-                      discharge, gap
+                      discharge, gap, minimize
   --laws=FILE         add a law file; may be repeated
   --bare              start with no laws but those given by --laws
   --load=FILE         start from a saved proof file
@@ -158,20 +158,26 @@ def runScript (r : Run) (cs : List (Nat × ScriptCmd)) : IO Run :=
 def lawFilePath : String := "Netty/laws/boolean.laws"
 
 /-- Lines to offer the whole law list, to check that every suggestion it makes
-is a sound step. Each is an association longer than the two operands most laws
-are written with, which is what matching modulo associativity reads apart. -/
+is a sound step. Most are associations longer than the two operands most laws
+are written with, which is what matching modulo associativity reads apart; all
+of them have main operands that a law can be applied to as *parts*, in positive,
+negative and neutral positions, which is what the margin connective of a part
+rewrite has to get right. -/
 def soundnessLines : List String :=
   ["x ∧ y ∧ z", "x ∨ y ∨ z", "x ∧ y ∧ z ∧ w", "x ∧ (y ∨ z)", "¬(x ∧ y ∧ z)",
-   "x ⇒ y ∧ z", "(x ∧ y ∧ z) ∨ w"]
+   "x ⇒ y ∧ z", "(x ∧ y ∧ z) ∨ w", "x ∧ (y ∨ y)", "(x ⇒ y) = (y ⇐ x)"]
 
 /-- Check the matching that the suggestions rest on. Every suggestion the
 whole law list offers for those lines, under each of the three directions,
 must be a *sound* step: the line joined to the suggestion by the connective it
-would put in the margin has to hold under every assignment. That is the check
-on matching modulo associativity, which reads a line apart in more ways than
-one and so could offer more than it may. The reading itself is witnessed: from
-`x ∧ y ∧ z`, specialization must offer `x`, a first segment shorter than the
-left spine, as well as `x ∧ y`. -/
+would put in the margin has to hold under every assignment. That is the check on
+matching modulo associativity, which reads a line apart in more ways than one,
+and on applying a law to a part of a line, which turns the law's own connective
+into the margin's according to the part's position — both could offer more than
+they may. Two readings are witnessed by name: from `x ∧ y ∧ z`, specialization
+must offer `x`, a first segment shorter than the left spine, as well as `x ∧ y`;
+and from `x ∧ (y ∨ y)`, which idempotence cannot match as a whole, it must offer
+`x ∧ y`, the fold of the second main operand. -/
 def matchTest : IO Bool := do
   let mut ok := true
   let mut checked := 0
@@ -218,6 +224,27 @@ def matchTest : IO Bool := do
         ok := false
         IO.eprintln s!"matching: specialization offers {String.intercalate ", " offered}, \
           not x and x ∧ y"
+  -- The reading that applying a law to a part of a line adds: idempotence
+  -- cannot match `x ∧ (y ∨ y)`, whose main operator is `∧`, but it folds the
+  -- second main operand where it stands.
+  match Parser.expr "x ∧ (y ∨ y)" with
+  | .error e =>
+      ok := false
+      IO.eprintln s!"matching: {e}"
+  | .ok line =>
+    match Doc.steps { laws := Laws.boolean } [.start .boolean .same line] with
+    | .error e =>
+        ok := false
+        IO.eprintln s!"matching: {e}"
+    | .ok d =>
+      let folds := d.suggestions.filter fun s =>
+        s.law == "idempotent" && s.result.render == "x ∧ y"
+      if folds.length == 1 then
+        IO.println "matching: idempotence folds y ∨ y inside x ∧ (y ∨ y)"
+      else
+        ok := false
+        IO.eprintln s!"matching: idempotence offers {folds.length} ways to fold \
+          y ∨ y inside x ∧ (y ∨ y), not one"
   return ok
 
 /-- Check the request service a user interface talks to: every demonstration

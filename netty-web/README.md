@@ -48,8 +48,8 @@ checks both halves. The server listens on the loopback interface only.
 
 * **demonstration…** replays one of the kernel's demonstrations —
   `portation` is the document's own first example, `discharge` zooms in and
-  uses the context, `gap` leaves a gap and then closes it. **new** starts
-  again with the same laws.
+  uses the context, `gap` leaves a gap and then closes it, and `minimize`
+  applies a law to a part of a line. **new** starts again with the same laws.
 * **A click on a suggestion** writes that line. Greyed suggestions are the
   ones whose match left a law variable unconstrained; the kernel will not
   apply those, and says which variable it is.

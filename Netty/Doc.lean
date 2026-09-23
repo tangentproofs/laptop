@@ -36,6 +36,23 @@ Because every line of a still-open level lies after every line of the levels
 below it, appending or inserting at the current level never disturbs an index
 recorded in a frame.
 
+## Suggestions, and laws applied to a part
+
+A suggestion comes from matching a law's variant against the line before the
+focus — either against the whole of it, or against one of its *main operands*,
+which is the document's applying a law "to a part, as a result of minimization".
+A part rewrite writes the line back with that part replaced, and takes for its
+margin connective the one that zooming in to the part, applying the law and
+zooming out would have written: the part's position turns the direction on the
+way in (`Dir.zoom`) and turns it back on the way out, so a step that is the
+part's direction inside is the level's direction outside, and a neutral position
+admits only `=`. That is why no new soundness argument is needed here. See
+`Doc.sites`, `Doc.rewriteAt` and `Doc.suggestions`.
+
+Only the main operands are sites — one level, the parts a single `zoomIn` can
+reach and a display draws as separate pieces. Deeper positions are still reached
+by zooming in.
+
 ## Focus
 
 There is always exactly one focus, just after the line `Doc.focus`. It can be
@@ -255,6 +272,35 @@ structure Suggestion where
   holes : List String
   deriving Repr, DecidableEq, Inhabited
 
+/-- A place in the line before the focus where a law may be applied: the whole
+line, or one of its main operands.
+
+Applying a law to a main operand is what the document calls applying it "to a
+part, as a result of minimization". The step it makes is the one a zoom in, a
+single application and a zoom out would make, so the numbers a site carries are
+the ones the zoom stack would compute: the part's type and direction are what
+zooming in to it gives (`Expr.operandTy`, `Dir.zoom`), and the connective the
+step writes in the outer margin is what zooming out of it would write. That is
+why no new soundness argument is needed here — only the old one, spelled without
+the two lines that zooming would have added to the proof.
+
+Only the *main* operands are sites, which is one level: the parts a single
+`zoomIn` can reach, and the parts a display draws as separate pieces
+(`Expr.operandTexts`). Deeper positions are still reached by zooming in. -/
+structure Site where
+  /-- The subexpression a law is matched against. -/
+  expr : Expr
+  /-- Its type. -/
+  ty : Ty
+  /-- The direction that holds there. -/
+  dir : Dir
+  /-- Its position in the line; `positive` for the whole line, which is not in
+  any position at all. -/
+  pos : Pos
+  /-- Which main operand it is; `none` for the whole line. -/
+  operand : Option Nat
+  deriving Repr, DecidableEq, Inhabited
+
 /-- A command: every change to a document is one of these, and every one of
 them is a pure function on the document. -/
 inductive Cmd
@@ -351,24 +397,63 @@ def contextLaws (d : Doc) : List Law := d.stack.flatMap (·.ctx)
 /-- Every law in force: the context first, then the loaded law lists. -/
 def allLaws (d : Doc) : List Law := d.contextLaws ++ d.laws
 
-/-- The suggestions for the line after the focus: for every variant of every
-law in force whose connective the direction allows, the result of matching the
-line before the focus against the variant's left side. Matching is modulo
-associativity, so one variant can match in several ways — `a ∧ b ⇒ a` reads
-`x ∧ y ∧ z` as `x ∧ (y ∧ z)` and as `(x ∧ y) ∧ z` — and each way is a
-suggestion of its own. Suggestions that leave law variables unconstrained come
-last, and a suggestion that would merely repeat the line — `a ⇐ a` from
-reflexivity, say — is dropped. -/
+/-- The places a law may be applied to in the line `e` of a level whose frame
+is `f`: the whole line first, then each of its main operands in order. -/
+def sites (f : Frame) (e : Expr) : List Site :=
+  { expr := e, ty := f.ty, dir := f.dir, pos := .positive, operand := none } ::
+    (List.range e.operands.length).filterMap fun i =>
+      e.operands[i]?.map fun sub =>
+        let p := e.operandPos i
+        { expr := sub, ty := e.operandTy i f.ty, dir := f.dir.zoom p,
+          pos := p, operand := some i }
+
+/-- The line that rewriting the part at `s` to `r` writes, and the connective
+the step puts in the outer margin. `none` when the part cannot be put back.
+
+For the whole line the connective is the variant's own. For a main operand it is
+what zooming out would write: `=` when the rewrite was an equality or the
+operand's position is neutral, and otherwise the level's own direction — the
+operand's position has already turned the direction once on the way in, so a
+step that is a direction inside is that same direction outside. -/
+def rewriteAt (f : Frame) (line : Expr) (s : Site) (o : BinOp) (r : Expr) :
+    Option (BinOp × Expr) :=
+  match s.operand with
+  | none => some (o, r)
+  | some i => do
+      let e ← line.replaceOperand i r
+      let rel ← o.rel?
+      let out : Rel :=
+        if s.pos == .neutral || rel.dir == .same then ⟨.same, false⟩ else ⟨f.dir, false⟩
+      return (out.op f.ty, e)
+
+/-- The suggestions for the line after the focus: for every place of the line
+before the focus (`Doc.sites`) and every variant of every law in force whose
+connective that place's direction allows, the result of matching the place
+against the variant's left side and putting the variant's right side back.
+
+A place is the whole line or one of its main operands, so a law applies "to a
+part, as a result of minimization" as well as to the line entire: `a ∨ a = a`
+takes `x ∧ (y ∨ y)` to `x ∧ y` in one step, where before it took a zoom in and
+a zoom out. Whole-line suggestions come first, then the parts in order.
+
+Matching is modulo associativity, so one variant can match one place in several
+ways — `a ∧ b ⇒ a` reads `x ∧ y ∧ z` as `x ∧ (y ∧ z)` and as `(x ∧ y) ∧ z` —
+and each way is a suggestion of its own. Suggestions that leave law variables
+unconstrained come last, and a suggestion that would merely repeat the line —
+`a ⇐ a` from reflexivity, say — is dropped. -/
 def suggestions (d : Doc) : List Suggestion :=
   match d.frame?, d.focusLine? with
   | some f, some line =>
-      let raw := d.allLaws.flatMap fun l =>
-        l.variants.flatMap fun v =>
-          if !(f.dir.allows f.ty v.op) then []
-          else (Expr.matchAll v.lhs line.expr []).filterMap fun σ =>
-            let r := v.rhs.instantiate σ
-            if r == line.expr then none
-            else some { law := v.law, op := v.op, result := r, holes := r.mvars }
+      let raw := (sites f line.expr).flatMap fun site =>
+        d.allLaws.flatMap fun l =>
+          l.variants.flatMap fun v =>
+            if !(site.dir.allows site.ty v.op) then []
+            else (Expr.matchAll v.lhs site.expr []).filterMap fun σ =>
+              match rewriteAt f line.expr site v.op (v.rhs.instantiate σ) with
+              | some (o, r) =>
+                  if r == line.expr then none
+                  else some { law := v.law, op := o, result := r, holes := r.mvars }
+              | none => none
       let ds := dedup raw
       ds.filter (·.holes.isEmpty) ++ ds.filter (fun s => !s.holes.isEmpty)
   | _, _ => []

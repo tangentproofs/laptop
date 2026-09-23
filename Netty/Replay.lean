@@ -18,11 +18,12 @@ exactly `a ⇒ (b ⇒ a)`. Nothing here is a test in the usual sense: `Doc.step`
 `Doc.suggestions` and `Doc.outcome` are total functions on first-order data and
 `Netty.Laws.boolean` is a literal, so `decide` settles the whole replay.
 
-Two more replays are checked the same way: one that zooms in to a subexpression
-and uses the context that zooming in supplies, and one that leaves a gap by
-direct entry and then closes it.
+Three more replays are checked the same way: one that zooms in to a
+subexpression and uses the context that zooming in supplies, one that leaves a
+gap by direct entry and then closes it, and one that applies a law to a *part*
+of a line instead of to the whole of it.
 
-`Netty.Demo` holds these same three proofs as *scripts*, which is what
+`Netty.Demo` holds these same four proofs as *scripts*, which is what
 `lake exe netty --demo=…` runs; `netty --selftest` checks that parsing each
 script yields exactly the command list checked here, so the two cannot drift
 apart.
@@ -101,7 +102,9 @@ def discharge : List Cmd :=
   [ .start .boolean .up dischargeGoal,
     .zoomIn 1,
     .applyNamed "discharge" (some (.eq, bin .imp (var "a") (var "b"))),
-    .applyNamed "context" none,
+    -- The context law `a ⇒ b` can also be applied to a *part* of the line
+    -- `a ⇒ b`, so the line it should write has to be named.
+    .applyNamed "context" (some (.eq, .top)),
     .zoomOut,
     .applyNamed "base" (some (.eq, .top)) ]
 
@@ -183,6 +186,35 @@ theorem no_match_without_a_law_variable :
     Expr.matchAll (bin .and (mvar "a") (bin .or (mvar "b") (mvar "c"))) conjunction [] = [] := by
   decide
 
+/-! ### A law applied to a part of a line
+
+Real Netty applies a law "to a part, as a result of minimization": the law
+matches a subexpression of the line and the suggestion rewrites that part in
+place. The kernel offers one site per main operand as well as the whole line, so
+a step that used to need a zoom in, an application and a zoom out is one
+application on the outer line. -/
+
+/-- `x ∧ (y ∨ y)`, whose second main operand idempotence folds. -/
+def part : Expr := bin .and (var "x") (bin .or (var "y") (var "y"))
+
+/-- Idempotence does not match `x ∧ (y ∨ y)` at all: its main operator is `∧`,
+not `∨`. So the step below is not a whole-line match under any reading. -/
+theorem idempotence_misses_the_whole_line :
+    Expr.matchAll (bin .or (mvar "a") (mvar "a")) part [] = [] := by decide
+
+/-- It does match the second main operand, and the suggestion rewrites that
+part in place, leaving `x` alone. -/
+def minimize : List Cmd :=
+  [ .start .boolean .same part,
+    .applyNamed "idempotent" (some (.eq, bin .and (var "x") (var "y"))) ]
+
+theorem minimize_proves :
+    proved minimize = some (bin .eq part (bin .and (var "x") (var "y"))) := by decide
+
+theorem minimize_complete :
+    ((session.steps minimize).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
 /-! ### Numbers: the directions are `≤ = ≥`, and a negative position turns them
 
 Nothing about the kernel is boolean; the direction machinery is the same at
@@ -194,8 +226,13 @@ position — turns the direction from `≤` to `≥`. -/
 def numberIdentity : Law :=
   { name := "identity", vars := ["x"], stmt := bin .eq (bin .add (mvar "x") (num 0)) (mvar "x") }
 
-/-- A session whose whole law list is that one law. -/
-def numberSession : Doc := { laws := [numberIdentity] }
+/-- `x ≤ x + 1`, a law whose main operator is a direction rather than `=`. -/
+def numberSuccessor : Law :=
+  { name := "successor", vars := ["x"],
+    stmt := bin .le (mvar "x") (bin .add (mvar "x") (num 1)) }
+
+/-- A session whose whole law list is those two laws. -/
+def numberSession : Doc := { laws := [numberIdentity, numberSuccessor] }
 
 /-- Start at `n - m` going down, zoom in to `m`, rewrite it to `m + 0`, and
 zoom back out. -/
@@ -218,12 +255,40 @@ theorem number_proves :
       = some (bin .eq (bin .sub (var "n") (var "m"))
                       (bin .sub (var "n") (bin .add (var "m") (num 0)))) := by decide
 
+/-! ### A part in a negative position, without zooming
+
+`successor` is a `≤` law, and the subtrahend of `n - m` is in a negative
+position, so applying it there turns the step around: the margin gets `≥` at
+the outer level even though the law wrote `≤` at the part. This is the same
+turning `number` above makes with a zoom in and a zoom out, in one step on the
+outer line. -/
+
+/-- `n - m ≥ n - (m + 1)`, by `successor` on the subtrahend. -/
+def numberMinimize : List Cmd :=
+  [ .start .number .up (bin .sub (var "n") (var "m")),
+    .applyNamed "successor"
+      (some (.ge, bin .sub (var "n") (bin .add (var "m") (num 1)))) ]
+
+theorem numberMinimize_proves :
+    provedIn numberSession numberMinimize
+      = some (bin .ge (bin .sub (var "n") (var "m"))
+                      (bin .sub (var "n") (bin .add (var "m") (num 1)))) := by decide
+
+/-- The turning is the only thing the position can do here: at the whole line,
+whose direction is `≥`, `successor`'s `≤` is not allowed in the margin at all,
+so the only suggestion it makes is the one on the part. -/
+theorem numberMinimize_is_the_only_successor_step :
+    ((numberSession.steps [.start .number .up (bin .sub (var "n") (var "m"))]).toOption.map
+      fun d => (d.suggestions.filter (·.law == "successor")).map fun s => (s.op, s.result))
+      = some [(.ge, bin .sub (var "n") (bin .add (var "m") (num 1)))] := by decide
+
 /-- The scripts `lake exe netty --demo=…` runs, paired with the command lists
 checked above; `netty --selftest` compares them. -/
 def demos : List (String × String × List Cmd) :=
   [("portation", Demo.portation, portation),
    ("discharge", Demo.discharge, discharge),
-   ("gap", Demo.gap, gap)]
+   ("gap", Demo.gap, gap),
+   ("minimize", Demo.minimize, minimize)]
 
 end Replay
 end Netty
