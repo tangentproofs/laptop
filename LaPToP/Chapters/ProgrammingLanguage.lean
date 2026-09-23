@@ -307,7 +307,7 @@ $`\mathbf{go\ to}` is a call of it; the four refinements are proved on the state
 and $`E = \mathit{ok}` — the book leaves those two to the reader. Cf. {uses "exit_loop"}[].
 :::
 
-:::definition "variable_declaration" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.newVar, LaPToP.ProgramTheory.Spec.newVarInit, LaPToP.ProgramTheory.Spec.assignLocal, LaPToP.ProgramTheory.Spec.liftNonlocal, LaPToP.ProgramTheory.Spec.assignLocal_seq, LaPToP.ProgramTheory.Spec.implementable_newVar, LaPToP.ProgramTheory.Spec.not_implementable_newVar, LaPToP.ProgramTheory.Spec.newVar_liftNonlocal, LaPToP.ProgramTheory.Spec.newVarInit_eq, LaPToP.ProgramTheory.Spec.newVar_newVar, LaPToP.ProgramTheory.Spec.newVar_mono, LaPToP.ProgramTheory.Spec.assignNonlocal, LaPToP.ProgramTheory.Spec.assignNonlocal_seq, LaPToP.ProgramTheory.ScopeExamples.YZ, LaPToP.ProgramTheory.ScopeExamples.St, LaPToP.ProgramTheory.ScopeExamples.example₁, LaPToP.ProgramTheory.ScopeExamples.example₂, LaPToP.ProgramTheory.ScopeExamples.example₃")
+:::definition "variable_declaration" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.newVar, LaPToP.ProgramTheory.Spec.newVarInit, LaPToP.ProgramTheory.Spec.assignLocal, LaPToP.ProgramTheory.Spec.liftNonlocal, LaPToP.ProgramTheory.Spec.assignLocal_seq, LaPToP.ProgramTheory.Spec.implementable_newVar, LaPToP.ProgramTheory.Spec.not_implementable_newVar, LaPToP.ProgramTheory.Spec.newVar_liftNonlocal, LaPToP.ProgramTheory.Spec.newVarInit_eq, LaPToP.ProgramTheory.Spec.newVar_newVar, LaPToP.ProgramTheory.Spec.newVar_mono, LaPToP.ProgramTheory.Spec.newVar_refines_newVarInit, LaPToP.ProgramTheory.Spec.newVarInit_mono, LaPToP.ProgramTheory.Spec.assignNonlocal, LaPToP.ProgramTheory.Spec.assignNonlocal_seq, LaPToP.ProgramTheory.ScopeExamples.YZ, LaPToP.ProgramTheory.ScopeExamples.St, LaPToP.ProgramTheory.ScopeExamples.example₁, LaPToP.ProgramTheory.ScopeExamples.example₂, LaPToP.ProgramTheory.ScopeExamples.example₃")
 "We can express a variable declaration together with the specification to
 which it applies as a binary expression in the initial and final state:
 $`\mathbf{new}\ x : T \cdot P = \exists x, x' : T \cdot P`. Specification $`P` is an
@@ -323,7 +323,10 @@ variable. Proved: implementability for nonempty $`T` (and unimplementability
 for empty $`T`), that declaring an unused variable changes nothing, the
 initializing declaration $`\mathbf{new}\ x : T := e \cdot P = \exists x : e \cdot \exists x' : T \cdot P`
 as a declaration followed by a local assignment, nesting
-$`\mathbf{new}\ x, y : T \cdot P = \exists x, x', y, y' : T \cdot P`, monotonicity, and the book's
+$`\mathbf{new}\ x, y : T \cdot P = \exists x, x', y, y' : T \cdot P`, monotonicity of both forms,
+that an initializing declaration refines the declaration it initializes
+($`\mathbf{new}\ x : T \cdot P \Leftarrow \mathbf{new}\ x : T := e \cdot P`, since fixing an
+arbitrary initial value is a refinement), and the book's
 examples in nonlocal integer variables $`y, z`:
 $`\mathbf{new}\ x : \mathit{int} \cdot x := 2.\ y := x + z = (y' = 2 + z \land z' = z)`,
 $`\mathbf{new}\ x : \mathit{int} \cdot y := x = (z' = z)` ("the initial value of the local
@@ -997,4 +1000,56 @@ characterization then follows from soundness and completeness of
 relation whose motive is the implication from the invariant, which is why no
 termination argument is needed. Divergence and failure for every fuel are each
 immediate from the other by the fuelled characterization.
+:::
+
+:::theorem "interpreter_scope" (parent := "programming_language_core") (tags := "programs, interpreter, scope, frames") (effort := "medium") (lean := "LaPToP.ProgramTheory.Spec.inScope, LaPToP.ProgramTheory.Spec.newLocal, LaPToP.ProgramTheory.Spec.newLocal_self, LaPToP.ProgramTheory.Spec.newLocal_eq, LaPToP.ProgramTheory.Spec.newLocal_mono, LaPToP.ProgramTheory.Spec.newLocal_refines_newVar, LaPToP.ProgramTheory.Interpreter.run_newLocal, LaPToP.ProgramTheory.Interpreter.denote_newLocal, LaPToP.ProgramTheory.Interpreter.writes, LaPToP.ProgramTheory.Interpreter.writes_ok, LaPToP.ProgramTheory.Interpreter.writes_assign, LaPToP.ProgramTheory.Interpreter.writes_seq, LaPToP.ProgramTheory.Interpreter.writes_cond, LaPToP.ProgramTheory.Interpreter.writes_whileDo, LaPToP.ProgramTheory.Interpreter.writes_newLocal, LaPToP.ProgramTheory.Interpreter.unchanged_of_eval, LaPToP.ProgramTheory.Interpreter.frame_denote, LaPToP.ProgramTheory.Interpreter.refines_frame_denote, LaPToP.ProgramTheory.Interpreter.denote_newLocal_eq, LaPToP.ProgramTheory.Interpreter.refines_newVar_denote, LaPToP.ProgramTheory.Interpreter.eval_newLocal_self, LaPToP.ProgramTheory.Interpreter.Demo.declare, LaPToP.ProgramTheory.Interpreter.Demo.withLocal, LaPToP.ProgramTheory.Interpreter.Demo.withLocal_run, LaPToP.ProgramTheory.Interpreter.Demo.withLocal_no_leak, LaPToP.ProgramTheory.Interpreter.Demo.writes_withLocal, LaPToP.ProgramTheory.Interpreter.Demo.frame_withLocal")
+Scope, executably. The frame of {uses "variable_suspension"}[] says what a
+computation does *not* do, and the declaration of
+{uses "variable_declaration"}[] puts the local variable beside the nonlocal
+state. Neither runs as it stands, and this node makes both part of the syntax
+that {uses "interpreter"}[] executes.
+
+The frame is discharged statically. `Interpreter.writes` reads a program's write
+set off its syntax — a declaration hiding its own variable — and no terminating
+execution touches a variable outside it. Hence for
+$`\mathsf{writes}\ p \subseteq xs` the framed specification and the denotation
+are the same relation, $`\mathbf{frame}\ xs \cdot p = p`, so a framed
+specification is implemented by a syntactic check on the program rather than an
+argument about its behaviour.
+
+The declaration borrows a slot. A machine with one flat state has no room beside
+it, so `Prog.newLocal` runs the body with the state slot named $`x` holding the
+initial value and puts back what the slot held before. That this is the book's
+notation and not a new one is the content of `Spec.newLocal_eq`: the flat-state
+declaration is exactly $`\mathbf{new}\ x : \mathit{Val} := e \cdot P` on the pair
+state, framed so that the borrowed slot is restored. Since a machine must choose
+the local's initial value where the book leaves it arbitrary, what is executed
+*refines* $`\mathbf{new}\ x : \mathit{Val} \cdot P` — the honest direction, and the
+one a development needs. The fuelled run, the fuel-free evaluation of
+{uses "interpreter_partial_correctness"}[] and the denotation stay in lockstep
+for the new construct, soundness, completeness and determinism included, because
+the declaration that is executed is the initializing one.
+
+The demonstration declares $`\mathbf{new}\ i : \mathit{int} := 5 \cdot s := s + i`: the
+kernel runs it, $`i` is proved unchanged and $`s` increased by 5 from any
+prestate, and the write set of the whole declaration is $`s` alone.
+
+What remains. Whether a declaration is a *program* in the sense of
+{uses "program_definition"}[] is not claimed: restoring a borrowed slot is not
+expressible in the four notations, so the loop-free predicate has no case for it.
+Arrays and assertions are still specifications only, not program syntax, and
+there is no command-line binary outside Lean.
+:::
+
+:::proof "interpreter_scope"
+That the flat-state declaration is the framed initializing declaration is a
+two-way calculation on `Function.update`: forwards, the final value of the local
+is the slot's value before it is restored; backwards, the frame condition says
+the slot already holds what it must be restored to. The write-set theorem is one
+induction on the evaluation relation, with the declaration case splitting on
+whether the variable is the declared one. The frame equation follows, since
+refinement in the other direction is the first conjunct of the frame. Run,
+evaluation and denotation extend to the new construct exactly as the other four
+notations do ({uses "interpreter_soundness"}[]), the fuel case mapping over the
+restore.
 :::
