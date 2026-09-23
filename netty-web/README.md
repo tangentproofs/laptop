@@ -85,8 +85,9 @@ neither is checked in.
 ## What it does not do yet
 
 The kernel's own residuals are listed in `.sci/netty-plan.md` and are visible
-here: matching is syntactic, a law applies to a whole line rather than to a
-part, and the focus moves only within the innermost level, so a click on a
-line of an outer level does not move it there. There is no ML ranking of the
+here: matching is modulo associativity but not modulo symmetry, a law applies
+to a whole line rather than to a part, and the focus moves only within the
+innermost level, so a click on a line of an outer level does not move it
+there. There is no ML ranking of the
 suggestions, no VS Code webview, and no editing of law files from the window —
 laws are files, and `NETTY_CMD` is how to add one.

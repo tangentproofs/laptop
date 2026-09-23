@@ -85,6 +85,12 @@ prints its proof pane:
 proves a ⇒ (b ⇒ a) = ⊤, that is, proves a ⇒ (b ⇒ a)
 ```
 
+A law is matched against the line *modulo associativity*: the document says
+that clicking any operand of `a + b + c` zooms in to it with no need of
+associative laws, and applying a law reads a line the same way, so
+`specialization`, `a ∧ b ⇒ a`, offers both `x` and `x ∧ y` from `x ∧ y ∧ z`.
+Each reading is a suggestion of its own.
+
 Laws are plain text files (`Netty/laws/boolean.laws` holds the Binary laws of
 aPToP §11.3.1); add your own with `--laws=FILE`. `Netty/Laws.lean` reads the
 shipped file at compile time and `Netty.boolean_isTautology` checks in Lean's

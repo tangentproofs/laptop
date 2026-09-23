@@ -34,10 +34,33 @@ substitution is what the suggestion offers.
 ## Matching
 
 Matching is one-way: law variables (`Expr.mvar`) are the only things that bind,
-so a law about `a` and a proof about `a` cannot capture one another. Matching
-is syntactic, up to the left-associated reading of an associative operator; a
-law `a ∧ b` matches `x ∧ y ∧ z` with `a := x ∧ y` and `b := z`, but not with
-`a := x`. Matching modulo associativity is a later refinement.
+so a law about `a` and a proof about `a` cannot capture one another.
+
+It is *modulo associativity*. The document says that clicking any operand of
+`a + b + c` zooms in to it, with no need of associative laws; applying a law
+reads a line the same way, so the law `a ∧ b ⇒ a` sees `x ∧ y ∧ z` as
+`x ∧ (y ∧ z)` as readily as `(x ∧ y) ∧ z`. When a pattern and a line are
+associations of the same associative operator, both are flattened
+(`Expr.flattenOp`), and every way of cutting the line's operands into as many
+non-empty *contiguous* segments as the pattern has operands is tried, each
+segment rebuilt left-associated (`Expr.rebuildOp`). A pattern operand that is
+not a law variable can only take a segment of one operand: the pattern was
+flattened too, so no operand of it is an association of that same operator,
+and an association is all a longer segment can be.
+
+A match can therefore succeed in more than one way — `a ∧ b ⇒ a` applied to
+`x ∧ y ∧ z` offers `x` and `x ∧ y`, where before it offered only `x ∧ y` —
+so `Expr.matchAll` returns every way, shortest first segment first, and the
+suggestion pane shows one suggestion for each. Nothing else about matching has
+changed: it is not modulo symmetry, so `x ∧ y` does not match `y ∧ x`, and it
+is not modulo the identity element.
+
+The recursion is bounded by fuel rather than by a well-founded measure, and the
+fuel is the pattern's size. One unit is spent per level of the pattern — every
+recursive call is on an operand of the pattern, whose height is one less — and
+an expression's height is at most its size, so the fuel cannot run out. Fuel is
+what keeps the matcher *structurally* recursive, and that is what lets `decide`
+run a whole proof session inside Lean's kernel in `Netty.Replay`.
 
 ## Soundness
 
@@ -77,20 +100,68 @@ abbrev Subst := List (String × Expr)
 
 namespace Expr
 
-/-- Match the pattern `pat` against `e`, extending `σ`. Only `mvar` binds. -/
-def matchWith : Expr → Expr → Subst → Option Subst
-  | mvar n, e, σ =>
-      match σ.lookup n with
-      | some e' => if e' == e then some σ else none
-      | none => some ((n, e) :: σ)
-  | var n, var m, σ => if n == m then some σ else none
-  | num n, num m, σ => if n == m then some σ else none
-  | top, top, σ => some σ
-  | bot, bot, σ => some σ
-  | neg a, neg b, σ => matchWith a b σ
-  | bin o l r, bin o' l' r', σ =>
-      if o == o' then (matchWith l l' σ).bind (fun σ' => matchWith r r' σ') else none
-  | _, _, _ => none
+/-- Bind a law variable to an expression, if that agrees with what it is bound
+to already. -/
+def bindMVar (n : String) (e : Expr) (σ : Subst) : List Subst :=
+  match σ.lookup n with
+  | some e' => if e' == e then [σ] else []
+  | none => [(n, e) :: σ]
+
+/-- Match one operand of the pattern against one non-empty contiguous segment
+of the line's operands, using `m` for a segment of length one.
+
+A longer segment is an association of `op`, and the pattern's operands were
+flattened, so none of them is one: only a law variable can take it. -/
+def matchSegment (m : Expr → Expr → Subst → List Subst) (op : BinOp)
+    (p : Expr) (es : List Expr) (σ : Subst) : List Subst :=
+  match es with
+  | [e] => m p e σ
+  | _ =>
+      match p, rebuildOp op es with
+      | mvar n, some e => bindMVar n e σ
+      | _, _ => []
+
+/-- Match the pattern's operands against the line's, each pattern operand
+taking a non-empty contiguous segment and `one` matching it against that
+segment. The recursion is on the pattern's operands, which is why `one` is a
+parameter: `matchFuel`'s own recursion is on its fuel. -/
+def matchSegments (one : Expr → List Expr → Subst → List Subst) :
+    List Expr → List Expr → Subst → List Subst
+  | [], [], σ => [σ]
+  | [], _ :: _, _ => []
+  | _ :: _, [], _ => []
+  | [p], es, σ => one p es σ
+  | p :: ps, e :: es, σ =>
+      -- `p` takes `e` and `k` of the operands after it; what is left must
+      -- still give each remaining pattern operand an operand of its own.
+      (List.range (es.length + 1 - ps.length)).flatMap fun k =>
+        (one p (e :: es.take k) σ).flatMap fun σ' =>
+          matchSegments one ps (es.drop k) σ'
+
+/-- Every way of matching the pattern `pat` against `e`, extending `σ`. Only
+`mvar` binds, and an association of an associative operator is matched modulo
+associativity. The fuel is spent one unit per level of the pattern. -/
+def matchFuel : Nat → Expr → Expr → Subst → List Subst
+  | 0, _, _, _ => []
+  | _ + 1, mvar n, e, σ => bindMVar n e σ
+  | _ + 1, var n, var m, σ => if n == m then [σ] else []
+  | _ + 1, num n, num m, σ => if n == m then [σ] else []
+  | _ + 1, top, top, σ => [σ]
+  | _ + 1, bot, bot, σ => [σ]
+  | f + 1, neg a, neg b, σ => matchFuel f a b σ
+  | f + 1, bin o l r, bin o' l' r', σ =>
+      if o != o' then []
+      else if o.assoc then
+        matchSegments (matchSegment (matchFuel f) o)
+          (flattenOp o (bin o l r)) (flattenOp o (bin o' l' r')) σ
+      else (matchFuel f l l' σ).flatMap fun σ' => matchFuel f r r' σ'
+  | _ + 1, _, _, _ => []
+
+/-- Every way of matching the pattern `pat` against `e`, extending `σ`. -/
+def matchAll (pat e : Expr) (σ : Subst) : List Subst := matchFuel pat.size pat e σ
+
+/-- The first way of matching `pat` against `e`, when there is one. -/
+def matchWith (pat e : Expr) (σ : Subst) : Option Subst := (matchAll pat e σ).head?
 
 /-- Replace the law variables bound by `σ`; leave the rest alone. -/
 def instantiate (σ : Subst) : Expr → Expr

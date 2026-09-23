@@ -157,6 +157,69 @@ def runScript (r : Run) (cs : List (Nat × ScriptCmd)) : IO Run :=
 /-- Where the shipped boolean law file lives, relative to the repository. -/
 def lawFilePath : String := "Netty/laws/boolean.laws"
 
+/-- Lines to offer the whole law list, to check that every suggestion it makes
+is a sound step. Each is an association longer than the two operands most laws
+are written with, which is what matching modulo associativity reads apart. -/
+def soundnessLines : List String :=
+  ["x ∧ y ∧ z", "x ∨ y ∨ z", "x ∧ y ∧ z ∧ w", "x ∧ (y ∨ z)", "¬(x ∧ y ∧ z)",
+   "x ⇒ y ∧ z", "(x ∧ y ∧ z) ∨ w"]
+
+/-- Check the matching that the suggestions rest on. Every suggestion the
+whole law list offers for those lines, under each of the three directions,
+must be a *sound* step: the line joined to the suggestion by the connective it
+would put in the margin has to hold under every assignment. That is the check
+on matching modulo associativity, which reads a line apart in more ways than
+one and so could offer more than it may. The reading itself is witnessed: from
+`x ∧ y ∧ z`, specialization must offer `x`, a first segment shorter than the
+left spine, as well as `x ∧ y`. -/
+def matchTest : IO Bool := do
+  let mut ok := true
+  let mut checked := 0
+  let mut skipped := 0
+  for text in soundnessLines do
+    match Parser.expr text with
+    | .error e =>
+        ok := false
+        IO.eprintln s!"matching: ‘{text}’: {e}"
+    | .ok line =>
+      for dir in [Dir.down, Dir.same, Dir.up] do
+        match Doc.steps { laws := Laws.boolean } [.start .boolean dir line] with
+        | .error e =>
+            ok := false
+            IO.eprintln s!"matching: ‘{text}’: {e}"
+        | .ok d =>
+          for s in d.suggestions do
+            let step : Law := { stmt := Expr.bin s.op line s.result }
+            if (step.stmt.mvars ++ step.stmt.vars).length > 8 then
+              skipped := skipped + 1
+            else if step.isTautology then
+              checked := checked + 1
+            else
+              ok := false
+              IO.eprintln s!"matching: ‘{s.law}’ offers an unsound step: {step.stmt.render}"
+  if ok then
+    IO.println s!"matching: {checked} suggested steps are sound\
+      {if skipped == 0 then "" else s!" ({skipped} had too many names to check)"}"
+  -- The reading that matching modulo associativity adds.
+  match Parser.expr "x ∧ y ∧ z" with
+  | .error e =>
+      ok := false
+      IO.eprintln s!"matching: {e}"
+  | .ok line =>
+    match Doc.steps { laws := Laws.boolean } [.start .boolean .down line] with
+    | .error e =>
+        ok := false
+        IO.eprintln s!"matching: {e}"
+    | .ok d =>
+      let offered := (d.suggestions.filter (·.law == "specialization")).map (·.result.render)
+      if offered == ["x", "x ∧ y"] then
+        IO.println "matching: specialization reads x ∧ y ∧ z both ways"
+      else
+        ok := false
+        IO.eprintln s!"matching: specialization offers {String.intercalate ", " offered}, \
+          not x and x ∧ y"
+  return ok
+
 /-- Check the request service a user interface talks to: every demonstration
 replays through it, a session survives being saved and loaded back through it,
 and a request the service does not know is refused rather than passed over. -/
@@ -249,6 +312,7 @@ def selftest : IO Bool := do
         let r ← runScript { session := { doc := { laws := Laws.boolean } } } quiet
         if r.ok then IO.println s!"demo {name}: script agrees with Netty.Replay, and proved"
         else ok := false
+  if !(← matchTest) then ok := false
   if !(← apiTest) then ok := false
   return ok
 

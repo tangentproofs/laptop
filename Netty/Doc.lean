@@ -353,21 +353,22 @@ def allLaws (d : Doc) : List Law := d.contextLaws ++ d.laws
 
 /-- The suggestions for the line after the focus: for every variant of every
 law in force whose connective the direction allows, the result of matching the
-line before the focus against the variant's left side. Suggestions that leave
-law variables unconstrained come last, and a suggestion that would merely
-repeat the line — `a ⇐ a` from reflexivity, say — is dropped. -/
+line before the focus against the variant's left side. Matching is modulo
+associativity, so one variant can match in several ways — `a ∧ b ⇒ a` reads
+`x ∧ y ∧ z` as `x ∧ (y ∧ z)` and as `(x ∧ y) ∧ z` — and each way is a
+suggestion of its own. Suggestions that leave law variables unconstrained come
+last, and a suggestion that would merely repeat the line — `a ⇐ a` from
+reflexivity, say — is dropped. -/
 def suggestions (d : Doc) : List Suggestion :=
   match d.frame?, d.focusLine? with
   | some f, some line =>
       let raw := d.allLaws.flatMap fun l =>
-        l.variants.filterMap fun v =>
-          if !(f.dir.allows f.ty v.op) then none
-          else match Expr.matchWith v.lhs line.expr [] with
-            | some σ =>
-                let r := v.rhs.instantiate σ
-                if r == line.expr then none
-                else some { law := v.law, op := v.op, result := r, holes := r.mvars }
-            | none => none
+        l.variants.flatMap fun v =>
+          if !(f.dir.allows f.ty v.op) then []
+          else (Expr.matchAll v.lhs line.expr []).filterMap fun σ =>
+            let r := v.rhs.instantiate σ
+            if r == line.expr then none
+            else some { law := v.law, op := v.op, result := r, holes := r.mvars }
       let ds := dedup raw
       ds.filter (·.holes.isEmpty) ++ ds.filter (fun s => !s.holes.isEmpty)
   | _, _ => []

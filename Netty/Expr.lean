@@ -197,6 +197,16 @@ def generalize (names : List String) : Expr → Expr
   | bin op l r => bin op (generalize names l) (generalize names r)
   | e => e
 
+/-- The number of nodes in an expression.
+
+It is what bounds the matcher in `Netty.Law`: that recursion spends one unit of
+its fuel per level of the pattern, and an expression's height is at most its
+size, so `size` is more fuel than a match can use. -/
+def size : Expr → Nat
+  | var _ | mvar _ | num _ | top | bot => 1
+  | neg a => 1 + a.size
+  | bin _ l r => 1 + l.size + r.size
+
 /-- Flatten an association of `op`, so that `a ∧ b ∧ c` has three operands. -/
 def flattenOp (op : BinOp) : Expr → List Expr
   | bin op' l r => if op' == op then flattenOp op l ++ flattenOp op r else [bin op' l r]

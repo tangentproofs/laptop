@@ -134,6 +134,55 @@ theorem gap_is_closed :
 theorem gap_proves :
     proved gap = some (bin .eq (neg (neg (var "a"))) (var "a")) := by decide
 
+/-! ### Matching modulo associativity
+
+The document says that clicking on any operand of `a + b + c` zooms in to it,
+with no need of associative laws. Applying a law reads a line the same way:
+`specialization`, `a ∧ b ⇒ a`, matches `x ∧ y ∧ z` — which is `(x ∧ y) ∧ z` —
+with `a := x` and `b := y ∧ z` as readily as with `a := x ∧ y` and `b := z`. -/
+
+/-- `x ∧ y ∧ z`, read as `(x ∧ y) ∧ z`. -/
+def conjunction : Expr := bin .and (bin .and (var "x") (var "y")) (var "z")
+
+/-- What the laws named `name` suggest for a proof of one line. -/
+def suggestedBy (name : String) (dir : Dir) (e : Expr) : List (BinOp × Expr) :=
+  match (session.steps [.start .boolean dir e]).toOption with
+  | some d => (d.suggestions.filter (·.law == name)).map fun s => (s.op, s.result)
+  | none => []
+
+/-- Specialization offers both readings, the one whose first segment is
+shorter first. Only the second of them was offered before matching went modulo
+associativity. -/
+theorem specialization_reads_both_ways :
+    suggestedBy "specialization" .down conjunction
+      = [(.imp, var "x"), (.imp, bin .and (var "x") (var "y"))] := by decide
+
+/-- So does symmetry, whose right side puts the segments back in the other
+order: `y ∧ z ∧ x` from the first reading, `z ∧ (x ∧ y)` from the second. -/
+theorem symmetry_reads_both_ways :
+    suggestedBy "symmetry" .down conjunction
+      = [(.eq, bin .and (bin .and (var "y") (var "z")) (var "x")),
+         (.eq, bin .and (var "z") (bin .and (var "x") (var "y")))] := by decide
+
+/-- A proof that the reading which is new here really can be taken: one step
+from `x ∧ y ∧ z` to `x`, where before it took an associative law first. -/
+def assoc : List Cmd :=
+  [ .start .boolean .down conjunction,
+    .applyNamed "specialization" (some (.imp, var "x")) ]
+
+theorem assoc_proves : proved assoc = some (bin .imp conjunction (var "x")) := by decide
+
+theorem assoc_complete :
+    ((session.steps assoc).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
+/-- A pattern operand that is not a law variable takes one operand and no
+more: `a ∧ (b ∨ c)` cannot read `x ∧ y ∧ z`, because no segment of it is a
+disjunction. -/
+theorem no_match_without_a_law_variable :
+    Expr.matchAll (bin .and (mvar "a") (bin .or (mvar "b") (mvar "c"))) conjunction [] = [] := by
+  decide
+
 /-! ### Numbers: the directions are `≤ = ≥`, and a negative position turns them
 
 Nothing about the kernel is boolean; the direction machinery is the same at
