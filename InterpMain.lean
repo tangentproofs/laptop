@@ -64,6 +64,7 @@ def grammarText : String :=
 "program   := choice ('.' choice)* '.'?
 choice    := statement ('or' statement)*
 statement := 'ok'
+           | 'tick'
            | var ':=' exp
            | 'if' cond 'then' program 'else' program 'fi'
            | 'while' cond 'do' program 'od'

@@ -23,6 +23,7 @@ apply to it unchanged.
 program   := choice ('.' choice)* '.'?
 choice    := statement ('or' statement)*
 statement := 'ok'
+           | 'tick'
            | var ':=' exp
            | 'if' cond 'then' program 'else' program 'fi'
            | 'while' cond 'do' program 'od'
@@ -302,12 +303,13 @@ def parseStmt (fuel : ℕ) (ts : Toks) : Except String (P × Toks) :=
   | f + 1 =>
     match ts with
     | .word "ok" :: ts => .ok (.ok, ts)
+    | .word "tick" :: ts => .ok (.tick, ts)
     | .word "ensure" :: ts => do
       let (b, ts) ← parseCond f ts
       .ok (.ensure b.eval, ts)
     | .word "assert" :: ts => do
       let (b, ts) ← parseCond f ts
-      .ok (assert b.eval, ts)
+      .ok (.assert b.eval, ts)
     | .word "if" :: ts => do
       let (b, ts) ← parseCond f ts
       let ts ← expectWord "then" ts
