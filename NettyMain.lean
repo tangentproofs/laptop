@@ -247,6 +247,59 @@ def matchTest : IO Bool := do
           y ∨ y inside x ∧ (y ∨ y), not one"
   return ok
 
+/-- Check that the focus can land anywhere, through the request service a user
+interface talks to — which is the path the web client's clickable line numbers
+take. Zoom in, take a step, and the outer line must be reported `focusable`;
+asking for it must succeed and leave the session at the outermost level, with
+the subproof's own lines still there but no longer focusable. -/
+def focusTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean } }
+  let run (s : Session) (arg : String) : Session × Api.Response :=
+    Api.respond s { op := "cmd", arg := arg }
+  let mut s := fresh
+  for arg in ["start ⇐ (a ⇒ b) ⇒ (a ⇒ a ∧ b)", "zoom 1", "apply discharge : = a ⇒ b"] do
+    let (s', r) := run s arg
+    s := s'
+    if !r.ok then
+      ok := false
+      IO.eprintln s!"focus: ‘{arg}’: {r.error}"
+  let before := Api.stateView s
+  match before.lines.find? (fun l => l.index == 0) with
+  | some l =>
+      if l.focusable && before.depth == 1 then
+        IO.println "focus: an outer line is focusable while the proof is zoomed in"
+      else
+        ok := false
+        IO.eprintln s!"focus: at depth {before.depth}, line 0 is \
+          {if l.focusable then "focusable" else "not focusable"}"
+  | none =>
+      ok := false
+      IO.eprintln "focus: the answer has no line 0"
+  let (s', r) := run s "focus 0"
+  if !r.ok then
+    ok := false
+    IO.eprintln s!"focus: ‘focus 0’ at an outer level: {r.error}"
+  else
+    let after := r.state
+    let focusables := (after.lines.filter (·.focusable)).map (·.index)
+    if after.focus == 0 && after.depth == 0 && after.lines.length == 4
+        && focusables == [0, 3] then
+      IO.println "focus: clicking it closed the subproof and left the focus there"
+    else
+      ok := false
+      IO.eprintln s!"focus: after ‘focus 0’ the focus is {after.focus} at depth \
+        {after.depth}, with {after.lines.length} lines and \
+        {focusables.length} focusable"
+    -- A line of the subproof that has just been closed cannot be focused again.
+    let (_, back) := run s' "focus 1"
+    if back.ok then
+      ok := false
+      IO.eprintln "focus: a line of a closed subproof was focused"
+    else
+      IO.println "focus: a line of the closed subproof is refused"
+  return ok
+
 /-- Check the request service a user interface talks to: every demonstration
 replays through it, a session survives being saved and loaded back through it,
 and a request the service does not know is refused rather than passed over. -/
@@ -287,8 +340,10 @@ def apiTest : IO Bool := do
 
 /-- Run the kernel's checks on itself: that every shipped law is a tautology,
 that the law list survives being written out and read back, that the law file
-on disk is the one compiled in, and that every demonstration script is the
-command list `Netty.Replay` checks in Lean and still proves what it claims. -/
+on disk is the one compiled in, that every demonstration script is the command
+list `Netty.Replay` checks in Lean and still proves what it claims, that every
+suggestion the law list offers is a sound step, and that the focus can land on
+an outer line through the request service. -/
 def selftest : IO Bool := do
   let mut ok := true
   let bad := Laws.boolean.filter fun l => !l.isTautology
@@ -340,6 +395,7 @@ def selftest : IO Bool := do
         if r.ok then IO.println s!"demo {name}: script agrees with Netty.Replay, and proved"
         else ok := false
   if !(← matchTest) then ok := false
+  if !(← focusTest) then ok := false
   if !(← apiTest) then ok := false
   return ok
 

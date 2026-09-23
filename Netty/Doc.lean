@@ -55,12 +55,22 @@ by zooming in.
 
 ## Focus
 
-There is always exactly one focus, just after the line `Doc.focus`. It can be
-moved to any earlier line *of the innermost level*, which is how a gap left by
-direct entry is filled: taking a suggestion that reproduces the line already
-below the focus replaces the warning sign with the law's name. Moving the focus
-across levels, which real Netty allows, would mean recomputing the zoom stack
-and is not done here.
+There is always exactly one focus, just after the line `Doc.focus`. Moving it
+back is how a gap left by direct entry is filled: taking a suggestion that
+reproduces the line already below the focus replaces the warning sign with the
+law's name.
+
+The document lets a click land *anywhere*, and so does `Cmd.setFocus`: the line
+may be at an outer level, and the zoom stack is then recomputed so that the
+line's level is the innermost open one again. The recompute is a run of
+zoom-outs (`Doc.closeToDepth`) — the state the user could have reached by
+closing those levels themselves — so each abandoned subproof still puts its
+bottom line back into the line it was zoomed in from, and the direction, type
+and context that come with the focus are the ones that level always had. The
+one place a click cannot go is into a subproof that has already been zoomed out
+of: that level is closed, and re-opening one is not something the kernel does.
+`Doc.canFocus` is the predicate, and it is what the API reports as
+`focusable`.
 
 ## Gaps
 
@@ -317,7 +327,8 @@ inductive Cmd
     | zoomIn (operand : Nat)
   /-- Zoom out of the innermost level. -/
     | zoomOut
-  /-- Move the focus to just after the given line. -/
+  /-- Move the focus to just after the given line, at whatever level it is on,
+  closing the levels that sit below it. -/
     | setFocus (line : Nat)
   deriving Repr, DecidableEq, Inhabited
 
@@ -479,6 +490,87 @@ def applySuggestion (d : Doc) (s : Suggestion) : Except String Doc := do
         { depth := d.depth, conn := some s.op, expr := s.result, why := s.law, gap := false }
       return (d.withLine d.focus { fl with gap := false }).insertAfterFocus line
 
+/-- Zoom out of the innermost level: append, to the level below, the line we
+zoomed in from with the chosen operand replaced by the bottom line of the
+subproof, and pop the frame. The subproof's own lines stay in the document,
+which is what the `ty` and `dir` a level's first line carries are for.
+
+The connective the new line gets follows the document's three rules: `=` when
+the operand's position is neutral or the subproof proved an equality, and the
+parent level's own direction otherwise. Zooming out of a level with a single
+line is an undo, as the document says: the line goes away again. -/
+def zoomOut (d : Doc) : Except String Doc :=
+  match d.stack with
+  | f :: parent :: rest => do
+      if d.focus + 1 != d.lines.size then
+        throw "zoom out only from the last line; move the focus there first"
+      let zl ← orElseError "this level was not entered by zooming in" f.zoomLine
+      let idxs := d.levelLines
+      if idxs.length ≤ 1 then
+        -- "Zooming out immediately after zooming in is the same as undo."
+        return { d with lines := d.lines.pop, stack := parent :: rest, focus := zl }
+      let rels := idxs.filterMap fun j => (d.lines[j]!).conn.bind BinOp.rel?
+      let rel ← orElseError "the subproof mixes directions" (Rel.combine rels)
+      let newRel : Rel :=
+        if f.pos == .neutral || rel.dir == .same then ⟨.same, false⟩ else ⟨parent.dir, false⟩
+      let bottom := (d.lines[idxs.getLast!]!).expr
+      let zoomExpr := (d.lines[zl]!).expr
+      let e ← orElseError "the subproof cannot be put back into its line"
+        (zoomExpr.replaceOperand f.operand bottom)
+      let idx := d.lines.size
+      return { d with
+        lines := d.lines.push
+          { depth := d.depth - 1, conn := some (newRel.op parent.ty), expr := e,
+            why := "zoom out" }
+        stack := parent :: rest
+        focus := idx }
+  | [_] => .error "the outermost proof cannot be zoomed out of"
+  | [] => .error "the proof has not been started"
+
+/-- Whether the focus may be moved to just after line `i`.
+
+Any line of any *open* level will do — the document lets a click land anywhere,
+and focusing a line below the innermost level closes the levels between it and
+that line (`Doc.closeToDepth`). What cannot be focused is a line of a subproof
+that has already been zoomed out of: its level is closed, and re-opening one is
+not something the kernel does. Those are the lines deeper than the innermost
+open level, and the lines that lie before the first line of the open level at
+their own depth — the ones belonging to an earlier, closed subproof at that
+depth. -/
+def canFocus (d : Doc) (i : Nat) : Bool :=
+  !d.stack.isEmpty &&
+    (match d.lines[i]? with
+     | none => false
+     | some l =>
+         -- The stack is innermost first, so the open level at depth `k` is the
+         -- frame `d.depth - k` frames in.
+         l.depth ≤ d.depth &&
+           (match d.stack[d.depth - l.depth]? with
+            | some f => i ≥ f.start
+            | none => false))
+
+/-- Close the open levels below depth `target`, exactly as a run of zoom-outs
+would: each one puts its subproof's bottom line back into the line it was zoomed
+in from. This is what lets the focus land on a line of an outer level — the
+document's click that can go anywhere — without a document model that knows how
+to be zoomed in to two places at once.
+
+Zooming out reads a level's *bottom* line and refuses to run unless the focus is
+on it. The focus we have been asked for is at an outer level, so it is leaving
+this one in any case, and moving it to the bottom line first loses nothing.
+
+The fuel is the number of open levels, one unit spent per level closed. -/
+def closeToDepth (d : Doc) (target : Nat) : Except String Doc :=
+  go d.stack.length d
+where
+  go : Nat → Doc → Except String Doc
+    | 0, d => .ok d
+    | fuel + 1, d =>
+        if d.depth ≤ target then .ok d
+        else do
+          let d := { d with focus := d.lines.size - 1 }
+          go fuel (← d.zoomOut)
+
 /-- Run one command. Every change a user can make to a proof is one of these,
 and this is the only way a `Doc` changes. -/
 def step (d : Doc) : Cmd → Except String Doc
@@ -531,39 +623,17 @@ def step (d : Doc) : Cmd → Except String Doc
                    zoomLine := some d.focus, operand := i, pos := pos,
                    ctx := (Expr.contextOf fl.expr i).map Law.context } :: d.stack
         focus := idx }
-  | .zoomOut =>
-      match d.stack with
-      | f :: parent :: rest => do
-          if d.focus + 1 != d.lines.size then
-            throw "zoom out only from the last line; move the focus there first"
-          let zl ← orElseError "this level was not entered by zooming in" f.zoomLine
-          let idxs := d.levelLines
-          if idxs.length ≤ 1 then
-            -- "Zooming out immediately after zooming in is the same as undo."
-            return { d with lines := d.lines.pop, stack := parent :: rest, focus := zl }
-          let rels := idxs.filterMap fun j => (d.lines[j]!).conn.bind BinOp.rel?
-          let rel ← orElseError "the subproof mixes directions" (Rel.combine rels)
-          -- The document's three rules for the connective the new line gets.
-          let newRel : Rel :=
-            if f.pos == .neutral || rel.dir == .same then ⟨.same, false⟩ else ⟨parent.dir, false⟩
-          let bottom := (d.lines[idxs.getLast!]!).expr
-          let zoomExpr := (d.lines[zl]!).expr
-          let e ← orElseError "the subproof cannot be put back into its line"
-            (zoomExpr.replaceOperand f.operand bottom)
-          let idx := d.lines.size
-          return { d with
-            lines := d.lines.push
-              { depth := d.depth - 1, conn := some (newRel.op parent.ty), expr := e,
-                why := "zoom out" }
-            stack := parent :: rest
-            focus := idx }
-      | [_] => .error "the outermost proof cannot be zoomed out of"
-      | [] => .error "the proof has not been started"
+  | .zoomOut => d.zoomOut
   | .setFocus n => do
-      let f ← orElseError "the proof has not been started" d.frame?
+      if d.stack.isEmpty then throw "the proof has not been started"
       let l ← orElseError s!"there is no line {n}" d.lines[n]?
-      if n < f.start || l.depth != d.depth then
-        throw "the focus can only move within the innermost level of the proof"
+      if !d.canFocus n then
+        throw s!"line {n} belongs to a subproof that has been zoomed out of; \
+          the focus cannot move back into one"
+      -- Closing the levels below the line leaves untouched the frame of the
+      -- level the line is in — `Doc.zoomOut` rebuilds no frame but the one it
+      -- pops — so `canFocus`, asked before, still holds after.
+      let d ← d.closeToDepth l.depth
       return { d with focus := n }
 
 /-- Run a whole script. -/

@@ -164,15 +164,20 @@ function formula(l: LineView): HTMLElement {
   return box;
 }
 
-/** One line of the proof. */
-function lineRow(l: LineView): HTMLElement {
+/** One line of the proof. `depth` is the innermost open level's, which is what
+ * says whether moving the focus to this line would close a subproof. */
+function lineRow(l: LineView, depth: number): HTMLElement {
   const row = el('div', {
     class: ['line', l.focused ? 'focused' : '', l.gap ? 'gapped' : ''].filter(Boolean).join(' '),
     style: `--depth: ${l.depth}`,
   });
   const gutter = el('button', {
     class: 'gutter' + (l.focusable ? ' movable' : ''),
-    title: l.focusable ? 'move the focus here' : 'the focus moves only within the innermost level',
+    title: !l.focusable
+      ? 'this line is in a subproof that has been zoomed out of; the focus cannot go back into one'
+      : l.depth < depth
+        ? 'move the focus here, closing the subproofs below this line'
+        : 'move the focus here',
   }, String(l.index));
   if (l.focusable) gutter.addEventListener('click', () => void cmd(`focus ${l.index}`));
   row.append(gutter);
@@ -201,7 +206,7 @@ function proofPane(s: StateView | null): HTMLElement {
     body.append(startRow());
   } else {
     for (const l of s.lines) {
-      body.append(lineRow(l));
+      body.append(lineRow(l, s.depth));
       if (l.focused) body.append(directRow(s, l.depth));
     }
   }

@@ -35,7 +35,8 @@ export interface LineView {
   note: string;
   /** Whether the focus sits just after this line. */
   focused: boolean;
-  /** Whether the focus may be moved here. */
+  /** Whether the focus may be moved here. A line of an outer level may be: the
+   * kernel closes the levels below it, as a run of zoom-outs would. */
   focusable: boolean;
   /** Whether a click on one of `parts` may zoom in to it. */
   zoomable: boolean;

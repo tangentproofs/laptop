@@ -71,7 +71,8 @@ structure LineView where
   note : String
   /-- Whether the focus sits just after this line. -/
   focused : Bool
-  /-- Whether the focus may be moved here. -/
+  /-- Whether the focus may be moved here. A line of an outer level may be: the
+  kernel closes the levels below it, as a run of zoom-outs would. -/
   focusable : Bool
   /-- Whether a click on one of `parts` may zoom in to it. -/
   zoomable : Bool
@@ -190,9 +191,7 @@ def lineView (d : Doc) (i : Nat) : LineView :=
     gap := l.gap
     note := d.note i
     focused := focused
-    focusable := match d.frame? with
-      | some f => i ≥ f.start && l.depth == d.depth
-      | none => false
+    focusable := d.canFocus i
     zoomable := focused && i + 1 == d.lines.size && !l.expr.operands.isEmpty }
 
 /-- The whole state of a session. -/

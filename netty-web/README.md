@@ -56,8 +56,11 @@ checks both halves. The server listens on the loopback interface only.
 * **A click on a subexpression** of the last line zooms in to it, which opens
   a subproof with its own direction and its own context. **zoom out** (`o`)
   closes it and puts the result back in the line it came from.
-* **A click on a line number** moves the focus there, within the innermost
-  level. Typing a line in the box at the focus is direct entry: it leaves a
+* **A click on a line number** moves the focus there. Any line of an open level
+  will do: the kernel closes the subproofs below it, as zooming out would. A
+  greyed number is a line of a subproof that has already been zoomed out of,
+  which a click cannot re-open.
+  Typing a line in the box at the focus is direct entry: it leaves a
   gap, marked `!`, until a suggestion that writes exactly that line closes it.
 * **save** writes the proof file the kernel's `save` writes, and **load**
   reads one back. **panes: lines / panes: text** switches between the drawn
@@ -85,9 +88,11 @@ neither is checked in.
 ## What it does not do yet
 
 The kernel's own residuals are listed in `.sci/netty-plan.md` and are visible
-here: matching is modulo associativity but not modulo symmetry, a law applies
-to a whole line rather than to a part, and the focus moves only within the
-innermost level, so a click on a line of an outer level does not move it
-there. There is no ML ranking of the
+here: matching is modulo associativity but not modulo symmetry or an identity
+element; a law applies to the whole line and to each of its main operands, but
+not to deeper subterms or to a contiguous segment of an association; and the
+document's display collapses — a pair of matched zooms merged, a one-law
+subproof folded into its parent line — are not done, so a subproof always shows
+all of its lines. There is no ML ranking of the
 suggestions, no VS Code webview, and no editing of law files from the window —
 laws are files, and `NETTY_CMD` is how to add one.

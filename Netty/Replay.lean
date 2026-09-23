@@ -18,10 +18,11 @@ exactly `a ⇒ (b ⇒ a)`. Nothing here is a test in the usual sense: `Doc.step`
 `Doc.suggestions` and `Doc.outcome` are total functions on first-order data and
 `Netty.Laws.boolean` is a literal, so `decide` settles the whole replay.
 
-Three more replays are checked the same way: one that zooms in to a
-subexpression and uses the context that zooming in supplies, one that leaves a
-gap by direct entry and then closes it, and one that applies a law to a *part*
-of a line instead of to the whole of it.
+Four more replays are checked the same way: one that zooms in to a
+subexpression and uses the context that zooming in supplies, one that reaches an
+outer line by a click instead of by zooming out, one that leaves a gap by direct
+entry and then closes it, and one that applies a law to a *part* of a line
+instead of to the whole of it.
 
 `Netty.Demo` holds these same four proofs as *scripts*, which is what
 `lake exe netty --demo=…` runs; `netty --selftest` checks that parsing each
@@ -114,6 +115,87 @@ theorem discharge_proves : proved discharge = some dischargeGoal := by decide
 theorem discharge_complete :
     ((session.steps discharge).toOption.map fun d => (d.gaps, d.stack.length))
       = some ([], 1) := by decide
+
+/-! ### The focus lands anywhere: recomputing the zoom stack
+
+The document lets a click land on any line of the proof. Focusing a line of an
+*outer* level closes the levels that sit below it, exactly as a run of zoom-outs
+would, so nothing is lost: each abandoned subproof still puts its bottom line
+back into the line it was zoomed in from. -/
+
+/-- The `discharge` proof again, but where `discharge` zooms out, this one
+clicks on line 0 — the outermost line — and then carries on at that level. -/
+def anywhere : List Cmd :=
+  [ .start .boolean .up dischargeGoal,
+    .zoomIn 1,
+    .applyNamed "discharge" (some (.eq, bin .imp (var "a") (var "b"))),
+    .applyNamed "context" (some (.eq, .top)),
+    .setFocus 0,
+    .setFocus 4,
+    .applyNamed "base" (some (.eq, .top)) ]
+
+/-- Clicking line 0 while two levels deep in the proof leaves the focus there,
+the stack back at the outermost level, and no context: the zoom in's facts went
+out with its frame. The subproof's own lines stay in the document, and the line
+the zoom out wrote is line 4. -/
+theorem anywhere_closes_the_stack :
+    ((session.steps (anywhere.take 5)).toOption.map fun d =>
+      (d.focus, d.stack.length, d.contextLaws.length, d.lines.size))
+      = some (0, 1, 0, 5) := by decide
+
+/-- The closed subproof's lines are not focusable — a click cannot re-open a
+level that has been zoomed out of — but both lines of the outermost level
+are. -/
+theorem anywhere_leaves_the_subproof_closed :
+    ((session.steps (anywhere.take 5)).toOption.map fun d =>
+      (List.range d.lines.size).filter (d.canFocus ·)) = some [0, 4] := by decide
+
+/-- Carrying on from there proves what `discharge` proves … -/
+theorem anywhere_proves : proved anywhere = some dischargeGoal := by decide
+
+/-- … and in fact writes the very same document: clicking an outer line did
+what `Cmd.zoomOut` does. -/
+theorem anywhere_is_discharge :
+    ((session.steps anywhere).toOption.map fun d => d.lines.toList)
+      = ((session.steps discharge).toOption.map fun d => d.lines.toList) := by decide
+
+/-- Two levels deep, one click closes both. Here the inner subproof rewrites
+`a ∧ b` to `b ∧ a`, and focusing line 0 writes the two lines the two zoom-outs
+would have written. -/
+def nested : List Cmd :=
+  [ .start .boolean .up dischargeGoal,
+    .zoomIn 1,
+    .zoomIn 1,
+    .applyNamed "symmetry" (some (.eq, bin .and (var "b") (var "a"))),
+    .setFocus 0 ]
+
+theorem nested_closes_both_levels :
+    ((session.steps nested).toOption.map fun d =>
+      (d.focus, d.stack.length, d.contextLaws.length, d.lines.size))
+      = some (0, 1, 0, 6) := by decide
+
+/-- The bottom line is the goal with `a ∧ b` turned around, which is what the
+two zoom-outs put back. -/
+theorem nested_puts_the_subproofs_back :
+    ((session.steps nested).toOption.bind fun d => d.lines[5]?.map Line.expr)
+      = some (bin .imp (bin .imp (var "a") (var "b"))
+                (bin .imp (var "a") (bin .and (var "b") (var "a")))) := by decide
+
+/-- A closed subproof stays closed even when a *new* level is open at its own
+depth: zoom in, step, zoom out, zoom in again, and the first subproof's lines
+are still not focusable, though both lines of the outer level and the line of the
+new level are. -/
+def reopen : List Cmd :=
+  [ .start .boolean .up dischargeGoal,
+    .zoomIn 1,
+    .applyNamed "discharge" (some (.eq, bin .imp (var "a") (var "b"))),
+    .zoomOut,
+    .zoomIn 1 ]
+
+theorem reopen_keeps_the_first_subproof_closed :
+    ((session.steps reopen).toOption.map fun d =>
+      (d.depth, (List.range d.lines.size).filter (d.canFocus ·)))
+      = some (1, [0, 3, 4]) := by decide
 
 /-! ### A gap, and closing it -/
 
