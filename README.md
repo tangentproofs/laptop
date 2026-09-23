@@ -28,6 +28,29 @@ _out/site/html-multi/index.html
 `./scripts/ci-pages.sh` is the same check the GitHub Pages workflow runs. It
 does **not** build PDF (`--pdf` is intentionally omitted from CI).
 
+## Run a program (`lake exe interp`)
+
+The programming notations of Chapters 4 and 5 are not only specified but
+executed: `LaPToP/ProgramTheory/Interpreter.lean` is an interpreter for them,
+and `interp` runs programs written in the concrete syntax of its demonstrations.
+
+```bash
+lake build interp                      # first time: compiles the exe (a few minutes)
+lake exe interp --help                 # options
+lake exe interp --grammar              # the grammar of the concrete syntax
+lake exe interp --demo=sumTo --n=10    # => n = 10, i = 10, s = 55
+lake exe interp --selftest             # the sources parse to the proved programs
+echo 'i:= 0. s:= 0. while i != n do i:= i+1. s:= s+i od' | lake exe interp --n=20
+echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --all   # backtracking
+```
+
+The state is the three integer variables `n`, `i`, `s`. `--all` searches for
+every poststate (`runAll`) instead of running the deterministic interpreter
+once, which is what a choice needs. Exit status is 1 for a parse error and 2
+when there is no poststate. Building the executable links the whole import
+chain, so it is a separate target: plain `lake build` and the Blueprint site do
+not build it.
+
 ## GitHub Pages
 
 Workflows:
@@ -104,7 +127,8 @@ LaPToP/
                              #   Interpreter (executable AST with local declarations, array
                              #   element assignment, assertions and backtracking choice; fuelled
                              #   run, searching runAll and fuel-free Eval; write sets and frames;
-                             #   denotation into Spec)
+                             #   denotation into Spec), InterpreterSyntax (tokenizer + parser for
+                             #   the demonstration syntax)
   RecursiveDefinition/       # Nat, DataConstruction, Programs, LoopBridge (terminating runs vs the
                              #   §6.1.1 least-fixed-point loop)
   TheoryDesign/              # Stack, SimpleStack, Queue, Tree, ProgramStack, ProgramQueue, DataTransformation,
@@ -112,7 +136,8 @@ LaPToP/
   Concurrency/               # Composition, ListConcurrency, Transformation, InsertionSort, DiningPhilosophers
   Interaction/               # InteractiveVariables, GrowSlow, Communication, CommunicationTiming, Merge,
                              #   MergeInterleave, ChannelDeclaration, Deadlock, PowerSeries, Thermostat
-LaPToPMain.lean              # Verso generator entry point
+LaPToPMain.lean              # Verso generator entry point (`lake exe vbp`)
+InterpMain.lean              # interpreter command line (`lake exe interp`)
 scripts/ci-pages.sh          # builds the site, then scripts/enhance-site-ux.py
 .sci/laws-survey.md          # §11.3 Reference law tables mapped to Lean theorems
 ```

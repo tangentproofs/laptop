@@ -19,6 +19,7 @@ import LaPToP.ProgramTheory.Blackjack
 import LaPToP.ProgramTheory.Information
 import LaPToP.ProgramTheory.Functional
 import LaPToP.ProgramTheory.Interpreter
+import LaPToP.ProgramTheory.InterpreterSyntax
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1165,4 +1166,47 @@ flat map of a composition, and the maximum of two fuels at each composition,
 appealing to monotonicity in the fuel. The example follows from the law
 $`(P \lor Q).\ \mathbf{ensure}\ b = (P.\ \mathbf{ensure}\ b) \lor (Q.\ \mathbf{ensure}\ b)`
 of {uses "backtracking"}[]; the computed results are reductions in the kernel.
+:::
+
+:::theorem "interpreter_cli" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, cli") (effort := "medium") (lean := "LaPToP.ProgramTheory.Interpreter.Demo.Tok, LaPToP.ProgramTheory.Interpreter.Demo.Tok.render, LaPToP.ProgramTheory.Interpreter.Demo.Toks, LaPToP.ProgramTheory.Interpreter.Demo.tokenize, LaPToP.ProgramTheory.Interpreter.Demo.parseExp, LaPToP.ProgramTheory.Interpreter.Demo.parseExpTail, LaPToP.ProgramTheory.Interpreter.Demo.parseTerm, LaPToP.ProgramTheory.Interpreter.Demo.parseTermTail, LaPToP.ProgramTheory.Interpreter.Demo.parseFactor, LaPToP.ProgramTheory.Interpreter.Demo.parseCond, LaPToP.ProgramTheory.Interpreter.Demo.parseCondTail, LaPToP.ProgramTheory.Interpreter.Demo.parseRel, LaPToP.ProgramTheory.Interpreter.Demo.parseProg, LaPToP.ProgramTheory.Interpreter.Demo.parseChoice, LaPToP.ProgramTheory.Interpreter.Demo.parseStmt, LaPToP.ProgramTheory.Interpreter.Demo.parseToks, LaPToP.ProgramTheory.Interpreter.Demo.parseProgram, LaPToP.ProgramTheory.Interpreter.Demo.sumToSrc, LaPToP.ProgramTheory.Interpreter.Demo.sumToToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_sumTo, LaPToP.ProgramTheory.Interpreter.Demo.countSrc, LaPToP.ProgramTheory.Interpreter.Demo.countToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_count, LaPToP.ProgramTheory.Interpreter.Demo.backtrackSrc, LaPToP.ProgramTheory.Interpreter.Demo.backtrackToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_backtrack, LaPToP.ProgramTheory.Interpreter.Demo.withLocalSrc, LaPToP.ProgramTheory.Interpreter.Demo.withLocalToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_withLocal, LaPToP.ProgramTheory.Interpreter.Demo.selfTests, LaPToP.ProgramTheory.Interpreter.Demo.state, LaPToP.ProgramTheory.Interpreter.Demo.state_zero_zero, LaPToP.ProgramTheory.Interpreter.Demo.renderState")
+A concrete syntax, and programs run from a shell. Everything the interpreter of
+{uses "interpreter"}[] executes has so far been written in Lean. This node adds
+the layer that was missing for it to be used as an interpreter: a tokenizer and a
+recursive-descent parser from text into the *same* abstract syntax, so a parsed
+program is executed by the same `run` and `runAll` and means the same
+specification. No semantics is added.
+
+The grammar is the book's where it can be. Sequential composition is written
+$`.` and binds loosest, so $`s := 0\ \mathbf{or}\ s := 1.\ \mathbf{ensure}\ s = 1`
+is the choice followed by the $`\mathbf{ensure}`, as
+{uses "interpreter_assertions"}[] reads it. Assignment, $`\mathbf{if}`,
+$`\mathbf{while}`, the local declaration, $`\mathbf{ensure}`,
+$`\mathbf{assert}` and the choice all have surface forms. Parsing is total:
+tokenizer and parser are structurally recursive on a fuel budget read off the
+input, and every failure is a message rather than a partial function.
+
+What ties the binary to the development is four theorems: the parser turns the
+tokens of each demonstration program into *that very Lean term* — the summation,
+the counting loop with its proved specification, the backtracking example and the
+local declaration that does not leak. So what runs from the command line is what
+the theorems of {uses "interpreter_soundness"}[] and
+{uses "interpreter_scope"}[] are about, not a lookalike.
+
+Honest scope. The theorems are stated of the token lists, not of the source text:
+reducing a string literal to its characters in the kernel costs minutes per
+example while reducing the parser is instant, so that the tokenizer takes each
+source to those tokens is *checked when the binary runs* and not proved. This is
+the surface syntax of the demonstrations, not of the book: three integer
+variables of fixed names, no array syntax (the array demonstration has its own
+variable type), no declarations of new names, and no output. Nothing here reaches
+concurrency, the time variable, or channels.
+:::
+
+:::proof "interpreter_cli"
+Each parsing function recurses on a fuel argument, which makes the definitions
+structural and therefore cheap for the kernel to reduce; that is what lets the
+agreement with the demonstration programs be a theorem closed by reflexivity
+rather than a test. The digits of a numeral are folded by hand instead of through
+the string library for the same reason. The four agreements are then reflexivity
+on closed terms.
 :::
