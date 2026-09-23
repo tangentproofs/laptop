@@ -121,6 +121,23 @@ theorem assert_of_holds {s : AT} (hb : b s) (s' : AT) : assert b s s' ↔ ok s s
 theorem assert_of_not {s : AT} (hb : ¬ b s) (s' : AT) : assert b s s' ↔ s'.t = ⊤ := by
   rw [assert, cond_neg _ _ b hb]
 
+/-- What a machine with no clock can see of an assertion: starting from a state
+at finite time, the behaviours of `assert b` that end in finite time are exactly
+`ensure b`. The difference between the two — a false `assert` is implementable
+by waiting forever, a false `ensure` is not implementable at all — lives
+entirely in the time variable, so on a state without one they cannot be told
+apart. -/
+theorem assert_finite (b : AT → Prop) {s : AT} (hs : s.t ≠ ⊤) (s' : AT) :
+    (assert b s s' ∧ s'.t ≠ ⊤) ↔ ensure b s s' := by
+  constructor
+  · rintro ⟨h, ht⟩
+    by_cases hb : b s
+    · exact ⟨hb, (assert_of_holds b hb s').1 h⟩
+    · exact absurd ((assert_of_not b hb s').1 h) ht
+  · rintro ⟨hb, hok⟩
+    rw [show s' = s from hok]
+    exact ⟨(assert_of_holds b hb s).2 rfl, hs⟩
+
 /-- `assert ⊤ = ok`: "in a correct program, the asserted expressions will
 always be true, and so all assertions are redundant". -/
 theorem assert_true : assert (fun _ => True) = ok :=
