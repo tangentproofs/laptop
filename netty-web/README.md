@@ -88,11 +88,15 @@ neither is checked in.
 ## What it does not do yet
 
 The kernel's own residuals are listed in `.sci/netty-plan.md` and are visible
-here: matching is modulo associativity but not modulo symmetry or an identity
-element; and a law applies to the whole line and to each of its main operands,
-but not to deeper subterms or to a contiguous segment of an association. There
-is no ML ranking of the suggestions, no VS Code webview, and no editing of law
-files from the window — laws are files, and `NETTY_CMD` is how to add one.
+here: a law applies to the whole line and to each of its main operands, but not
+to deeper subterms or to a contiguous segment of an association. There is no ML
+ranking of the suggestions, no VS Code webview, and no editing of law files from
+the window — laws are files, and `NETTY_CMD` is how to add one.
+
+Matching is modulo associativity, symmetry and the identity element, so the
+suggestion list is long: a law reads a line every way those three allow, and
+each way is a suggestion of its own. The readings that need no rearrangement
+come first.
 
 The document's two display collapses *are* done, in the kernel: a subproof that
 is a single law application is drawn as its parent line with the law's name

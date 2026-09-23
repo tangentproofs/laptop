@@ -221,12 +221,14 @@ theorem gap_is_closed :
 theorem gap_proves :
     proved gap = some (bin .eq (neg (neg (var "a"))) (var "a")) := by decide
 
-/-! ### Matching modulo associativity
+/-! ### Matching modulo associativity, symmetry and the identity
 
 The document says that clicking on any operand of `a + b + c` zooms in to it,
-with no need of associative laws. Applying a law reads a line the same way:
-`specialization`, `a ∧ b ⇒ a`, matches `x ∧ y ∧ z` — which is `(x ∧ y) ∧ z` —
-with `a := x` and `b := y ∧ z` as readily as with `a := x ∧ y` and `b := z`. -/
+with no need of associative laws, and it has `symmetry` and `identity` laws that
+a user should likewise not have to spend a step on. Applying a law reads a line
+modulo all three: `specialization`, `a ∧ b ⇒ a`, matches `x ∧ y ∧ z` — which is
+`(x ∧ y) ∧ z` — with `a := x` and `b := y ∧ z` as readily as with `a := x ∧ y`
+and `b := z`, and, since `∧` is symmetric, with `a := y` and `b := x ∧ z` too. -/
 
 /-- `x ∧ y ∧ z`, read as `(x ∧ y) ∧ z`. -/
 def conjunction : Expr := bin .and (bin .and (var "x") (var "y")) (var "z")
@@ -237,21 +239,28 @@ def suggestedBy (name : String) (dir : Dir) (e : Expr) : List (BinOp × Expr) :=
   | some d => (d.suggestions.filter (·.law == name)).map fun s => (s.op, s.result)
   | none => []
 
-/-- Specialization offers both readings, the one whose first segment is
-shorter first. Only the second of them was offered before matching went modulo
-associativity. -/
-theorem specialization_reads_both_ways :
+/-- Specialization offers every sub-conjunction of `x ∧ y ∧ z`. The two
+readings associativity alone gives come first, shortest first segment first;
+then the four that need symmetry, which no cut of the line into contiguous
+segments can reach. Only `x ∧ y` was offered before matching went modulo
+associativity, and only `x` and `x ∧ y` before it went modulo symmetry. -/
+theorem specialization_reads_every_way :
     suggestedBy "specialization" .down conjunction
-      = [(.imp, var "x"), (.imp, bin .and (var "x") (var "y"))] := by decide
+      = [(.imp, var "x"), (.imp, bin .and (var "x") (var "y")),
+         (.imp, bin .and (var "y") (var "z")), (.imp, bin .and (var "x") (var "z")),
+         (.imp, var "z"), (.imp, var "y")] := by decide
 
-/-- So does symmetry, whose right side puts the segments back in the other
-order: `y ∧ z ∧ x` from the first reading, `z ∧ (x ∧ y)` from the second. -/
-theorem symmetry_reads_both_ways :
+/-- Symmetry rearranges the three operands every way but the one it started
+with, which the identity-rewrite gate drops. -/
+theorem symmetry_reads_every_way :
     suggestedBy "symmetry" .down conjunction
       = [(.eq, bin .and (bin .and (var "y") (var "z")) (var "x")),
-         (.eq, bin .and (var "z") (bin .and (var "x") (var "y")))] := by decide
+         (.eq, bin .and (var "z") (bin .and (var "x") (var "y"))),
+         (.eq, bin .and (var "x") (bin .and (var "y") (var "z"))),
+         (.eq, bin .and (var "y") (bin .and (var "x") (var "z"))),
+         (.eq, bin .and (bin .and (var "x") (var "z")) (var "y"))] := by decide
 
-/-- A proof that the reading which is new here really can be taken: one step
+/-- A proof that the reading associativity adds really can be taken: one step
 from `x ∧ y ∧ z` to `x`, where before it took an associative law first. -/
 def assoc : List Cmd :=
   [ .start .boolean .down conjunction,
@@ -263,12 +272,63 @@ theorem assoc_complete :
     ((session.steps assoc).toOption.map fun d => (d.gaps, d.stack.length))
       = some ([], 1) := by decide
 
+/-- And one that symmetry adds: `x ∧ y ⇒ y`, in one step. No cut of `x ∧ y`
+into contiguous segments gives `a := y`, so before this the proof needed the
+symmetry law first. -/
+def swap : List Cmd :=
+  [ .start .boolean .down (bin .and (var "x") (var "y")),
+    .applyNamed "specialization" (some (.imp, var "y")) ]
+
+theorem swap_proves :
+    proved swap = some (bin .imp (bin .and (var "x") (var "y")) (var "y")) := by decide
+
+theorem swap_complete :
+    ((session.steps swap).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
 /-- A pattern operand that is not a law variable takes one operand and no
-more: `a ∧ (b ∨ c)` cannot read `x ∧ y ∧ z`, because no segment of it is a
-disjunction. -/
+more: `a ∧ (b ∨ c)` cannot read `x ∧ y ∧ z`, because no part of it is a
+disjunction — not even now that the parts need not be contiguous. -/
 theorem no_match_without_a_law_variable :
     Expr.matchAll (bin .and (mvar "a") (bin .or (mvar "b") (mvar "c"))) conjunction [] = [] := by
   decide
+
+/-! ### Symmetry and the identity, at the matcher
+
+The three readings, each in one line. Symmetry lets a pattern operand take
+operands that are not next to each other; the identity lets a pattern operand
+that *is* the unit take none at all, and lets a unit the line writes be struck
+out. What it does not do is let a law *variable* take none — otherwise every
+binary law would match every line. -/
+
+/-- `a ∧ b` matches `y ∧ x`, which associativity alone cannot do: the two ways
+round are the two matches, the one that needs no rearrangement first. -/
+theorem symmetry_matches_a_swap :
+    Expr.matchAll (bin .and (mvar "a") (mvar "b")) (bin .and (var "y") (var "x")) []
+      = [[("b", var "x"), ("a", var "y")], [("b", var "y"), ("a", var "x")]] := by decide
+
+/-- A law written with a unit reads a line that left it out: `a ∧ ⊤` matches
+the bare line `y`. -/
+theorem identity_is_elided :
+    Expr.matchAll (bin .and (mvar "a") .top) (var "y") [] = [[("a", var "y")]] := by decide
+
+/-- A unit the line writes is struck out of it: `a ∧ a` matches `x ∧ ⊤ ∧ x`,
+which it cannot do while the `⊤` is still there to be shared out. -/
+theorem identity_is_struck_out :
+    Expr.matchAll (bin .and (mvar "a") (mvar "a"))
+      (bin .and (bin .and (var "x") .top) (var "x")) [] = [[("a", var "x")]] := by decide
+
+/-- But a law variable never takes the unit the line does not mention, so
+`a ∧ b` still does not match a line that is not a conjunction at all. That is
+what keeps the identity from making every binary law apply everywhere. -/
+theorem a_variable_does_not_take_the_unit :
+    Expr.matchAll (bin .and (mvar "a") (mvar "b")) (var "y") [] = [] := by decide
+
+/-- `=` is symmetric without being an association, so it is matched by trying
+its two operands both ways round. -/
+theorem equality_is_symmetric :
+    Expr.matchAll (bin .eq (mvar "a") (var "y")) (bin .eq (var "y") (var "x")) []
+      = [[("a", var "x")]] := by decide
 
 /-! ### A law applied to a part of a line
 
@@ -338,6 +398,38 @@ theorem number_proves :
     provedIn numberSession number
       = some (bin .eq (bin .sub (var "n") (var "m"))
                       (bin .sub (var "n") (bin .add (var "m") (num 0)))) := by decide
+
+/-! ### A unit the line never writes
+
+`BinOp.identity` names `0` as the unit of `+`, so a law written with it can read
+a line that left it out. This is the one shape that matching modulo identity
+adds and nothing else can: the line is not an addition at all, and no
+rearranging of operands will make it one. -/
+
+/-- `x + 0 ≤ x + 1`, a law written with the unit. -/
+def numberUnit : Law :=
+  { name := "unit successor", vars := ["x"],
+    stmt := bin .le (bin .add (mvar "x") (num 0)) (bin .add (mvar "x") (num 1)) }
+
+/-- A session whose whole law list is that one law. -/
+def unitSession : Doc := { laws := [numberUnit] }
+
+/-- Against the bare line `n`, the law reads `n` as `n + 0` and offers
+`n + 1` — the only suggestion there is, and one no syntactic match could
+make. -/
+theorem numberUnit_elides_the_zero :
+    ((unitSession.steps [.start .number .down (var "n")]).toOption.map fun d =>
+      d.suggestions.map fun s => (s.op, s.result))
+      = some [(.le, bin .add (var "n") (num 1))] := by decide
+
+/-- And the step can be taken: `n ≤ n + 1`, with the unit never written. -/
+def numberUnitProof : List Cmd :=
+  [ .start .number .down (var "n"),
+    .applyNamed "unit successor" (some (.le, bin .add (var "n") (num 1))) ]
+
+theorem numberUnit_proves :
+    provedIn unitSession numberUnitProof
+      = some (bin .le (var "n") (bin .add (var "n") (num 1))) := by decide
 
 /-! ### A part in a negative position, without zooming
 

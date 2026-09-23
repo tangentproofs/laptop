@@ -20,9 +20,13 @@ Three things live here besides the syntax tree itself.
   The inference is deliberately crude: an operator fixes the type of its
   result and usually of its operands, and a bare identifier inherits the type
   of the context it sits in.
-* **Associativity.** The document says that clicking any operand of `a+b+c`
-  zooms in to it, with no need of associative laws. So the *main operands* of
-  an expression whose main operator is associative are the flattened list.
+* **Associativity, symmetry and units.** The document says that clicking any
+  operand of `a+b+c` zooms in to it, with no need of associative laws. So the
+  *main operands* of an expression whose main operator is associative are the
+  flattened list. `BinOp.comm` and `BinOp.identity` name the operators the
+  document declares symmetric and the units it names for them; they are what
+  `Netty.Expr.matchFuel` reads a line modulo, and they change nothing about how
+  a line is drawn or zoomed in to.
 -/
 
 namespace Netty
@@ -97,6 +101,29 @@ def prec : BinOp → Nat
 def assoc : BinOp → Bool
   | and | or | add | mul => true
   | _ => false
+
+/-- The operators the document declares symmetric — the ones its `symmetry`
+laws are about, `∧ ∨ = ⧧` at the boolean type and `+ ×` at the number type.
+Matching reads a line modulo these, so a law about `a ∧ b` sees `y ∧ x`
+(`Netty.Expr.matchFuel`). -/
+def comm : BinOp → Bool
+  | and | or | add | mul | eq | ne => true
+  | _ => false
+
+/-- The identity element of the operator, where the document names one: `⊤` for
+`∧`, `⊥` for `∨`, `0` for `+` and `1` for `×`. Matching reads a line modulo
+these too, so a law that mentions the unit can see a line that leaves it out,
+and a law that does not can see a line that writes it.
+
+The document also states `⊤ ⇒ a ≡ a` and `⊤ = a ≡ a`, but `⇒` and `=` are not
+associations that a line is read apart into, so those stay ordinary laws rather
+than something the matcher does silently. -/
+def identity : BinOp → Option Expr
+  | and => some .top
+  | or => some .bot
+  | add => some (.num 0)
+  | mul => some (.num 1)
+  | _ => none
 
 /-- The type of the operator's result. -/
 def resultTy : BinOp → Ty

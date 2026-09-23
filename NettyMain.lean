@@ -159,25 +159,31 @@ def lawFilePath : String := "Netty/laws/boolean.laws"
 
 /-- Lines to offer the whole law list, to check that every suggestion it makes
 is a sound step. Most are associations longer than the two operands most laws
-are written with, which is what matching modulo associativity reads apart; all
-of them have main operands that a law can be applied to as *parts*, in positive,
-negative and neutral positions, which is what the margin connective of a part
-rewrite has to get right. -/
+are written with, which is what matching modulo associativity reads apart and
+modulo symmetry rearranges; all of them have main operands that a law can be
+applied to as *parts*, in positive, negative and neutral positions, which is
+what the margin connective of a part rewrite has to get right. The last two
+write a unit where a law need not mention one, which is what matching modulo the
+identity element strikes out. -/
 def soundnessLines : List String :=
   ["x ∧ y ∧ z", "x ∨ y ∨ z", "x ∧ y ∧ z ∧ w", "x ∧ (y ∨ z)", "¬(x ∧ y ∧ z)",
-   "x ⇒ y ∧ z", "(x ∧ y ∧ z) ∨ w", "x ∧ (y ∨ y)", "(x ⇒ y) = (y ⇐ x)"]
+   "x ⇒ y ∧ z", "(x ∧ y ∧ z) ∨ w", "x ∧ (y ∨ y)", "(x ⇒ y) = (y ⇐ x)",
+   "x ∧ ⊤ ∧ y", "x ∨ ⊥ ∨ y"]
 
 /-- Check the matching that the suggestions rest on. Every suggestion the
 whole law list offers for those lines, under each of the three directions,
 must be a *sound* step: the line joined to the suggestion by the connective it
 would put in the margin has to hold under every assignment. That is the check on
-matching modulo associativity, which reads a line apart in more ways than one,
-and on applying a law to a part of a line, which turns the law's own connective
-into the margin's according to the part's position — both could offer more than
-they may. Two readings are witnessed by name: from `x ∧ y ∧ z`, specialization
-must offer `x`, a first segment shorter than the left spine, as well as `x ∧ y`;
-and from `x ∧ (y ∨ y)`, which idempotence cannot match as a whole, it must offer
-`x ∧ y`, the fold of the second main operand. -/
+matching modulo associativity, symmetry and the identity element, which reads a
+line apart, rearranges it and strikes its units out, and on applying a law to a
+part of a line, which turns the law's own connective into the margin's according
+to the part's position — all of them could offer more than they may. Three
+readings are witnessed by name: from `x ∧ y ∧ z`, specialization must offer
+every sub-conjunction, the two that associativity alone gives first and the four
+that need symmetry after; from `x ∧ (y ∨ y)`, which idempotence cannot match as
+a whole, it must offer `x ∧ y`, the fold of the second main operand; and a law
+written with a unit — `a ∧ ⊤`, here as a law list of its own — must read a line
+that never writes one. -/
 def matchTest : IO Bool := do
   let mut ok := true
   let mut checked := 0
@@ -218,12 +224,12 @@ def matchTest : IO Bool := do
         IO.eprintln s!"matching: {e}"
     | .ok d =>
       let offered := (d.suggestions.filter (·.law == "specialization")).map (·.result.render)
-      if offered == ["x", "x ∧ y"] then
-        IO.println "matching: specialization reads x ∧ y ∧ z both ways"
+      if offered == ["x", "x ∧ y", "y ∧ z", "x ∧ z", "z", "y"] then
+        IO.println "matching: specialization reads every sub-conjunction of x ∧ y ∧ z"
       else
         ok := false
         IO.eprintln s!"matching: specialization offers {String.intercalate ", " offered}, \
-          not x and x ∧ y"
+          not every sub-conjunction of x ∧ y ∧ z"
   -- The reading that applying a law to a part of a line adds: idempotence
   -- cannot match `x ∧ (y ∨ y)`, whose main operator is `∧`, but it folds the
   -- second main operand where it stands.
@@ -245,6 +251,28 @@ def matchTest : IO Bool := do
         ok := false
         IO.eprintln s!"matching: idempotence offers {folds.length} ways to fold \
           y ∨ y inside x ∧ (y ∨ y), not one"
+  -- The reading matching modulo the identity element adds: a law written with a
+  -- unit reads a line that never writes one. `a ∧ ⊤ ⇒ ¬¬a` is not a law of the
+  -- shipped list, so it stands here as a law list of its own; against the line
+  -- `y` it must offer `¬¬y`, and a law written without the unit must not.
+  match Parser.lawFile "unit: a ∧ ⊤ ⟹ ¬¬a\nno unit: a ∧ b ⟹ ¬¬a\n", Parser.expr "y" with
+  | .ok ls, .ok line =>
+      match Doc.steps { laws := ls } [.start .boolean .down line] with
+      | .error e =>
+          ok := false
+          IO.eprintln s!"matching: {e}"
+      | .ok d =>
+        let offered := d.suggestions.map fun s => (s.law, s.result.render)
+        if offered == [("unit", "¬¬y")] then
+          IO.println "matching: a law written a ∧ ⊤ reads the line y, and a ∧ b does not"
+        else
+          ok := false
+          IO.eprintln s!"matching: against y the unit laws offer \
+            {String.intercalate ", " (offered.map fun (l, r) => s!"{l}: {r}")}, \
+            not just the one written with ⊤"
+  | _, _ =>
+      ok := false
+      IO.eprintln "matching: the unit law list does not parse"
   return ok
 
 /-- Check that the focus can land anywhere, through the request service a user

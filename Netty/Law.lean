@@ -36,31 +36,60 @@ substitution is what the suggestion offers.
 Matching is one-way: law variables (`Expr.mvar`) are the only things that bind,
 so a law about `a` and a proof about `a` cannot capture one another.
 
-It is *modulo associativity*. The document says that clicking any operand of
-`a + b + c` zooms in to it, with no need of associative laws; applying a law
-reads a line the same way, so the law `a ∧ b ⇒ a` sees `x ∧ y ∧ z` as
-`x ∧ (y ∧ z)` as readily as `(x ∧ y) ∧ z`. When a pattern and a line are
-associations of the same associative operator, both are flattened
-(`Expr.flattenOp`), and every way of cutting the line's operands into as many
-non-empty *contiguous* segments as the pattern has operands is tried, each
-segment rebuilt left-associated (`Expr.rebuildOp`). A pattern operand that is
-not a law variable can only take a segment of one operand: the pattern was
-flattened too, so no operand of it is an association of that same operator,
-and an association is all a longer segment can be.
+It is *modulo associativity, symmetry and the identity element* — the three
+things the document says a user need not write an associative, symmetry or
+identity law to get. The document says that clicking any operand of `a + b + c`
+zooms in to it, with no need of associative laws; applying a law reads a line
+the same way.
 
-A match can therefore succeed in more than one way — `a ∧ b ⇒ a` applied to
-`x ∧ y ∧ z` offers `x` and `x ∧ y`, where before it offered only `x ∧ y` —
-so `Expr.matchAll` returns every way, shortest first segment first, and the
-suggestion pane shows one suggestion for each. Nothing else about matching has
-changed: it is not modulo symmetry, so `x ∧ y` does not match `y ∧ x`, and it
-is not modulo the identity element.
+**Associativity.** When the pattern is an association of an associative
+operator, both it and the line are flattened (`Expr.flattenOp`) and the line's
+operands are shared out among the pattern's, each group rebuilt left-associated
+(`Expr.rebuildOp`). So `a ∧ b ⇒ a` sees `x ∧ y ∧ z` as `x ∧ (y ∧ z)` as readily
+as `(x ∧ y) ∧ z`. A pattern operand that is not a law variable can only take one
+operand: the pattern was flattened too, so no operand of it is an association of
+that same operator, and an association is all a longer group can be.
+
+**Symmetry.** For an operator the document declares symmetric (`BinOp.comm`:
+`∧ ∨ = ⧧` and `+ ×`), the group a pattern operand takes need not be contiguous:
+`Expr.shares` offers every sub-list of what is left, each keeping the line's own
+order inside it. So `a ∧ b ⇒ a` reads `x ∧ y ∧ z` as `y ∧ (x ∧ z)` and offers
+`y`, and `x ∧ y` matches `y ∧ x`. A symmetric operator that is *not* an
+association — `=` and `⧧` — is matched by trying its two operands both ways
+round instead.
+
+**The identity element.** For an operator the document names a unit for
+(`BinOp.identity`: `⊤` for `∧`, `⊥` for `∨`, `0` for `+`, `1` for `×`), a
+pattern operand that *is* that unit may take no operands at all, so a law
+written `x + 0` reads the line `n`; and a unit the line writes may be struck out
+of it (`Expr.lineForms`), so `a ∧ a` reads `x ∧ ⊤ ∧ x`. Only a pattern operand
+that is literally the unit may take nothing — a law variable never quietly binds
+to a unit the line does not mention, which is what keeps `a ∧ b ⇒ a` from
+matching every line there is.
+
+Readings that need no rearrangement are offered first: `Expr.shares` puts the
+contiguous prefixes, shortest first, before the sub-lists that only symmetry
+allows. A match can succeed in many ways, so `Expr.matchAll` returns every one
+of them — deduplicated, since symmetry and the identity can reach the same
+substitution by more than one route — and the suggestion pane shows one
+suggestion for each.
+
+None of this is a new *step*: a law is still applied by matching a line and
+writing the variant's right side, and the line and the matched left side differ
+only by an associativity, a symmetry or a unit, all of which are equalities. So
+no soundness argument is added — which is what `netty --selftest` checks by
+evaluation, every suggestion the whole law list offers for a battery of lines
+having to be a true step.
 
 The recursion is bounded by fuel rather than by a well-founded measure, and the
 fuel is the pattern's size. One unit is spent per level of the pattern — every
 recursive call is on an operand of the pattern, whose height is one less — and
 an expression's height is at most its size, so the fuel cannot run out. Fuel is
 what keeps the matcher *structurally* recursive, and that is what lets `decide`
-run a whole proof session inside Lean's kernel in `Netty.Replay`.
+run a whole proof session inside Lean's kernel in `Netty.Replay`. A line that is
+not an association of the pattern's operator at all is rejected before any of
+the sharing out begins, unless the pattern mentions that operator's unit, so the
+common case costs what it always did.
 
 ## Soundness
 
@@ -107,40 +136,77 @@ def bindMVar (n : String) (e : Expr) (σ : Subst) : List Subst :=
   | some e' => if e' == e then [σ] else []
   | none => [(n, e) :: σ]
 
-/-- Match one operand of the pattern against one non-empty contiguous segment
-of the line's operands, using `m` for a segment of length one.
+/-- Match one operand of the pattern against the operands of the line it has
+been given, using `m` when it is given exactly one.
 
-A longer segment is an association of `op`, and the pattern's operands were
-flattened, so none of them is one: only a law variable can take it. -/
+Several operands are an association of `op`, and the pattern's operands were
+flattened, so none of them is one: only a law variable can take them. *No*
+operand is `op`'s identity element, where the document names one — that is
+matching modulo identity, and it is how a law that mentions `⊤` in `a ∧ ⊤`
+reads a line that left it out. Only a pattern operand that *is* the identity may
+take none, so a law variable never quietly binds to a unit the line does not
+mention. -/
 def matchSegment (m : Expr → Expr → Subst → List Subst) (op : BinOp)
     (p : Expr) (es : List Expr) (σ : Subst) : List Subst :=
   match es with
+  | [] =>
+      match op.identity with
+      | some u => if p == u then [σ] else []
+      | none => []
   | [e] => m p e σ
   | _ =>
       match p, rebuildOp op es with
       | mvar n, some e => bindMVar n e σ
       | _, _ => []
 
+/-- Every sub-list of `es`, paired with what is left over, both keeping the
+line's own order. -/
+def subLists : List Expr → List (List Expr × List Expr)
+  | [] => [([], [])]
+  | e :: rest => (subLists rest).flatMap fun (c, r) => [(e :: c, r), (c, e :: r)]
+
+/-- The ways of giving one pattern operand some of the line's operands, with
+the rest left over, in the order they are offered.
+
+The contiguous *prefixes* come first, shortest first: those are the readings
+associativity alone gives, and a reading that needs no rearrangement is always
+offered before one that does. When the operator is symmetric every other
+sub-list follows, each keeping the line's own order inside it — that is matching
+modulo symmetry, and it is why `a ∧ b ⇒ a` can read `x ∧ y ∧ z` as `y ∧ (x ∧ z)`
+and so offer `y`. -/
+def shares (comm : Bool) (es : List Expr) : List (List Expr × List Expr) :=
+  let pres := (List.range (es.length + 1)).map fun k => (es.take k, es.drop k)
+  if comm then pres ++ (subLists es).filter (fun s => !pres.contains s) else pres
+
 /-- Match the pattern's operands against the line's, each pattern operand
-taking a non-empty contiguous segment and `one` matching it against that
-segment. The recursion is on the pattern's operands, which is why `one` is a
-parameter: `matchFuel`'s own recursion is on its fuel. -/
-def matchSegments (one : Expr → List Expr → Subst → List Subst) :
+taking some of them and `one` matching it against those. The recursion is on the
+pattern's operands, which is why `one` is a parameter: `matchFuel`'s own
+recursion is on its fuel. -/
+def matchSegments (comm : Bool) (one : Expr → List Expr → Subst → List Subst) :
     List Expr → List Expr → Subst → List Subst
-  | [], [], σ => [σ]
-  | [], _ :: _, _ => []
-  | _ :: _, [], _ => []
+  | [], es, σ => if es.isEmpty then [σ] else []
   | [p], es, σ => one p es σ
-  | p :: ps, e :: es, σ =>
-      -- `p` takes `e` and `k` of the operands after it; what is left must
-      -- still give each remaining pattern operand an operand of its own.
-      (List.range (es.length + 1 - ps.length)).flatMap fun k =>
-        (one p (e :: es.take k) σ).flatMap fun σ' =>
-          matchSegments one ps (es.drop k) σ'
+  | p :: ps, es, σ =>
+      (shares comm es).flatMap fun (mine, rest) =>
+        (one p mine σ).flatMap fun σ' => matchSegments comm one ps rest σ'
+
+/-- The readings of the line `e` as operands of `o`: the flattening, and — when
+`o` has an identity element that the line actually writes — the flattening with
+those operands struck out. Striking them out is matching modulo identity from
+the line's side, so `a ∧ a` reads `x ∧ ⊤ ∧ x`. A line that is nothing but units
+is left alone, since striking them all out would leave no line. -/
+def lineForms (o : BinOp) (e : Expr) : List (List Expr) :=
+  let es := flattenOp o e
+  match o.identity with
+  | some u =>
+      let kept := es.filter (· != u)
+      if kept.isEmpty || kept.length == es.length then [es] else [es, kept]
+  | none => [es]
 
 /-- Every way of matching the pattern `pat` against `e`, extending `σ`. Only
-`mvar` binds, and an association of an associative operator is matched modulo
-associativity. The fuel is spent one unit per level of the pattern. -/
+`mvar` binds; an association is matched modulo associativity, symmetry and the
+identity element, following what the document declares of each operator. The
+fuel is spent one unit per level of the pattern. -/
 def matchFuel : Nat → Expr → Expr → Subst → List Subst
   | 0, _, _, _ => []
   | _ + 1, mvar n, e, σ => bindMVar n e σ
@@ -149,16 +215,37 @@ def matchFuel : Nat → Expr → Expr → Subst → List Subst
   | _ + 1, top, top, σ => [σ]
   | _ + 1, bot, bot, σ => [σ]
   | f + 1, neg a, neg b, σ => matchFuel f a b σ
-  | f + 1, bin o l r, bin o' l' r', σ =>
-      if o != o' then []
-      else if o.assoc then
-        matchSegments (matchSegment (matchFuel f) o)
-          (flattenOp o (bin o l r)) (flattenOp o (bin o' l' r')) σ
-      else (matchFuel f l l' σ).flatMap fun σ' => matchFuel f r r' σ'
+  | f + 1, bin o l r, e, σ =>
+      if o.assoc || o.identity.isSome then
+        let es := flattenOp o e
+        let ps := flattenOp o (bin o l r)
+        -- `es` is one operand exactly when the line is not an association of
+        -- `o` at all. The pattern has at least two, so all but one of them
+        -- would have to take nothing, which only `o`'s own identity may do.
+        if es.length == 1 && !ps.any (fun p => o.identity == some p) then []
+        else
+          (lineForms o e).flatMap fun line =>
+            matchSegments o.comm (matchSegment (matchFuel f) o) ps line σ
+      else
+        match e with
+        | bin o' l' r' =>
+            if o != o' then []
+            else
+              (matchFuel f l l' σ).flatMap (fun σ' => matchFuel f r r' σ') ++
+                (if o.comm then
+                   (matchFuel f l r' σ).flatMap fun σ' => matchFuel f r l' σ'
+                 else [])
+        | _ => []
   | _ + 1, _, _, _ => []
 
+/-- Keep the first occurrence of each substitution: symmetry and the identity
+can find one and the same match by more than one route. -/
+def dedupSubst (σs : List Subst) : List Subst :=
+  (σs.foldl (fun acc σ => if acc.contains σ then acc else σ :: acc) []).reverse
+
 /-- Every way of matching the pattern `pat` against `e`, extending `σ`. -/
-def matchAll (pat e : Expr) (σ : Subst) : List Subst := matchFuel pat.size pat e σ
+def matchAll (pat e : Expr) (σ : Subst) : List Subst :=
+  dedupSubst (matchFuel pat.size pat e σ)
 
 /-- The first way of matching `pat` against `e`, when there is one. -/
 def matchWith (pat e : Expr) (σ : Subst) : Option Subst := (matchAll pat e σ).head?
