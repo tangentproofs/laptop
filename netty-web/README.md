@@ -89,10 +89,15 @@ neither is checked in.
 
 The kernel's own residuals are listed in `.sci/netty-plan.md` and are visible
 here: matching is modulo associativity but not modulo symmetry or an identity
-element; a law applies to the whole line and to each of its main operands, but
-not to deeper subterms or to a contiguous segment of an association; and the
-document's display collapses — a pair of matched zooms merged, a one-law
-subproof folded into its parent line — are not done, so a subproof always shows
-all of its lines. There is no ML ranking of the
-suggestions, no VS Code webview, and no editing of law files from the window —
-laws are files, and `NETTY_CMD` is how to add one.
+element; and a law applies to the whole line and to each of its main operands,
+but not to deeper subterms or to a contiguous segment of an association. There
+is no ML ranking of the suggestions, no VS Code webview, and no editing of law
+files from the window — laws are files, and `NETTY_CMD` is how to add one.
+
+The document's two display collapses *are* done, in the kernel: a subproof that
+is a single law application is drawn as its parent line with the law's name
+moved up onto it, and two zoom-ins matched by two zoom-outs are drawn as one
+zoom step. They arrive here as `state.lines` — the lines a collapse hides are
+simply not in the answer, and a line it lifts arrives with a smaller `depth` —
+so the window draws them without knowing they exist. The `fold` and `merge`
+demonstrations show each of them.

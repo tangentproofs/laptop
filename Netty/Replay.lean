@@ -18,13 +18,15 @@ exactly `a ⇒ (b ⇒ a)`. Nothing here is a test in the usual sense: `Doc.step`
 `Doc.suggestions` and `Doc.outcome` are total functions on first-order data and
 `Netty.Laws.boolean` is a literal, so `decide` settles the whole replay.
 
-Four more replays are checked the same way: one that zooms in to a
-subexpression and uses the context that zooming in supplies, one that reaches an
-outer line by a click instead of by zooming out, one that leaves a gap by direct
-entry and then closes it, and one that applies a law to a *part* of a line
-instead of to the whole of it.
+More replays are checked the same way: one that zooms in to a subexpression and
+uses the context that zooming in supplies, one that reaches an outer line by a
+click instead of by zooming out, one that leaves a gap by direct entry and then
+closes it, one that applies a law to a *part* of a line instead of to the whole
+of it, and two that exercise the display collapses — a one-step subproof folded
+into its parent line, and two zoom-ins matched by two zoom-outs drawn as one
+zoom step.
 
-`Netty.Demo` holds these same four proofs as *scripts*, which is what
+`Netty.Demo` holds several of these proofs as *scripts*, which is what
 `lake exe netty --demo=…` runs; `netty --selftest` checks that parsing each
 script yields exactly the command list checked here, so the two cannot drift
 apart.
@@ -364,13 +366,132 @@ theorem numberMinimize_is_the_only_successor_step :
       fun d => (d.suggestions.filter (·.law == "successor")).map fun s => (s.op, s.result))
       = some [(.ge, bin .sub (var "n") (bin .add (var "m") (num 1)))] := by decide
 
+/-! ### The display collapses
+
+A proof written by zooming keeps lines a reader does not need. The document
+collapses two such patterns, and `Doc.shownLines` is that collapse: which lines
+a display draws, at what depth, and with what law name at the end of them. The
+document itself keeps every line, so what is checked here is the *drawing*. -/
+
+/-- What a display draws: for each line it shows, the depth it is drawn at, its
+margin connective, its formula and the name at the end of it. -/
+def shown (cs : List Cmd) : Option (List (Nat × Option BinOp × Expr × String)) :=
+  (session.steps cs).toOption.map fun d =>
+    d.shownLines.map fun s =>
+      (s.depth, (d.lines[s.index]!).conn, (d.lines[s.index]!).expr, s.note)
+
+/-- The long way round to `x ∧ y`: zoom in to `y ∨ y`, fold it there, and zoom
+back out — the four lines that applying a law to a *part* replaces with two. -/
+def fold : List Cmd :=
+  [ .start .boolean .same part,
+    .zoomIn 1,
+    .applyNamed "idempotent" (some (.eq, var "y")),
+    .zoomOut ]
+
+theorem fold_proves :
+    proved fold = some (bin .eq part (bin .and (var "x") (var "y"))) := by decide
+
+/-- The document keeps all four lines … -/
+theorem fold_keeps_its_four_lines :
+    ((session.steps fold).toOption.map fun d => d.lines.size) = some 4 := by decide
+
+/-- … and the display draws two: the subproof was a single law application, so
+it folds into the line it was zoomed in from and `idempotent` moves up onto
+that line. Lines 1 and 2 are not drawn; line 3 still answers to `focus 3`. -/
+theorem fold_collapses :
+    ((session.steps fold).toOption.map Doc.shownLines)
+      = some [{ index := 0, depth := 0, note := "idempotent" },
+              { index := 3, depth := 0, note := "" }] := by decide
+
+/-- And what is drawn is, line for line, what `minimize` draws: the long way
+round and the short way round look the same, which is the point of the fold. -/
+theorem fold_shows_what_minimize_shows : shown fold = shown minimize := by decide
+
+/-- `x ∧ (y ∨ (¬¬z ∧ ¬¬z))`: two levels down there is a two-step subproof, so
+the merge of two zooms has something to leave behind. -/
+def nest : Expr :=
+  bin .and (var "x")
+    (bin .or (var "y") (bin .and (neg (neg (var "z"))) (neg (neg (var "z")))))
+
+/-- Zoom in twice, take two steps, and zoom out twice. -/
+def merge : List Cmd :=
+  [ .start .boolean .same nest,
+    .zoomIn 1,
+    .zoomIn 1,
+    .applyNamed "idempotent" (some (.eq, neg (neg (var "z")))),
+    .applyNamed "double negation" (some (.eq, var "z")),
+    .zoomOut,
+    .zoomOut ]
+
+theorem merge_proves :
+    proved merge
+      = some (bin .eq nest
+                (bin .and (var "x") (bin .or (var "y") (var "z")))) := by decide
+
+/-- Seven lines in the document … -/
+theorem merge_keeps_its_seven_lines :
+    ((session.steps merge).toOption.map fun d => d.lines.size) = some 7 := by decide
+
+/-- … five drawn, at one level of nesting rather than two. The middle level —
+line 1, which the first zoom in wrote, and line 5, which the first zoom out
+wrote — held nothing of its own, so the subproof it held is drawn a level
+further out and those two lines are not drawn at all. The inner subproof is two
+steps long, so it is not folded away as well. -/
+theorem merge_collapses :
+    ((session.steps merge).toOption.map Doc.shownLines)
+      = some [{ index := 0, depth := 0, note := "" },
+              { index := 2, depth := 1, note := "idempotent" },
+              { index := 3, depth := 1, note := "double negation" },
+              { index := 4, depth := 1, note := "" },
+              { index := 6, depth := 0, note := "" }] := by decide
+
+/-- A merge can expose a fold: the same two zooms with a *one*-step subproof
+inside collapse all the way to two lines, the law's name on the first of them.
+The pass is a fixpoint, so both collapses run. -/
+def mergeThenFold : List Cmd :=
+  [ .start .boolean .same
+      (bin .and (var "x") (bin .or (var "y") (bin .and (var "z") (var "z")))),
+    .zoomIn 1,
+    .zoomIn 1,
+    .applyNamed "idempotent" (some (.eq, var "z")),
+    .zoomOut,
+    .zoomOut ]
+
+theorem mergeThenFold_collapses :
+    ((session.steps mergeThenFold).toOption.map Doc.shownLines)
+      = some [{ index := 0, depth := 0, note := "idempotent" },
+              { index := 5, depth := 0, note := "" }] := by decide
+
+/-- Nothing is collapsed while the level is still open: after the inner zoom
+out of `merge`, the middle level is where the user is working, and all six
+lines written so far are drawn. A collapse waits for the matching zoom out. -/
+theorem merge_waits_for_the_zoom_out :
+    ((session.steps (merge.take 6)).toOption.map fun d =>
+      (d.lines.size, d.shownLines.length)) = some (6, 6) := by decide
+
+/-- A gap is never collapsed away: the same fold, but with the subproof's one
+step typed in directly instead of taken from a law, keeps all four lines and
+its warning sign. -/
+def gapInside : List Cmd :=
+  [ .start .boolean .same part,
+    .zoomIn 1,
+    .direct .eq (var "y"),
+    .zoomOut ]
+
+theorem gapInside_is_not_collapsed :
+    ((session.steps gapInside).toOption.map fun d =>
+      (d.shownLines.length, d.shownLines.map Shown.note))
+      = some (4, ["", "!", "", ""]) := by decide
+
 /-- The scripts `lake exe netty --demo=…` runs, paired with the command lists
 checked above; `netty --selftest` compares them. -/
 def demos : List (String × String × List Cmd) :=
   [("portation", Demo.portation, portation),
    ("discharge", Demo.discharge, discharge),
    ("gap", Demo.gap, gap),
-   ("minimize", Demo.minimize, minimize)]
+   ("minimize", Demo.minimize, minimize),
+   ("fold", Demo.fold, fold),
+   ("merge", Demo.merge, merge)]
 
 end Replay
 end Netty

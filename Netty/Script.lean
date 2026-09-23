@@ -227,10 +227,54 @@ proof
 check x ∧ (y ∨ y) ≡ x ∧ y
 "
 
+/-- The first of the display collapses: a subproof that is a single law
+application is *drawn* as its parent line with the law's name moved up onto
+it. The proof pane is printed twice, once while the subproof is still open and
+once after the zoom out has closed it, so the fold can be seen happening — and
+what is left is line for line what `minimize` draws, which is the same step
+taken the short way round. -/
+def fold : String :=
+"# A one-step subproof, folded into its parent line by the display. The first
+# ‘proof’ shows the subproof open; the second shows it folded away, with
+# ‘idempotent’ moved up to line 0 — which is what the ‘minimize’ demonstration,
+# taking the same step in one application, draws.
+start = x ∧ (y ∨ y)
+zoom 1
+apply idempotent : = y
+proof
+out
+proof
+check x ∧ (y ∨ y) ≡ x ∧ y
+"
+
+/-- The other display collapse: two zoom-ins matched by two zoom-outs are
+*drawn* as one zoom step. The middle level holds nothing of its own — its only
+two lines are the one the zoom in wrote and the one the zoom out wrote — so the
+subproof it holds is drawn a level further out. Again the pane is printed
+twice, before the outer zoom out and after it. -/
+def merge : String :=
+"# Two zoom-ins matched by two zoom-outs, merged by the display into one zoom
+# step. The middle level — the line ‘y ∨ ¬¬z ∧ ¬¬z’ and the line the first zoom
+# out writes — does nothing but hold the subproof, so after the second zoom out
+# the display draws that subproof one level out and leaves the middle level's
+# two lines undrawn. The inner subproof is two steps long, so it is not folded
+# away as well.
+start = x ∧ (y ∨ (¬¬z ∧ ¬¬z))
+zoom 1
+zoom 1
+apply idempotent : = ¬¬z
+apply double negation : = z
+out
+proof
+out
+proof
+check x ∧ (y ∨ (¬¬z ∧ ¬¬z)) ≡ x ∧ (y ∨ z)
+"
+
 /-- The demonstrations, by name. -/
 def all : List (String × String) :=
   [("portation", portation), ("discharge", discharge), ("gap", gap),
-   ("minimize", minimize)]
+   ("minimize", minimize), ("fold", fold), ("merge", merge)]
 
 end Demo
 end Netty

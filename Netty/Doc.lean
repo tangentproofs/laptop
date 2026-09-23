@@ -77,6 +77,37 @@ of: that level is closed, and re-opening one is not something the kernel does.
 `Line.gap` marks a logical gap between that line and the next: a step that no
 law licenses. Direct entry creates one. `Doc.outcome` refuses to say what a
 proof with a gap proves.
+
+## The display collapses
+
+A proof that was written by zooming keeps more lines than it needs to be read
+by. The document collapses two of those patterns, and so does this kernel —
+not by throwing lines away, but by a pass over the document that says which
+lines a display draws, at what depth, and with what law name at the end of
+them (`Doc.shownLines`). The document itself is untouched, so a saved proof is
+the whole proof, the script language still calls a line by its index in
+`Doc.lines`, and nothing about applying a law changes.
+
+The two collapses are:
+
+* **a subproof that is a single law application folds into its parent line**,
+  with the law's name moved up onto that line — the two lines the zoom in and
+  the one step wrote are not drawn at all, and the line the zoom out wrote
+  follows the parent directly. What is left is exactly what applying the law to
+  a *part* of the parent line would have drawn (`Doc.sites`), so the long way
+  round and the short way round are drawn alike; and
+* **two zoom-ins matched by two zoom-outs merge into one zoom step**: a level
+  whose only lines are the one a zoom in wrote and the one a zoom out wrote has
+  done nothing but hold a subproof, so that subproof is drawn one level out and
+  the two scaffolding lines are not drawn.
+
+Both are honest because both only remove lines that a rewriting of the step
+would not have written in the first place, and both leave every line that
+carries a law name or a warning sign. Neither ever hides the focus, a line
+with a gap, or a line of a level that is still open: a collapse fires only
+where the matching zoom-out has already been written, and `Doc.canFocus`
+refuses a closed level anyway. The pass is a fixpoint, so a threefold zoom
+merges twice and then folds.
 -/
 
 namespace Netty
@@ -309,6 +340,22 @@ structure Site where
   pos : Pos
   /-- Which main operand it is; `none` for the whole line. -/
   operand : Option Nat
+  deriving Repr, DecidableEq, Inhabited
+
+/-- A line as a display draws it, after the collapses of `Doc.shownLines`.
+
+It is not a new kind of line: it names a line of `Doc.lines` by the index the
+script language knows it by, and adds the two things a collapse changes — the
+depth the line is drawn at, which merging two zooms lowers, and the name
+written at the end of it, which folding a one-step subproof moves up. -/
+structure Shown where
+  /-- Its index in `Doc.lines`. -/
+  index : Nat
+  /-- The depth it is drawn at, which may be less than the line's own. -/
+  depth : Nat
+  /-- What is written at the end of it: the law that justifies the step to the
+  next line drawn at this depth, or `!` where there is a gap. -/
+  note : String
   deriving Repr, DecidableEq, Inhabited
 
 /-- A command: every change to a document is one of these, and every one of
@@ -659,6 +706,129 @@ def outcome (d : Doc) : Except String Outcome := do
     else if bottom.expr == .bot && (op == .eq || op == .imp) then .neg top.expr
     else .bin op top.expr bottom.expr
   return { top := top.expr, rel := op, bottom := bottom.expr, proved := proved }
+
+/-! ### The display collapses
+
+What a display draws is not quite `Doc.lines`. Two patterns of lines that
+zooming writes carry nothing a reader needs, and the document collapses them;
+`Doc.shownLines` is that collapse, as a pass over the document rather than a
+change to it. See the module header for what the two are and why they are
+honest. -/
+
+/-- The name to write at the end of line `i`: the law that justifies the step
+to the next line at the same level, or a warning sign where there is a gap.
+`zoom in` and `zoom out` are movements of the display, not laws, and are not
+written. -/
+def note (d : Doc) (i : Nat) : String :=
+  match d.lines[i]? with
+  | none => ""
+  | some l =>
+      if l.gap then "!"
+      else match d.nextSibling i with
+        | some j =>
+            let w := (d.lines[j]!).why
+            if w == "zoom in" || w == "zoom out" || w == "" then "" else w
+        | none => ""
+
+/-- Whether a line's `why` names a law, rather than one of the words the kernel
+writes for a movement of the display or for a line the user typed in. Only a
+line whose step is a law application may be folded away, because only its name
+can be moved up. -/
+def isLawStep (w : String) : Bool :=
+  !(w.isEmpty || w == "zoom in" || w == "zoom out" || w == "direct entry")
+
+/-- Why line `i` was written. -/
+def whyOf (d : Doc) (i : Nat) : String := (d.lines[i]?).elim "" Line.why
+
+/-- Whether a gap follows line `i`. -/
+def gapOf (d : Doc) (i : Nat) : Bool := (d.lines[i]?).elim false Line.gap
+
+/-- Whether line `i` may be hidden by a collapse: never the focus, and never a
+line a gap follows, so that no warning sign and no place a user is working can
+be collapsed away. -/
+def mayHide (d : Doc) (i : Nat) : Bool := i != d.focus && !d.gapOf i
+
+/-- Every line, before any collapse: drawn at its own depth, with the name the
+document writes at the end of it. -/
+def shownAll (d : Doc) : List Shown :=
+  (List.range d.lines.size).map fun i =>
+    { index := i, depth := (d.lines[i]!).depth, note := d.note i }
+
+/-- Fold a subproof that is a single law application into the line it was
+zoomed in from, moving the law's name up onto that line.
+
+The pattern is four lines drawn in a row: a line at depth `k`, the line a zoom
+in wrote at depth `k+1`, one line at depth `k+1` that a law wrote, and the line
+the matching zoom out wrote back at depth `k`. The two middle lines go, and the
+name of the law is written at the end of the first — which is exactly what
+applying that law to a *part* of the first line would have drawn. -/
+def foldHere (d : Doc) : List Shown → Option (List Shown)
+  | s0 :: s1 :: s2 :: s3 :: rest =>
+      let k := s0.depth
+      let w := d.whyOf s2.index
+      if s0.note.isEmpty && s1.depth == k + 1 && s2.depth == k + 1 && s3.depth == k
+          && d.whyOf s1.index == "zoom in" && d.whyOf s3.index == "zoom out"
+          && isLawStep w && !d.gapOf s0.index
+          && d.mayHide s1.index && d.mayHide s2.index then
+        some ({ s0 with note := w } :: s3 :: rest)
+      else none
+  | _ => none
+
+/-- Merge two zoom-ins matched by two zoom-outs into one zoom step.
+
+The pattern is a level at depth `k` whose only two lines are the one a zoom in
+wrote and the one a zoom out wrote, holding a single subproof at depth `k+1`,
+and itself closed by a zoom out at depth `k-1`. That level held nothing of its
+own, so its two lines go and its subproof is drawn one level further out. -/
+def mergeHere (d : Doc) : List Shown → Option (List Shown)
+  | s0 :: rest =>
+      let k := s0.depth
+      let inner := rest.takeWhile fun s => s.depth > k
+      match k, inner, rest.dropWhile (fun s => s.depth > k) with
+      | k' + 1, i0 :: _, sq :: sp :: tl =>
+          if s0.note.isEmpty && sq.note.isEmpty
+              && d.whyOf s0.index == "zoom in" && d.whyOf i0.index == "zoom in"
+              && i0.depth == k + 1 && sq.depth == k && sp.depth == k'
+              && d.whyOf sq.index == "zoom out" && d.whyOf sp.index == "zoom out"
+              && (inner.filter fun s => s.depth == k + 1 && d.whyOf s.index == "zoom in").length == 1
+              && d.mayHide s0.index && d.mayHide sq.index then
+            some ((inner.map fun s => { s with depth := s.depth - 1 }) ++ sp :: tl)
+          else none
+      | _, _, _ => none
+  | [] => none
+
+/-- The first collapse that applies, scanning the drawn lines from the top.
+
+A merge is tried before a fold at the same place, because a merge can expose a
+fold and not the other way round: two zooms around a one-step subproof merge to
+one zoom step, and that step then folds into the line above it. Folding first
+would fold the inner subproof into the middle level and leave the middle level
+standing. -/
+def collapseStep (d : Doc) : List Shown → Option (List Shown)
+  | [] => none
+  | s :: rest =>
+      match mergeHere d (s :: rest) with
+      | some out => some out
+      | none =>
+          match foldHere d (s :: rest) with
+          | some out => some out
+          | none => (collapseStep d rest).map (s :: ·)
+
+/-- The lines a display draws: every line of the document, at the depth and
+with the name the collapses leave it, and without the lines they hide.
+
+The pass is run to a fixpoint — each collapse can expose another, so a
+threefold zoom merges twice and then folds — with the number of lines for fuel,
+which is more than enough because every collapse hides two lines. -/
+def shownLines (d : Doc) : List Shown :=
+  go d.lines.size d.shownAll
+where
+  go : Nat → List Shown → List Shown
+    | 0, ss => ss
+    | fuel + 1, ss =>
+        match collapseStep d ss with
+        | some ss' => go fuel ss'
+        | none => ss
 
 end Doc
 end Netty

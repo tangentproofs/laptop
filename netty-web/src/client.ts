@@ -6,6 +6,11 @@
  * and turns a click into one line of the kernel's script language: a click on
  * a suggestion is `apply #N`, a click on a main operand is `zoom N`, a click
  * on a line's number is `focus N`. Nothing about a proof is decided here.
+ *
+ * `state.lines` is the proof after the kernel's display collapses, so a line
+ * the collapses hide simply does not arrive and a line they lift arrives with
+ * a smaller `depth`. Each line still carries its own index in the document,
+ * which is what `focus N` names, so nothing here has to know about them.
  */
 
 import type { LineView, Op, Response, StateView, SuggestionView } from './protocol.js';
@@ -164,8 +169,10 @@ function formula(l: LineView): HTMLElement {
   return box;
 }
 
-/** One line of the proof. `depth` is the innermost open level's, which is what
- * says whether moving the focus to this line would close a subproof. */
+/** One line of the proof. `l.depth` is the depth the kernel says to draw it
+ * at, which the display collapses may have lifted; `depth` is the innermost
+ * open level's, which is what says whether moving the focus to this line would
+ * close a subproof. */
 function lineRow(l: LineView, depth: number): HTMLElement {
   const row = el('div', {
     class: ['line', l.focused ? 'focused' : '', l.gap ? 'gapped' : ''].filter(Boolean).join(' '),
@@ -293,7 +300,8 @@ function toolbar(s: StateView | null): HTMLElement {
   };
   const demos = el('select', { class: 'demos', title: 'replay a demonstration of the document' });
   demos.append(el('option', { value: '' }, 'demonstration…'));
-  for (const d of ['portation', 'discharge', 'gap', 'minimize']) demos.append(el('option', { value: d }, d));
+  for (const d of ['portation', 'discharge', 'gap', 'minimize', 'fold', 'merge'])
+    demos.append(el('option', { value: d }, d));
   demos.addEventListener('change', () => {
     if (demos.value !== '') void send('demo', demos.value);
     demos.value = '';

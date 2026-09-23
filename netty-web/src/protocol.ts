@@ -8,11 +8,13 @@
  * standard input; one answer is one line of JSON on its standard output.
  */
 
-/** A line of the proof, as it is drawn. */
+/** A line of the proof, as it is drawn — one of `Doc.shownLines`, the document
+ * after the display collapses, so the lines a collapse hides are not here. */
 export interface LineView {
   /** Its index in the document, which is what `focus N` calls it. */
   index: number;
-  /** How deeply it is nested in subproofs. */
+  /** How deeply it is drawn in subproofs — its own depth, unless merging two
+   * zooms into one lifted it a level. */
   depth: number;
   /** The margin connective, or `''` on the first line of a level. */
   conn: string;
@@ -68,6 +70,8 @@ export interface StateView {
   dir: string;
   /** The connectives that level's direction allows in the margin. */
   conns: string[];
+  /** The lines the display draws: every line of the document except the ones
+   * the collapses hide. */
   lines: LineView[];
   /** The laws the zoom stack has added, innermost level first. */
   context: string[];

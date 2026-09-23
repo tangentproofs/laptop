@@ -14,6 +14,11 @@ name of the law that produced a line is written at the end of the line
 takes the place of the name where there is a logical gap. Subproofs are
 indented instead of being drawn with the document's corner brackets, and the
 focus is marked in the gutter.
+
+The lines it draws are `Doc.shownLines`, the document after the display
+collapses, so a subproof that is a single law application is drawn as its
+parent line with the law's name at the end of it, and two zoom-ins matched by
+two zoom-outs are drawn as one zoom step.
 -/
 
 namespace Netty
@@ -32,37 +37,28 @@ private def dropTrailingSpaces (s : String) : String :=
 
 namespace Doc
 
-/-- The name to write at the end of line `i`: the law that justifies the step
-to the next line at the same level, or a warning sign where there is a gap. -/
-def note (d : Doc) (i : Nat) : String :=
-  match d.lines[i]? with
-  | none => ""
-  | some l =>
-      if l.gap then "!"
-      else match d.nextSibling i with
-        | some j =>
-            let w := (d.lines[j]!).why
-            if w == "zoom in" || w == "zoom out" || w == "" then "" else w
-        | none => ""
-
-/-- The proof pane. -/
+/-- The proof pane, as the display collapses leave it (`Doc.shownLines`): a
+line that a collapse hides is not printed, a line the merge of two zooms lifts
+is indented one level less, and a law's name folded up from a subproof stands
+at the end of the line it was folded into. The number in the gutter is always
+the line's own index in the document, which is what the script language calls
+it. -/
 def renderProof (d : Doc) : String :=
   if d.lines.isEmpty then "(no proof yet)" else
-  let idxs := List.range d.lines.size
-  let cell := fun (i : Nat) =>
-    let l := d.lines[i]!
+  let shown := d.shownLines
+  let cell := fun (s : Shown) =>
+    let l := d.lines[s.index]!
     let margin :=
       match l.conn, l.ty, l.dir with
       | some o, _, _ => "  " ++ o.symbol ++ " "
       | none, some ty, some dir => " [" ++ dir.symbol ty ++ "]"
       | none, _, _ => "    "
-    String.ofList (List.replicate (2 * l.depth) ' ') ++ margin ++ " " ++ l.expr.render
-  let width := (idxs.map (fun i => (cell i).length)).foldl Nat.max 0
-  String.intercalate "\n" <| idxs.map fun i =>
-    let mark := if i == d.focus && !d.stack.isEmpty then ">" else " "
-    let row := mark ++ padLeft 4 (toString i) ++ "  " ++ padTo width (cell i)
-    let n := d.note i
-    if n.isEmpty then dropTrailingSpaces row else row ++ "   " ++ n
+    String.ofList (List.replicate (2 * s.depth) ' ') ++ margin ++ " " ++ l.expr.render
+  let width := (shown.map (fun s => (cell s).length)).foldl Nat.max 0
+  String.intercalate "\n" <| shown.map fun s =>
+    let mark := if s.index == d.focus && !d.stack.isEmpty then ">" else " "
+    let row := mark ++ padLeft 4 (toString s.index) ++ "  " ++ padTo width (cell s)
+    if s.note.isEmpty then dropTrailingSpaces row else row ++ "   " ++ s.note
 
 /-- The context pane: the laws the zoom stack has added, innermost level
 first. -/

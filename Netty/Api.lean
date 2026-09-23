@@ -47,7 +47,8 @@ open Lean (Json ToJson FromJson toJson fromJson?)
 structure LineView where
   /-- Its index in `Doc.lines`, which is what the script language calls it. -/
   index : Nat
-  /-- How deeply it is nested in subproofs. -/
+  /-- How deeply it is drawn in subproofs — its own depth, unless merging two
+  zooms into one lifted it a level. -/
   depth : Nat
   /-- The margin connective, or `""` on the first line of a level. -/
   conn : String
@@ -110,7 +111,8 @@ structure StateView where
   /-- The connectives the innermost level's direction allows in the margin,
   which is what a direct entry may choose from. -/
   conns : List String
-  /-- Every line, in reading order. -/
+  /-- The lines the display draws, in reading order: every line of the
+  document except the ones the collapses hide. -/
   lines : List LineView
   /-- The laws the zoom stack has added, innermost level first. -/
   context : List String
@@ -170,12 +172,16 @@ def tyName : Ty → String
   | .boolean => "boolean"
   | .number => "number"
 
-/-- One line of the proof, as a client draws it. -/
-def lineView (d : Doc) (i : Nat) : LineView :=
+/-- One line of the proof, as a client draws it: a line the display collapses
+leave standing (`Doc.shownLines`), at the depth and with the name they leave it
+with. Its `index` is still its index in the document, which is what `focus N`
+calls it, so a collapse never changes what a click means. -/
+def lineView (d : Doc) (s : Shown) : LineView :=
+  let i := s.index
   let l := d.lines[i]!
   let focused := i == d.focus && !d.stack.isEmpty
   { index := i
-    depth := l.depth
+    depth := s.depth
     conn := match l.conn with | some o => o.symbol | none => ""
     dir := match l.conn, l.ty, l.dir with
       | none, some ty, some dir => dir.symbol ty
@@ -189,7 +195,7 @@ def lineView (d : Doc) (i : Nat) : LineView :=
     parts := l.expr.operandTexts
     why := l.why
     gap := l.gap
-    note := d.note i
+    note := s.note
     focused := focused
     focusable := d.canFocus i
     zoomable := focused && i + 1 == d.lines.size && !l.expr.operands.isEmpty }
@@ -206,7 +212,7 @@ def stateView (s : Session) : StateView :=
       | some f => ([BinOp.eq, .imp, .rimp, .lt, .gt, .le, .ge].filter
           (f.dir.allows f.ty ·)).map BinOp.symbol
       | none => []
-    lines := (List.range d.lines.size).map (lineView d)
+    lines := d.shownLines.map (lineView d)
     context := d.contextLaws.map (·.stmt.render)
     suggestions := (List.range d.suggestions.length).map fun i =>
       let g := d.suggestions[i]!

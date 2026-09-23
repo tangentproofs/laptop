@@ -47,7 +47,7 @@ usage: netty [options] [script]
 
   script              run this file of commands (default: standard input)
   --demo=NAME         run a built-in demonstration instead: portation,
-                      discharge, gap, minimize
+                      discharge, gap, minimize, fold, merge
   --laws=FILE         add a law file; may be repeated
   --bare              start with no laws but those given by --laws
   --load=FILE         start from a saved proof file
@@ -283,13 +283,17 @@ def focusTest : IO Bool := do
   else
     let after := r.state
     let focusables := (after.lines.filter (·.focusable)).map (·.index)
-    if after.focus == 0 && after.depth == 0 && after.lines.length == 4
+    -- The document has four lines now; the display draws two, because the
+    -- subproof the click closed is a single law application and folds into the
+    -- line above it. Both drawn lines are still focusable, under their own
+    -- indices in the document.
+    if after.focus == 0 && after.depth == 0 && after.lines.length == 2
         && focusables == [0, 3] then
       IO.println "focus: clicking it closed the subproof and left the focus there"
     else
       ok := false
       IO.eprintln s!"focus: after ‘focus 0’ the focus is {after.focus} at depth \
-        {after.depth}, with {after.lines.length} lines and \
+        {after.depth}, with {after.lines.length} lines drawn and \
         {focusables.length} focusable"
     -- A line of the subproof that has just been closed cannot be focused again.
     let (_, back) := run s' "focus 1"
@@ -298,6 +302,47 @@ def focusTest : IO Bool := do
       IO.eprintln "focus: a line of a closed subproof was focused"
     else
       IO.println "focus: a line of the closed subproof is refused"
+  return ok
+
+/-- Check that the display collapses reach a user interface, through the same
+request service the web client talks to. The `fold` demonstration's four lines
+are drawn as two, with `idempotent` moved up onto the line the subproof was
+zoomed in from — which is line for line what `minimize`, the same step taken in
+one application, draws. The `merge` demonstration's seven lines are drawn as
+five, one level deep rather than two: the middle level held nothing but the
+subproof, so it is not drawn at all. In both, a drawn line keeps its own index
+in the document, which is what a click on it still means. -/
+def collapseTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean } }
+  let drawn := fun (name : String) => do
+    let (_, r) := Api.respond fresh { op := "demo", arg := name }
+    if !r.ok then
+      IO.eprintln s!"collapse: demo {name}: {r.error}"
+      return (none : Option (List (Nat × Nat × String)))
+    return some (r.state.lines.map fun l => (l.index, l.depth, l.note))
+  match ← drawn "fold", ← drawn "minimize" with
+  | some f, some m =>
+      if f == [(0, 0, "idempotent"), (3, 0, "")] then
+        IO.println "collapse: a one-step subproof folds into its parent line"
+      else
+        ok := false
+        IO.eprintln s!"collapse: fold draws {repr f}"
+      if f.map (fun (_, d, n) => (d, n)) == m.map (fun (_, d, n) => (d, n)) then
+        IO.println "collapse: the long way round is drawn as the short way round"
+      else
+        ok := false
+        IO.eprintln s!"collapse: fold draws {repr f}, minimize draws {repr m}"
+  | _, _ => ok := false
+  match ← drawn "merge" with
+  | some g =>
+      if g == [(0, 0, ""), (2, 1, "idempotent"), (3, 1, "double negation"),
+               (4, 1, ""), (6, 0, "")] then
+        IO.println "collapse: two zoom-ins matched by two zoom-outs draw as one"
+      else
+        ok := false
+        IO.eprintln s!"collapse: merge draws {repr g}"
+  | none => ok := false
   return ok
 
 /-- Check the request service a user interface talks to: every demonstration
@@ -342,8 +387,9 @@ def apiTest : IO Bool := do
 that the law list survives being written out and read back, that the law file
 on disk is the one compiled in, that every demonstration script is the command
 list `Netty.Replay` checks in Lean and still proves what it claims, that every
-suggestion the law list offers is a sound step, and that the focus can land on
-an outer line through the request service. -/
+suggestion the law list offers is a sound step, that the focus can land on an
+outer line through the request service, and that the display collapses reach it
+too. -/
 def selftest : IO Bool := do
   let mut ok := true
   let bad := Laws.boolean.filter fun l => !l.isTautology
@@ -396,6 +442,7 @@ def selftest : IO Bool := do
         else ok := false
   if !(← matchTest) then ok := false
   if !(← focusTest) then ok := false
+  if !(← collapseTest) then ok := false
   if !(← apiTest) then ok := false
   return ok
 
