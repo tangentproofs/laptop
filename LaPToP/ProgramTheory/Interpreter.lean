@@ -1,5 +1,6 @@
 import LaPToP.ProgramTheory.Programs
 import LaPToP.ProgramTheory.WhileLoop
+import LaPToP.ProgramTheory.Scope
 
 /-!
 # An interpreter for the programming notations
@@ -31,6 +32,7 @@ interpreter is interpreting *this* theory and no other:
 | `.seq p q`        | `Spec.seq`                                 |
 | `.cond b p q`     | `Spec.cond`                                |
 | `.whileDo b p`    | `Spec.whileRel` (see below)                |
+| `.newLocal x e p` | `Spec.newLocal` (see below)                |
 
 For the loop we need a specification where the book has only a refinement
 notation. `Spec.whileRel b R` is the inductively defined relation of the
@@ -71,6 +73,21 @@ rule `Interpreter.eval_while_invariant`, which needs no fuel and no variant.
 `Interpreter.Diverges` names the computations with no poststate; the interpreter
 reports them honestly by failing for every fuel (`Interpreter.diverges_iff`).
 
+## Frames and local declarations
+
+Section 5.0.1's frame notation says what a computation does *not* do, and
+Section 5.0.0 declares a local variable beside the nonlocal state. Both are made
+executable here. `writes p` reads a program's write set off its syntax, and
+`frame_denote` proves `frame xs· denote p = denote p` whenever `writes p ⊆ xs`,
+so a framed specification is discharged by a syntactic check rather than by an
+argument about behaviour. `Prog.newLocal x e p` borrows the state slot `x` for
+the duration of `p`, initializing it to `e` and putting back what it found;
+`Spec.newLocal_eq` identifies its denotation with the book's initializing
+declaration `new x: Val := e· P` under the frame that restores the slot, and
+`refines_newVar_denote` shows that what is executed refines the book's
+`new x: Val· P`, whose initial value is arbitrary where a machine must choose
+one.
+
 ## Honest deviations and scope
 
 * Expressions are *semantic*: `e : State Var Val → Val` and `b : State Var Val → Bool`,
@@ -86,10 +103,17 @@ reports them honestly by failing for every fuel (`Interpreter.diverges_iff`).
   the state `ZS` that carries the time variable those axioms mention; the
   interpreter's own state has no time variable, so the bridge is at the level of
   `Spec.whileRel`, the specification `denote` gives a `whileDo`.
+* A local declaration reuses a state slot, because the interpreter's state is
+  flat; the book puts the local beside the nonlocal state. The two are related
+  by `Spec.newLocal_eq`, at the cost of the frame condition that the slot is
+  restored. Whether a declaration is a *program* in the sense of Section 4.0.3
+  is not claimed: `Spec.IsProgram` has no rule for it, and restoring a borrowed
+  slot is not expressible in the four notations, so `LoopFree` has no case for
+  `newLocal`.
 * Out of scope in this round, and not claimed anywhere below: concurrency (`||`),
-  the time variable `t`, channels and interaction, variable declaration and
-  framing, assertions, the full surface syntax of the book, and a command-line
-  binary outside Lean.
+  the time variable `t`, channels and interaction, arrays and assertions as
+  program syntax, the full surface syntax of the book, and a command-line binary
+  outside Lean.
 -/
 
 namespace LaPToP.ProgramTheory
@@ -192,6 +216,9 @@ inductive Prog (Var : Type u) (Val : Type v) : Type (max u v) where
   | cond (b : Spec.State Var Val → Bool) (p q : Prog Var Val) : Prog Var Val
   /-- `while b do p od`. -/
   | whileDo (b : Spec.State Var Val → Bool) (p : Prog Var Val) : Prog Var Val
+  /-- `new x: Val := e· p`: the local variable of `p` is the state slot `x`,
+  initialized to `e` and restored when the scope ends. -/
+  | newLocal (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val) : Prog Var Val
 
 /-- Programs without loops: the four notations of Section 4.0.3 that are
 programs outright. -/
@@ -221,6 +248,8 @@ def run [DecidableEq Var] :
   | n + 1, .cond b p q, s => if b s then run n p s else run n q s
   | n + 1, .whileDo b p, s =>
       if b s then (run n p s).bind (run n (.whileDo b p)) else some s
+  | n + 1, .newLocal x e p, s =>
+      (run n p (Function.update s x (e s))).map fun t => Function.update t x (s x)
 
 variable [DecidableEq Var]
 
@@ -244,6 +273,11 @@ variable [DecidableEq Var]
     (s : Spec.State Var Val) :
     run (n + 1) (.whileDo b p) s =
       if b s then (run n p s).bind (run n (.whileDo b p)) else some s := rfl
+
+@[simp] theorem run_newLocal (n : ℕ) (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val)
+    (s : Spec.State Var Val) :
+    run (n + 1) (.newLocal x e p) s =
+      (run n p (Function.update s x (e s))).map fun t => Function.update t x (s x) := rfl
 
 /-- More fuel never spoils a successful run. -/
 theorem run_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
@@ -281,6 +315,11 @@ theorem run_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
           simp only [ih hp hnm, Option.bind_some]
           exact ih h hnm
       · exact h
+    | newLocal x e p =>
+      simp only [run_newLocal] at h ⊢
+      cases hp : run n p (Function.update s x (e s)) with
+      | none => rw [hp] at h; simp at h
+      | some t => rw [hp] at h; rw [ih hp hnm]; exact h
 
 /-! ### Denotation into the theory of Chapter 4 -/
 
@@ -292,6 +331,7 @@ def denote : Prog Var Val → Spec (Spec.State Var Val)
   | .seq p q => Spec.seq (denote p) (denote q)
   | .cond b p q => Spec.cond (fun s => b s = true) (denote p) (denote q)
   | .whileDo b p => Spec.whileRel (fun s => b s = true) (denote p)
+  | .newLocal x e p => Spec.newLocal x e (denote p)
 
 @[simp] theorem denote_ok : denote (Var := Var) (Val := Val) .ok = Spec.ok := rfl
 
@@ -306,6 +346,9 @@ def denote : Prog Var Val → Spec (Spec.State Var Val)
 
 @[simp] theorem denote_whileDo (b : Spec.State Var Val → Bool) (p : Prog Var Val) :
     denote (.whileDo b p) = Spec.whileRel (fun s => b s = true) (denote p) := rfl
+
+@[simp] theorem denote_newLocal (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val) :
+    denote (.newLocal x e p) = Spec.newLocal x e (denote p) := rfl
 
 /-- A loop-free program denotes a program in the sense of Section 4.0.3. -/
 theorem isProgram_denote {p : Prog Var Val} (h : LoopFree p) : Spec.IsProgram (denote p) := by
@@ -355,6 +398,14 @@ theorem denote_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var 
       · simp only [Option.some.injEq] at h
         subst h
         exact Spec.whileRel.exit hb
+    | newLocal x e p =>
+      simp only [run_newLocal] at h
+      cases hp : run n p (Function.update s x (e s)) with
+      | none => rw [hp] at h; simp at h
+      | some t =>
+        rw [hp] at h
+        simp only [Option.map_some, Option.some.injEq] at h
+        exact ⟨t, ih hp, h.symm⟩
 
 /-- **Completeness**: every behaviour allowed by the denotation is achieved by
 a run with enough fuel. -/
@@ -395,6 +446,12 @@ theorem exists_run_of_denote : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val
       refine ⟨max f₁ f₂ + 1, ?_⟩
       rw [run_whileDo, ite_eq_left hb, run_le h₁ (le_max_left f₁ f₂), Option.bind_some]
       exact run_le h₂ (le_max_right f₁ f₂)
+  | newLocal x e p ihp =>
+    intro s s' h
+    obtain ⟨t, hp, ht⟩ :
+        ∃ t, denote p (Function.update s x (e s)) t ∧ s' = Function.update t x (s x) := h
+    obtain ⟨f, hf⟩ := ihp hp
+    exact ⟨f + 1, by rw [run_newLocal, hf, Option.map_some, ht]⟩
 
 /-- Each denoted program is deterministic: the interpreter computes a function
 of the prestate, so the specification it implements has at most one poststate. -/
@@ -468,6 +525,12 @@ inductive Eval : Prog Var Val → Spec.State Var Val → Spec.State Var Val → 
   /-- `while b do p od` with `b` false exits at once. -/
   | whileFalse {b : Spec.State Var Val → Bool} {p : Prog Var Val}
       {s : Spec.State Var Val} (hb : b s = false) : Eval (.whileDo b p) s s
+  /-- `new x := e· p` runs `p` with the slot `x` holding `e`, and puts back what
+  the slot held before. -/
+  | newLocal {x : Var} {e : Spec.State Var Val → Val} {p : Prog Var Val}
+      {s t : Spec.State Var Val} :
+      Eval p (Function.update s x (e s)) t →
+        Eval (.newLocal x e p) s (Function.update t x (s x))
 
 /-- A fuelled run is an execution: the budget only restricts which derivations
 are reachable, not what they mean. -/
@@ -507,6 +570,15 @@ theorem eval_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Va
           exact .whileTrue hb (ih hp) (ih h)
       · simp only [Option.some.injEq] at h
         exact h ▸ .whileFalse (by simpa using hb)
+    | newLocal x e p =>
+      simp only [run_newLocal] at h
+      cases hp : run n p (Function.update s x (e s)) with
+      | none => rw [hp] at h; simp at h
+      | some t =>
+        rw [hp] at h
+        simp only [Option.map_some, Option.some.injEq] at h
+        subst h
+        exact .newLocal (ih hp)
 
 /-- **Partial correctness**: an execution that terminates satisfies the denoted
 specification. -/
@@ -521,6 +593,7 @@ theorem denote_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
   | condFalse hb _ ih => exact Or.inr ⟨by simp [hb], ih⟩
   | whileTrue hb _ _ ihp ihw => exact Spec.whileRel.step hb ihp ihw
   | whileFalse hb => exact Spec.whileRel.exit (by simp [hb])
+  | newLocal _ ih => exact ⟨_, ih, rfl⟩
 
 /-- **Completeness**: every behaviour the denotation allows is a terminating
 execution. Together with `denote_of_eval`, execution and denotation are the same
@@ -547,6 +620,12 @@ theorem eval_of_denote : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
     induction h with
     | exit hb => exact .whileFalse (by simpa using hb)
     | step hb hR _ ihw => exact .whileTrue hb (ihp hR) ihw
+  | newLocal x e p ihp =>
+    intro s s' h
+    obtain ⟨t, hp, ht⟩ :
+        ∃ t, denote p (Function.update s x (e s)) t ∧ s' = Function.update t x (s x) := h
+    subst ht
+    exact .newLocal (ihp hp)
 
 /-- Execution *is* the denotation: the fuel-free operational semantics and the
 Chapter 4 specification of a program are one relation. -/
@@ -620,6 +699,134 @@ theorem diverges_whileDo {b : Spec.State Var Val → Bool} {p : Prog Var Val}
   have := denote_of_eval h
   rw [denote_whileDo, Spec.whileRel_of_always _ _ fun s => hb s] at this
   exact this
+
+/-! ### Frames and local declarations
+
+Section 5.0.1 writes `frame x, y· P` for "`P`, and all other variables are
+unchanged", and Section 5.0.0 declares a local variable beside the nonlocal
+state. Neither is executable as it stands: a frame is a claim about what a
+computation does *not* do, and a machine with one flat state has no room beside
+it. Both become executable here.
+
+The frame is discharged statically. `writes p` is the set of variables a program
+can assign to — computed from the syntax, with a local declaration hiding its own
+variable — and `frame_denote` says that for `writes p ⊆ xs` the framed
+specification and the program's denotation are the same relation. So
+`frame xs· P ⇐ p` needs no proof about `p`'s behaviour beyond a syntactic check.
+
+The declaration borrows a slot. `Prog.newLocal x e p` runs `p` with the state
+slot `x` holding `e`, and puts back what the slot held before; its denotation is
+`Spec.newLocal`, which `Spec.newLocal_eq` identifies with the book's
+initializing declaration `new x: Val := e· P` framed to restore the slot. Since
+the interpreter must choose the local's initial value where the book leaves it
+arbitrary, what is executed *refines* the book's `new x: Val· P`
+(`refines_newVar_denote`); that is the honest direction, and it is the direction
+a development needs.
+-/
+
+/-- The variables a program can assign to, read off its syntax. A local
+declaration hides its own variable: whatever `p` writes to `x` inside
+`new x := e· p` is put back when the scope ends. -/
+def writes : Prog Var Val → Set Var
+  | .ok => ∅
+  | .assign x _ => {x}
+  | .seq p q => writes p ∪ writes q
+  | .cond _ p q => writes p ∪ writes q
+  | .whileDo _ p => writes p
+  | .newLocal x _ p => writes p \ {x}
+
+omit [DecidableEq Var] in
+@[simp] theorem writes_ok : writes (Prog.ok : Prog Var Val) = ∅ := rfl
+
+omit [DecidableEq Var] in
+@[simp] theorem writes_assign (x : Var) (e : Spec.State Var Val → Val) :
+    writes (.assign x e) = {x} := rfl
+
+omit [DecidableEq Var] in
+@[simp] theorem writes_seq (p q : Prog Var Val) : writes (.seq p q) = writes p ∪ writes q := rfl
+
+omit [DecidableEq Var] in
+@[simp] theorem writes_cond (b : Spec.State Var Val → Bool) (p q : Prog Var Val) :
+    writes (.cond b p q) = writes p ∪ writes q := rfl
+
+omit [DecidableEq Var] in
+@[simp] theorem writes_whileDo (b : Spec.State Var Val → Bool) (p : Prog Var Val) :
+    writes (.whileDo b p) = writes p := rfl
+
+omit [DecidableEq Var] in
+@[simp] theorem writes_newLocal (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val) :
+    writes (.newLocal x e p) = writes p \ {x} := rfl
+
+/-- A terminating execution changes no variable outside the program's write set.
+This is the frame condition of Section 5.0.1, established once and for all from
+the syntax. -/
+theorem unchanged_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
+    Eval p s s' → ∀ v ∉ writes p, s' v = s v := by
+  intro p s s' h
+  induction h with
+  | ok => intro _ _; rfl
+  | @assign x e s =>
+    intro v hv
+    simp only [writes_assign, Set.mem_singleton_iff] at hv
+    exact Function.update_of_ne hv _ _
+  | seq _ _ ihp ihq =>
+    intro v hv
+    simp only [writes_seq, Set.mem_union, not_or] at hv
+    exact (ihq v hv.2).trans (ihp v hv.1)
+  | condTrue _ _ ih =>
+    intro v hv
+    simp only [writes_cond, Set.mem_union, not_or] at hv
+    exact ih v hv.1
+  | condFalse _ _ ih =>
+    intro v hv
+    simp only [writes_cond, Set.mem_union, not_or] at hv
+    exact ih v hv.2
+  | whileTrue _ _ _ ihp ihw =>
+    intro v hv
+    simp only [writes_whileDo] at hv ⊢
+    exact (ihw v hv).trans (ihp v hv)
+  | whileFalse => intro _ _; rfl
+  | @newLocal x e p s t _ ih =>
+    intro v hv
+    simp only [writes_newLocal, Set.mem_sdiff, Set.mem_singleton_iff, not_and, not_not] at hv
+    by_cases hvx : v = x
+    · subst hvx; simp
+    · have hp : v ∉ writes p := fun hw => hvx (hv hw)
+      rw [Function.update_of_ne hvx, ih v hp, Function.update_of_ne hvx]
+
+/-- **The frame of a program**: for a program whose writes lie inside `xs`, the
+framed specification and the denotation are the same relation,
+`frame xs· denote p = denote p`. -/
+theorem frame_denote {p : Prog Var Val} {xs : Set Var} (h : writes p ⊆ xs) :
+    Spec.frame xs (denote p) = denote p :=
+  Spec.ext fun _ _ =>
+    ⟨And.left, fun hd => ⟨hd, fun v hv => unchanged_of_eval (eval_of_denote hd) v fun hw => hv (h hw)⟩⟩
+
+/-- `frame xs· denote p ⇐ p`: a program that writes only inside the frame
+implements the framed specification, by a syntactic check on the program. -/
+theorem refines_frame_denote {p : Prog Var Val} {xs : Set Var} (h : writes p ⊆ xs) :
+    Spec.Refines (Spec.frame xs (denote p)) (denote p) := fun _ _ hd => by
+  rw [frame_denote h]; exact hd
+
+/-- The denotation of a local declaration is the book's initializing declaration
+of Section 5.0.0 under the frame notation of Section 5.0.1. -/
+theorem denote_newLocal_eq (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val) :
+    denote (.newLocal x e p) =
+      Spec.frame {x}ᶜ (Spec.newVarInit e (Spec.inScope x (denote p))) :=
+  Spec.newLocal_eq x e (denote p)
+
+/-- What is executed refines the book's declaration: the interpreter chooses the
+local's initial value, where `new x: Val· P` leaves it arbitrary. -/
+theorem refines_newVar_denote (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val) :
+    Spec.Refines (Spec.frame {x}ᶜ (Spec.newVar (Spec.inScope x (denote p))))
+      (denote (.newLocal x e p)) :=
+  Spec.newLocal_refines_newVar x e (denote p)
+
+/-- A local declaration does not leak: after `new x := e· p` the slot `x` holds
+what it held before, whatever `p` did to it. -/
+theorem eval_newLocal_self {x : Var} {e : Spec.State Var Val → Val} {p : Prog Var Val}
+    {s s' : Spec.State Var Val} (h : Eval (.newLocal x e p) s s') : s' x = s x :=
+  Spec.newLocal_self x e (denote p) (denote_of_eval h)
 
 /-! ### A first-order syntax, and executable demonstrations
 
@@ -698,6 +905,9 @@ def ifThen (c : Bexp) (p q : P) : P := .cond c.eval p q
 
 /-- `while c do p od`, with `c` in the first-order syntax. -/
 def loop (c : Bexp) (p : P) : P := .whileDo c.eval p
+
+/-- `new x: int := e· p`, with `e` in the first-order syntax. -/
+def declare (x : Vr) (e : Exp) (p : P) : P := .newLocal x e.eval p
 
 /-- The initial state: `n` as given, `i` and `s` zero. -/
 def start (n : ℤ) : St := fun v => match v with | .n => n | _ => 0
@@ -826,6 +1036,51 @@ answer. -/
 theorem forever_run_none (f : ℕ) (st : St) :
     run f (loop (.le (.lit 0) (.lit 0)) .ok) st = none :=
   diverges_iff.mp (forever_diverges st) f
+
+/-! #### A local declaration that does not leak
+
+`new i: int := 5· s:= s+i` borrows the slot of `i`, uses it, and puts back what
+it found. The frame of the whole declaration is therefore `s` alone: the local's
+variable is hidden by its own declaration. -/
+
+/-- `new i: int := 5· s:= s+i`. -/
+def withLocal : P := declare .i (.lit 5) (set .s (.add (.var .s) (.var .i)))
+
+-- The interpreter runs it: from `n = 3` the final state has `i = 0` and `s = 5`.
+#eval (run 10 withLocal (start 3)).map fun st => (st .i, st .s)
+
+/-- The local is 5 inside the scope and `i` is 0 again outside it, computed by
+the interpreter and checked by the kernel. -/
+theorem withLocal_run :
+    (run 10 withLocal (start 3)).map (fun st => (st .i, st .s)) = some (0, 5) := rfl
+
+/-- From any prestate: `i` is as it was, and `s` has gained the local's value. -/
+theorem withLocal_no_leak {st st' : St} (h : Eval withLocal st st') :
+    st' Vr.i = st Vr.i ∧ st' Vr.s = st Vr.s + 5 := by
+  refine ⟨eval_newLocal_self h, ?_⟩
+  obtain ⟨t, hd, ht⟩ :
+      ∃ t, Spec.assign Vr.s (Exp.eval (.add (.var .s) (.var .i)))
+        (Function.update st Vr.i (5 : ℤ)) t ∧ st' = Function.update t Vr.i (st Vr.i) :=
+    denote_of_eval h
+  rw [Spec.assign_iff] at hd
+  have hts : t Vr.s = st Vr.s + 5 := by
+    have h1 := hd.1
+    simp only [Exp.eval, Function.update_of_ne (by decide : Vr.s ≠ Vr.i),
+      Function.update_self] at h1
+    exact h1
+  rw [ht, Function.update_of_ne (by decide : Vr.s ≠ Vr.i), hts]
+
+/-- The declaration writes only `s`. -/
+theorem writes_withLocal : writes withLocal = {Vr.s} := by
+  ext v
+  simp only [withLocal, declare, set, writes_newLocal, writes_assign, Set.mem_sdiff,
+    Set.mem_singleton_iff]
+  exact ⟨And.left, fun h => ⟨h, by rw [h]; decide⟩⟩
+
+/-- So the framed specification of Section 5.0.1 is exactly what it implements:
+`frame s· new i := 5· s:= s+i = new i := 5· s:= s+i`. -/
+theorem frame_withLocal : Spec.frame {Vr.s} (denote withLocal) = denote withLocal :=
+  frame_denote (by rw [writes_withLocal])
 
 /-- A loop-free program denotes a program in the sense of Section 4.0.3. -/
 example : Spec.IsProgram (denote (.seq (set .i (.lit 0)) (set .s (.lit 0)) : P)) :=

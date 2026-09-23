@@ -102,6 +102,16 @@ theorem newVar_newVar {T' : Type w} (P : Spec ((σ × T) × T')) :
 theorem newVar_mono {P Q : Spec (σ × T)} (h : Refines P Q) : Refines (newVar P) (newVar Q) :=
   fun _ _ ⟨x, x', hQ⟩ => ⟨x, x', h _ _ hQ⟩
 
+/-- An initializing declaration refines the declaration it initializes:
+`new x: T· P ⇐ new x: T := e· P`. "The initial value of the local variable is an
+arbitrary value of its type", so fixing it is a refinement. -/
+theorem newVar_refines_newVarInit (e : σ → T) (P : Spec (σ × T)) :
+    Refines (newVar P) (newVarInit e P) := fun s _ ⟨x', h⟩ => ⟨e s, x', h⟩
+
+/-- An initializing declaration is monotonic with respect to refinement. -/
+theorem newVarInit_mono (e : σ → T) {P Q : Spec (σ × T)} (h : Refines P Q) :
+    Refines (newVarInit e P) (newVarInit e Q) := fun _ _ ⟨x', hQ⟩ => ⟨x', h _ _ hQ⟩
+
 end Declaration
 
 section DeclarationExamples
@@ -192,6 +202,73 @@ theorem frame_assign (x : Var) (hx : x ∈ xs) (e : State Var Val → Val) : fra
       exact h.2 v (fun hvx => hv (hvx ▸ hx))
 
 end Frame
+
+/-! ### Declaration on a homogeneous state (aPToP §5.0.0 with §5.0.1)
+
+Section 5.0.0 puts the local variable *beside* the nonlocal state: inside
+`new x: T· P` the state is the pair `σ × T`. A machine with one flat state
+`State Var Val` has no room beside it, and declares a local by taking a state
+slot, using it, and putting back what was there. `newLocal` is that operation,
+and it is exactly the book's initializing declaration under the frame notation
+of Section 5.0.1 (`newLocal_eq`): nothing new is defined here, the two notations
+are combined.
+-/
+
+section Local
+
+variable {Var : Type u} {Val : Type v} [DecidableEq Var]
+
+/-- A specification read inside the scope of a local variable held in the state
+slot `x`: the pair `(s, a)` is the state `s` with `x` holding `a`. -/
+def inScope (x : Var) (P : Spec (State Var Val)) : Spec (State Var Val × Val) :=
+  fun st st' => P (Function.update st.1 x st.2) (Function.update st'.1 x st'.2)
+
+/-- `new x: Val := e· P` on a flat state: the slot named `x` holds the local
+variable, initialized to `e`, and holds its earlier value again when the scope
+ends — so the declaration does not leak. -/
+def newLocal (x : Var) (e : State Var Val → Val) (P : Spec (State Var Val)) :
+    Spec (State Var Val) :=
+  fun s s' => ∃ t, P (Function.update s x (e s)) t ∧ s' = Function.update t x (s x)
+
+/-- A local declaration leaves the slot it borrowed as it found it. -/
+theorem newLocal_self (x : Var) (e : State Var Val → Val) (P : Spec (State Var Val))
+    {s s' : State Var Val} (h : newLocal x e P s s') : s' x = s x := by
+  obtain ⟨t, -, rfl⟩ := h
+  simp
+
+/-- `new x := e· P = frame x̄· new x: Val := e· P`: the flat-state declaration is
+the book's initializing declaration of Section 5.0.0, framed by Section 5.0.1 so
+that the borrowed slot is restored. -/
+theorem newLocal_eq (x : Var) (e : State Var Val → Val) (P : Spec (State Var Val)) :
+    newLocal x e P = frame {x}ᶜ (newVarInit e (inScope x P)) := by
+  refine Spec.ext fun s s' => ⟨?_, ?_⟩
+  · rintro ⟨t, hP, rfl⟩
+    refine ⟨⟨t x, ?_⟩, fun v hv => ?_⟩
+    · simp only [inScope, Function.update_idem, Function.update_eq_self]
+      exact hP
+    · simp only [Set.mem_compl_iff, Set.mem_singleton_iff, not_not] at hv
+      subst hv
+      simp
+  · rintro ⟨⟨x', hP⟩, hv⟩
+    have hx : s' x = s x := hv x (by simp)
+    refine ⟨Function.update s' x x', hP, ?_⟩
+    rw [Function.update_idem, ← hx, Function.update_eq_self]
+
+/-- The declaration on a flat state is monotonic with respect to refinement. -/
+theorem newLocal_mono (x : Var) (e : State Var Val → Val) {P Q : Spec (State Var Val)}
+    (h : Refines P Q) : Refines (newLocal x e P) (newLocal x e Q) :=
+  fun _ _ ⟨t, hQ, ht⟩ => ⟨t, h _ _ hQ, ht⟩
+
+/-- The flat-state declaration refines the book's uninitialized declaration,
+framed: `frame x̄· new x: Val· P ⇐ new x: Val := e· P`. Choosing the initial value
+of the local is a refinement, which is what makes the declaration executable. -/
+theorem newLocal_refines_newVar (x : Var) (e : State Var Val → Val)
+    (P : Spec (State Var Val)) :
+    Refines (frame {x}ᶜ (newVar (inScope x P))) (newLocal x e P) := by
+  rw [newLocal_eq]
+  exact frame_mono _ _ _ (newVar_refines_newVarInit e (inScope x P))
+
+end Local
 
 end Spec
 
