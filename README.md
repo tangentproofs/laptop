@@ -100,7 +100,8 @@ LaPToP/
   ProgramTheory/             # Specifications, Programs, Time, Space, Search, FastExp, Fibonacci, CollatzTime,
                              #   OldTheory, AssertionLaws, WhileLoop, ForLoop, ExitLoop, TwoDimSearch, GoTo, Scope,
                              #   Arrays, TimeDependence, Assertions, Subprograms, Alias, Probabilistic,
-                             #   ProbabilisticSums, RandomNumbers, Blackjack, Information, Functional
+                             #   ProbabilisticSums, RandomNumbers, Blackjack, Information, Functional,
+                             #   Interpreter (executable AST + denotation into Spec)
   RecursiveDefinition/       # Nat, DataConstruction, Programs
   TheoryDesign/              # Stack, SimpleStack, Queue, Tree, ProgramStack, ProgramQueue, DataTransformation,
                              #   SecuritySwitch, TakeANumber, Parsing, LimitedQueue, Incompleteness

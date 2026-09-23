@@ -18,6 +18,7 @@ import LaPToP.ProgramTheory.RandomNumbers
 import LaPToP.ProgramTheory.Blackjack
 import LaPToP.ProgramTheory.Information
 import LaPToP.ProgramTheory.Functional
+import LaPToP.ProgramTheory.Interpreter
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -879,4 +880,77 @@ precise about the domain of $`i`"; the step refinement is proved on $`\mathit{na
 the timing step on the domain $`0,..\#L{+}1` that the bound $`0,..\#L{-}i{+}1` needs
 (for $`i > \#L` the bunch is $`\mathit{null}`). The bunch sum $`1 + B` is the image of
 $`B` under $`1 + {\cdot}`. The imperative counterpart is {uses "linear_search"}[].
+:::
+
+:::definition "interpreter" (parent := "programming_language_core") (lean := "LaPToP.ProgramTheory.Spec.whileRel, LaPToP.ProgramTheory.Spec.whileRel_unfold, LaPToP.ProgramTheory.Spec.whileRefines_whileRel, LaPToP.ProgramTheory.Spec.refines_whileRel, LaPToP.ProgramTheory.Spec.whileRel_of_not, LaPToP.ProgramTheory.Interpreter.Prog, LaPToP.ProgramTheory.Interpreter.LoopFree, LaPToP.ProgramTheory.Interpreter.run, LaPToP.ProgramTheory.Interpreter.run_zero, LaPToP.ProgramTheory.Interpreter.run_ok, LaPToP.ProgramTheory.Interpreter.run_assign, LaPToP.ProgramTheory.Interpreter.run_seq, LaPToP.ProgramTheory.Interpreter.run_cond, LaPToP.ProgramTheory.Interpreter.run_whileDo, LaPToP.ProgramTheory.Interpreter.run_le, LaPToP.ProgramTheory.Interpreter.denote, LaPToP.ProgramTheory.Interpreter.denote_ok, LaPToP.ProgramTheory.Interpreter.denote_assign, LaPToP.ProgramTheory.Interpreter.denote_seq, LaPToP.ProgramTheory.Interpreter.denote_cond, LaPToP.ProgramTheory.Interpreter.denote_whileDo, LaPToP.ProgramTheory.Interpreter.isProgram_denote")
+An interpreter for the programming notations. Chapters 4 and 5 give those
+notations as specifications — relations between prestate and poststate — and
+the while-loop as a refinement notation; nothing in them runs. This node adds
+the executable layer: `Interpreter.Prog` is the abstract syntax of $`\mathit{ok}`,
+$`x := e`, $`P.\ Q`, $`\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ Q` and
+$`\mathbf{while}\ b\ \mathbf{do}\ P\ \mathbf{od}`; `Interpreter.run` executes a
+program from a state, returning the final state or, when the fuel is exhausted,
+nothing; and `Interpreter.denote` maps the syntax onto exactly the
+specifications of {uses "specification_notations"}[] and {uses "assignment_spec"}[],
+so that the interpreter interprets this theory and no other. One unit of fuel
+is spent per level of the execution tree, which makes `run` structurally
+recursive and therefore reducible by the kernel; more fuel never spoils a
+successful run (`run_le`).
+
+For the loop a specification is needed where the book has only the refinement
+notation of {uses "while_loop"}[]. `Spec.whileRel b R` is the inductively
+defined relation of the terminating executions: either $`b` fails and the state
+is unchanged, or $`b` holds, $`R` takes one step, and the loop relates the
+result to the final state. It is a fixed point of the book's unfolding,
+$`\mathbf{while}\ b\ \mathbf{do}\ R\ \mathbf{od} = \mathbf{if}\ b\ \mathbf{then}\ R.\ \mathbf{while}\ b\ \mathbf{do}\ R\ \mathbf{od}\ \mathbf{else}\ \mathit{ok}`,
+hence satisfies the while-refinement it is meant to satisfy; and it is the
+strongest such solution, so any $`W` proved by the book's while-refinement rule
+is refined by it. That last theorem is what makes an execution trustworthy. A
+loop-free program denotes a program in the sense of
+{uses "program_definition"}[].
+
+Honest deviations. Expressions are semantic — a Lean function of the prestate,
+as in {uses "assignment_spec"}[], where the book restricts them to implemented
+expressions — so `Prog` is data only up to its embedded expression functions;
+the demonstrations below close that gap with a first-order expression syntax of
+their own. The loop is the only unbounded construct and is executed with fuel;
+a fuel-free execution, and the tie to the least-fixed-point account of loops,
+are not done here. Out of scope this round, and claimed nowhere: concurrency,
+the time variable, channels and interaction, variable declaration and framing,
+assertions, the full surface syntax of the book, and a command-line binary
+outside Lean.
+:::
+
+:::theorem "interpreter_soundness" (parent := "programming_language_core") (tags := "programs, interpreter, execution") (effort := "medium") (lean := "LaPToP.ProgramTheory.Interpreter.denote_of_run, LaPToP.ProgramTheory.Interpreter.exists_run_of_denote, LaPToP.ProgramTheory.Interpreter.deterministic_denote, LaPToP.ProgramTheory.Interpreter.run_sound, LaPToP.ProgramTheory.Interpreter.run_while_sound, LaPToP.ProgramTheory.Interpreter.Demo.Vr, LaPToP.ProgramTheory.Interpreter.Demo.St, LaPToP.ProgramTheory.Interpreter.Demo.Exp, LaPToP.ProgramTheory.Interpreter.Demo.Exp.eval, LaPToP.ProgramTheory.Interpreter.Demo.Bexp, LaPToP.ProgramTheory.Interpreter.Demo.Bexp.eval, LaPToP.ProgramTheory.Interpreter.Demo.P, LaPToP.ProgramTheory.Interpreter.Demo.set, LaPToP.ProgramTheory.Interpreter.Demo.ifThen, LaPToP.ProgramTheory.Interpreter.Demo.loop, LaPToP.ProgramTheory.Interpreter.Demo.start, LaPToP.ProgramTheory.Interpreter.Demo.sumTo, LaPToP.ProgramTheory.Interpreter.Demo.sumTo_ten, LaPToP.ProgramTheory.Interpreter.Demo.sumTo_twenty, LaPToP.ProgramTheory.Interpreter.Demo.sumTo_no_fuel, LaPToP.ProgramTheory.Interpreter.Demo.countBody, LaPToP.ProgramTheory.Interpreter.Demo.countCond, LaPToP.ProgramTheory.Interpreter.Demo.count, LaPToP.ProgramTheory.Interpreter.Demo.W, LaPToP.ProgramTheory.Interpreter.Demo.countCond_eval, LaPToP.ProgramTheory.Interpreter.Demo.whileRefines_W, LaPToP.ProgramTheory.Interpreter.Demo.count_sound, LaPToP.ProgramTheory.Interpreter.Demo.count_seven")
+The interpreter agrees with the theory. Soundness: if a run succeeds, its
+result satisfies the denoted specification. Completeness: every behaviour the
+denotation allows is achieved by a run with enough fuel. Together they give
+determinism of every denoted program — as an executed program must be — and the
+bridge from a development to an execution: if $`W \Leftarrow` the denotation of
+$`p` has been proved, then every successful run of $`p` satisfies $`W`
+({uses "refinement_laws"}[]), and for a loop developed the book's way
+({uses "while_loop"}[]) every terminating run satisfies the specification
+proved for it.
+
+The demonstrations run three integer variables $`n`, $`i`, $`s` with a
+first-order expression syntax and its evaluator, so the example programs are
+data. $`i := 0.\ s := 0.\ \mathbf{while}\ i \neq n\ \mathbf{do}\ i := i+1.\ s := s+i\ \mathbf{od}`
+computes $`1 + \ldots + 10 = 55` and $`1 + \ldots + 20 = 210`; with too little
+fuel the run reports failure rather than a wrong answer. The counting loop
+$`\mathbf{while}\ i \neq n\ \mathbf{do}\ i := i+1.\ s := s+1\ \mathbf{od}` is given
+the specification $`i \leq n \Rightarrow s' = s + (n - i)`, proved as a
+while-refinement in the book's two cases, and every terminating run of it then
+satisfies that specification. The three numerical results are proved by
+reduction in the kernel, not merely observed.
+:::
+
+:::proof "interpreter_soundness"
+Soundness by induction on the fuel and cases on the program; the loop case
+builds a step or an exit of the loop relation. Completeness by induction on the
+program, with an inner induction on the loop relation for the loop, taking the
+maximum of the two fuels at each composition and appealing to monotonicity in
+the fuel. Determinism: two behaviours give two successful runs, which agree
+when both are given the larger fuel. The counting loop needs the two cases of
+Refinement by Cases ({uses "refinement_by_steps_parts_cases"}[]) and the
+Substitution Law ({uses "substitution_law"}[]) for the body.
 :::
