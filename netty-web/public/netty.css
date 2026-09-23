@@ -1,0 +1,207 @@
+/* The three panes. The proof pane is a grid of rows, each row a gutter, a
+   margin and a formula, so that a subproof indents and the margin connectives
+   line up as they do in the document. */
+
+:root {
+  --ink: #16191d;
+  --dim: #6a727d;
+  --paper: #fbfaf7;
+  --pane: #ffffff;
+  --rule: #dcd8d0;
+  --focus: #fdf3d6;
+  --hot: #1c5d99;
+  --hot-soft: #e5eff8;
+  --bad: #9b2226;
+  --good: #22683f;
+  --mono: ui-monospace, "DejaVu Sans Mono", "Fira Mono", Menlo, monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e6e3dd;
+    --dim: #97a0ab;
+    --paper: #14171a;
+    --pane: #1b1f23;
+    --rule: #333a42;
+    --focus: #2c2a1c;
+    --hot: #7fb3e0;
+    --hot-soft: #22303c;
+    --bad: #e8817f;
+    --good: #85c8a1;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  height: 100vh;
+}
+
+/* The window is the three panes: the page itself never scrolls, each pane
+   scrolls on its own, and what a pane says at its foot stays in view. */
+#app { display: flex; flex-direction: column; height: 100%; }
+
+header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+h1 { font-size: 1.1rem; margin: 0; letter-spacing: 0.02em; }
+.tagline { color: var(--dim); font-size: 0.85rem; }
+
+.toolbar { margin-left: auto; display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+
+button, select, .load {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: var(--pane);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled), select:hover, .load:hover { border-color: var(--hot); color: var(--hot); }
+button:disabled { opacity: 0.45; cursor: default; }
+.load input { display: none; }
+
+.note-bar {
+  padding: 0.35rem 1rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--pane);
+}
+.note-bar.quiet { color: var(--dim); }
+.note-bar.error { color: var(--bad); }
+
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1.2fr) minmax(0, 2fr);
+  gap: 1px;
+  background: var(--rule);
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 950px) {
+  .panes { grid-template-columns: 1fr; overflow-y: auto; }
+  .pane { min-height: 60vh; }
+}
+
+.pane { background: var(--pane); display: flex; flex-direction: column; min-width: 0; }
+
+.pane h2 {
+  margin: 0;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.pane h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+.body { padding: 0.5rem 0.4rem; overflow: auto; flex: 1; min-height: 0; }
+.quiet { color: var(--dim); font-size: 0.85rem; margin: 0.4rem 0.6rem; }
+pre { margin: 0.2rem 0.6rem; font-family: var(--mono); font-size: 0.85rem; white-space: pre; }
+
+/* a line of the proof */
+.line, .entry {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.05rem 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  border-radius: 4px;
+}
+.line.focused { background: var(--focus); }
+
+.gutter {
+  min-width: 2.1rem;
+  text-align: right;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  background: none;
+  border: none;
+  padding: 0 0.2rem;
+  cursor: default;
+}
+.gutter.movable { cursor: pointer; }
+.gutter.movable:hover { color: var(--hot); text-decoration: underline; }
+
+.caret { width: 0.6rem; color: var(--hot); }
+.margin { min-width: 2.4rem; color: var(--dim); margin-left: calc(var(--depth, 0) * 1.6rem); }
+.margin.direction { color: var(--ink); }
+
+.formula { white-space: pre; }
+.op { color: var(--dim); }
+
+.operand { padding: 0 0.05rem; }
+button.operand {
+  font-family: var(--mono);
+  font-size: inherit;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 3px;
+  padding: 0 0.15rem;
+}
+button.operand:hover { background: var(--hot-soft); border-color: var(--hot); color: var(--ink); }
+
+.note { margin-left: auto; padding-left: 1.5rem; color: var(--dim); font-size: 0.8rem; font-family: var(--mono); }
+.note.gap { color: var(--bad); font-weight: 700; }
+
+.entry .expr { flex: 1; min-width: 8rem; font-family: var(--mono); }
+.entry input {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.15rem 0.4rem;
+}
+.entry input:focus { outline: none; border-color: var(--hot); }
+
+.outcome {
+  border-top: 1px solid var(--rule);
+  padding: 0.5rem 0.9rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--dim);
+}
+.outcome.proved { color: var(--good); }
+
+.law { font-family: var(--mono); font-size: 0.9rem; padding: 0.15rem 0.6rem; }
+
+.suggestion {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+}
+.suggestion:hover:not(:disabled) { background: var(--hot-soft); border-color: var(--hot); }
+.suggestion .margin { min-width: 1.4rem; }
+.suggestion.blocked { opacity: 0.55; }

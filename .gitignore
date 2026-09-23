@@ -2,3 +2,8 @@
 .lake/
 .build/
 _out/
+
+# netty-web: npm's tree and what the TypeScript compiler writes
+netty-web/node_modules/
+netty-web/dist/
+netty-web/public/js/

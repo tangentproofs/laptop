@@ -1,0 +1,20 @@
+{
+  "//": "The three panes, in the browser: ES modules, the DOM, no Node types.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "outDir": "public/js",
+    "rootDir": "src",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "declaration": false,
+    "sourceMap": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/client.ts", "src/protocol.ts"]
+}

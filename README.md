@@ -93,6 +93,27 @@ three demonstrations in Lean and proves that each ends with no gaps, fully
 zoomed out, and proving the formula it claims. Exit status is 1 when a `check`
 fails and 2 for a bad script or law file.
 
+### The three panes in a browser (`netty-web/`)
+
+`netty --serve` answers one JSON request per line of standard input with the
+whole state of the session — every line with its depth, its margin connective
+and its main operands, the context, the numbered suggestions, and what the
+proof proves — which is what a window with three panes needs and a terminal
+does not. `netty-web/` is that window: a Node server that forwards a request to
+the kernel, and a TypeScript client that draws the proof, context and
+suggestion panes and turns a click into one line of the script language.
+
+```bash
+lake build netty
+cd netty-web && npm install && npm run serve   # http://127.0.0.1:4173/
+```
+
+The model is not duplicated in TypeScript: a click on a suggestion is
+`apply #N`, a click on a subexpression is `zoom N`, a click on a line number is
+`focus N`, and every change still goes through `Netty.Doc.step`. `netty-web/README.md`
+has the details; `netty --selftest` checks the request service too, by replaying
+each demonstration through it and saving and loading the result.
+
 ## GitHub Pages
 
 Workflows:
@@ -185,7 +206,12 @@ Netty/                       # the Netty proof-assistant kernel (no Mathlib, no 
   laws/boolean.laws          #   the Binary laws of §11.3.1, as a Netty law file
   Doc.lean Render.lean       #   the proof document, zoom stack, context, suggestions
   Json.lean Script.lean      #   saving a proof; the script language and the demos
+  Api.lean                   #   the session as one JSON request and one JSON answer
   Replay.lean                #   the document's examples, replayed and checked in Lean
+netty-web/                   # the three panes in a browser, over `netty --serve`
+  src/protocol.ts            #   the shapes Netty/Api.lean writes
+  src/kernel.ts src/server.ts#   the kernel as a child process; static files and POST /api
+  src/client.ts public/      #   the proof, context and suggestion panes
 LaPToPMain.lean              # Verso generator entry point (`lake exe vbp`)
 InterpMain.lean              # interpreter command line (`lake exe interp`)
 NettyMain.lean               # Netty command line (`lake exe netty`)

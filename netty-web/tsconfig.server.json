@@ -1,0 +1,20 @@
+{
+  "//": "The server and its talk with the kernel: Node, ES modules, strict.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "declaration": false,
+    "sourceMap": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/server.ts", "src/kernel.ts", "src/protocol.ts"]
+}
