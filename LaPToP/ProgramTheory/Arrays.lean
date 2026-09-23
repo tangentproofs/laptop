@@ -53,6 +53,82 @@ lemma each).
 
 namespace LaPToP.ProgramTheory
 
+namespace Spec
+
+/-! ### Array element assignment on a flat state (aPToP §5.1.0)
+
+The state above is a record with an array field, as the book's is. A machine
+whose state is a flat map from variable names to values holds an array as the
+*family of slots it indexes*: "in program theory, an array is a list variable",
+and a list variable on a flat state is the family `arr : Idx → Var`. Element
+assignment is then assignment whose *target name is computed from the prestate* —
+which is exactly what breaks the Substitution Law, and exactly what
+`assignAt_seq` repairs, by the book's rule "change `A i:= e` to `A:= i→e | A`
+before applying any programming theory".
+-/
+
+section FlatArrays
+
+universe u v w
+
+variable {Var : Type u} {Val : Type v} {Idx : Type w}
+
+/-- `A i:= e` with the target name computed from the prestate: the poststate is
+the prestate with the slot named `x σ` holding `e σ`. Unlike `Spec.assign`, the
+name assigned to is not fixed by the syntax. -/
+def assignAt [DecidableEq Var] (x : State Var Val → Var) (e : State Var Val → Val) :
+    Spec (State Var Val) :=
+  fun s s' => s' = Function.update s (x s) (e s)
+
+variable [DecidableEq Var]
+
+/-- A constant name is the assignment of Section 4.0: `x:= e`. -/
+theorem assignAt_const (x : Var) (e : State Var Val → Val) :
+    assignAt (fun _ => x) e = assign x e := rfl
+
+/-- The Substitution Law for the computed-name form — the book's "change
+`A i:= e` to `A:= i→e | A` before applying any programming theory": the whole
+prestate, including the computed name, is substituted at once. -/
+theorem assignAt_seq (x : State Var Val → Var) (e : State Var Val → Val)
+    (P : Spec (State Var Val)) :
+    seq (assignAt x e) P = fun s s' => P (Function.update s (x s) (e s)) s' :=
+  Spec.ext fun _ _ => ⟨fun ⟨_, h, hP⟩ => h ▸ hP, fun hP => ⟨_, rfl, hP⟩⟩
+
+omit [DecidableEq Var] in
+/-- `A i:= e = A′i=e ∧ (∀j· j⧧i ⇒ A′j = A j) ∧ x′=x ∧ y′=y ∧ ...`, the book's
+definition of array element assignment read on a flat state: the indexed slot
+gets `e`, the other slots of the array are unchanged, and so is every variable
+outside the array. -/
+def assignArr (arr : Idx → Var) (idx : State Var Val → Idx) (e : State Var Val → Val) :
+    Spec (State Var Val) := fun s s' =>
+  s' (arr (idx s)) = e s ∧ (∀ j, j ≠ idx s → s' (arr j) = s (arr j)) ∧
+    ∀ v, (∀ j, v ≠ arr j) → s' v = s v
+
+/-- `A i:= e = A:= i→e | A` on a flat state: element assignment is assignment to
+the computed name, provided distinct indices name distinct slots. -/
+theorem assignArr_eq_assignAt {arr : Idx → Var} (harr : Function.Injective arr)
+    (idx : State Var Val → Idx) (e : State Var Val → Val) :
+    assignArr arr idx e = assignAt (fun s => arr (idx s)) e := by
+  refine Spec.ext fun s s' => ?_
+  simp only [assignArr, assignAt]
+  constructor
+  · rintro ⟨h1, h2, h3⟩
+    funext v
+    by_cases hv : v = arr (idx s)
+    · subst hv; rw [Function.update_self]; exact h1
+    · rw [Function.update_of_ne hv]
+      by_cases hj : ∃ j, v = arr j
+      · obtain ⟨j, rfl⟩ := hj
+        exact h2 j fun h => hv (by rw [h])
+      · exact h3 v fun j h => hj ⟨j, h⟩
+  · rintro rfl
+    refine ⟨Function.update_self .., fun j hj => ?_, fun v hv => Function.update_of_ne (hv (idx s)) ..⟩
+    exact Function.update_of_ne (fun h => hj (harr h)) ..
+
+end FlatArrays
+
+end Spec
+
 namespace Arrays
 
 open Spec LaPToP.FunctionTheory
@@ -100,6 +176,20 @@ theorem assignElem_eq_assignA (idx : AS → ℕ) (e : AS → ℤ) :
     · rw [Function.update_of_ne hj]; exact h2 j hj
   · rintro rfl
     refine ⟨Function.update_self .., fun j hj => Function.update_of_ne hj .., rfl, rfl⟩
+
+/-- The book's array element assignment is the flat-state form on the array
+component, with the scalar variables `i` and `x` framed: on a flat state a list
+variable is the family of slots it indexes, and nothing else changes. -/
+theorem assignElem_iff_assignArr (idx : AS → ℕ) (e : AS → ℤ) (s s' : AS) :
+    assignElem idx e s s' ↔
+      Spec.assignArr (Var := ℕ) (Val := ℤ) id (fun _ => idx s) (fun _ => e s) s.A s'.A ∧
+        s'.i = s.i ∧ s'.x = s.x := by
+  simp only [assignElem, Spec.assignArr, id_eq]
+  constructor
+  · rintro ⟨h1, h2, h3, h4⟩
+    exact ⟨⟨h1, h2, fun v hv => absurd rfl (hv v)⟩, h3, h4⟩
+  · rintro ⟨⟨h1, h2, -⟩, h3, h4⟩
+    exact ⟨h1, h2, h3, h4⟩
 
 /-- `i→e | A` of Function Theory agrees with `Function.update A i e` at every index. -/
 theorem orElse_arrow_apply (A : ℕ → ℤ) (i : ℕ) (e : ℤ) (j : ℕ)

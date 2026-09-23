@@ -1,6 +1,7 @@
 import LaPToP.ProgramTheory.Programs
 import LaPToP.ProgramTheory.WhileLoop
 import LaPToP.ProgramTheory.Scope
+import LaPToP.ProgramTheory.Arrays
 
 /-!
 # An interpreter for the programming notations
@@ -33,6 +34,7 @@ interpreter is interpreting *this* theory and no other:
 | `.cond b p q`     | `Spec.cond`                                |
 | `.whileDo b p`    | `Spec.whileRel` (see below)                |
 | `.newLocal x e p` | `Spec.newLocal` (see below)                |
+| `.assignAt x e`   | `Spec.assignAt` (see below)                |
 
 For the loop we need a specification where the book has only a refinement
 notation. `Spec.whileRel b R` is the inductively defined relation of the
@@ -88,6 +90,22 @@ declaration `new x: Val := e· P` under the frame that restores the slot, and
 `new x: Val· P`, whose initial value is arbitrary where a machine must choose
 one.
 
+## Arrays
+
+Section 5.1.0 warns that the Substitution Law fails for array element
+assignment, because the name assigned to is not fixed by the syntax:
+`A i:= e` writes the slot that `i` names in the *prestate*. `Prog.assignAt`
+is that construct — assignment to a computed name — and `Spec.assignAt_seq` is
+the substitution that does work, the book's "change `A i:= e` to `A:= i→e | A`
+before applying any programming theory". An array on a flat state is the family
+of slots it indexes, and `denote_assignAt_arr` proves that assignment to a
+computed slot of such a family is exactly the book's definition of `A i:= e`
+(`Spec.assignArr`, tied back to `Arrays.assignElem` on the book's record state
+by `Arrays.assignElem_iff_assignArr`). `Prog.assign` is the special case with a
+constant name, where the Substitution Law is sound. The write set of an element
+assignment is the range of the computed name, so the frame machinery covers
+arrays unchanged.
+
 ## Honest deviations and scope
 
 * Expressions are *semantic*: `e : State Var Val → Val` and `b : State Var Val → Bool`,
@@ -110,15 +128,20 @@ one.
   is not claimed: `Spec.IsProgram` has no rule for it, and restoring a borrowed
   slot is not expressible in the four notations, so `LoopFree` has no case for
   `newLocal`.
+* An array is the family of state slots it indexes, not a single variable
+  holding a list as in `Arrays.AS` — a flat state has no room for a list value.
+  The two readings are related by `Arrays.assignElem_iff_assignArr`. Arrays of
+  two dimensions and records are not given syntax of their own; on this encoding
+  they are the same construct with a different index type, but that is said, not
+  proved here.
 * Out of scope in this round, and not claimed anywhere below: concurrency (`||`),
-  the time variable `t`, channels and interaction, arrays and assertions as
-  program syntax, the full surface syntax of the book, and a command-line binary
-  outside Lean.
+  the time variable `t`, channels and interaction, assertions as program syntax,
+  the full surface syntax of the book, and a command-line binary outside Lean.
 -/
 
 namespace LaPToP.ProgramTheory
 
-universe u v
+universe u v w
 
 namespace Spec
 
@@ -219,6 +242,8 @@ inductive Prog (Var : Type u) (Val : Type v) : Type (max u v) where
   /-- `new x: Val := e· p`: the local variable of `p` is the state slot `x`,
   initialized to `e` and restored when the scope ends. -/
   | newLocal (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val) : Prog Var Val
+  /-- `A i:= e`: assignment whose target name is computed from the prestate. -/
+  | assignAt (x : Spec.State Var Val → Var) (e : Spec.State Var Val → Val) : Prog Var Val
 
 /-- Programs without loops: the four notations of Section 4.0.3 that are
 programs outright. -/
@@ -250,6 +275,7 @@ def run [DecidableEq Var] :
       if b s then (run n p s).bind (run n (.whileDo b p)) else some s
   | n + 1, .newLocal x e p, s =>
       (run n p (Function.update s x (e s))).map fun t => Function.update t x (s x)
+  | _ + 1, .assignAt x e, s => some (Function.update s (x s) (e s))
 
 variable [DecidableEq Var]
 
@@ -278,6 +304,10 @@ variable [DecidableEq Var]
     (s : Spec.State Var Val) :
     run (n + 1) (.newLocal x e p) s =
       (run n p (Function.update s x (e s))).map fun t => Function.update t x (s x) := rfl
+
+@[simp] theorem run_assignAt (n : ℕ) (x : Spec.State Var Val → Var)
+    (e : Spec.State Var Val → Val) (s : Spec.State Var Val) :
+    run (n + 1) (.assignAt x e) s = some (Function.update s (x s) (e s)) := rfl
 
 /-- More fuel never spoils a successful run. -/
 theorem run_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
@@ -320,6 +350,7 @@ theorem run_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
       cases hp : run n p (Function.update s x (e s)) with
       | none => rw [hp] at h; simp at h
       | some t => rw [hp] at h; rw [ih hp hnm]; exact h
+    | assignAt x e => simpa using h
 
 /-! ### Denotation into the theory of Chapter 4 -/
 
@@ -332,6 +363,7 @@ def denote : Prog Var Val → Spec (Spec.State Var Val)
   | .cond b p q => Spec.cond (fun s => b s = true) (denote p) (denote q)
   | .whileDo b p => Spec.whileRel (fun s => b s = true) (denote p)
   | .newLocal x e p => Spec.newLocal x e (denote p)
+  | .assignAt x e => Spec.assignAt x e
 
 @[simp] theorem denote_ok : denote (Var := Var) (Val := Val) .ok = Spec.ok := rfl
 
@@ -349,6 +381,9 @@ def denote : Prog Var Val → Spec (Spec.State Var Val)
 
 @[simp] theorem denote_newLocal (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val) :
     denote (.newLocal x e p) = Spec.newLocal x e (denote p) := rfl
+
+@[simp] theorem denote_assignAt (x : Spec.State Var Val → Var) (e : Spec.State Var Val → Val) :
+    denote (.assignAt x e) = Spec.assignAt x e := rfl
 
 /-- A loop-free program denotes a program in the sense of Section 4.0.3. -/
 theorem isProgram_denote {p : Prog Var Val} (h : LoopFree p) : Spec.IsProgram (denote p) := by
@@ -406,6 +441,9 @@ theorem denote_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var 
         rw [hp] at h
         simp only [Option.map_some, Option.some.injEq] at h
         exact ⟨t, ih hp, h.symm⟩
+    | assignAt x e =>
+      simp only [run_assignAt, Option.some.injEq] at h
+      exact h.symm
 
 /-- **Completeness**: every behaviour allowed by the denotation is achieved by
 a run with enough fuel. -/
@@ -452,6 +490,9 @@ theorem exists_run_of_denote : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val
         ∃ t, denote p (Function.update s x (e s)) t ∧ s' = Function.update t x (s x) := h
     obtain ⟨f, hf⟩ := ihp hp
     exact ⟨f + 1, by rw [run_newLocal, hf, Option.map_some, ht]⟩
+  | assignAt x e =>
+    intro s s' h
+    exact ⟨1, by rw [run_assignAt, show s' = Function.update s (x s) (e s) from h]⟩
 
 /-- Each denoted program is deterministic: the interpreter computes a function
 of the prestate, so the specification it implements has at most one poststate. -/
@@ -531,6 +572,9 @@ inductive Eval : Prog Var Val → Spec.State Var Val → Spec.State Var Val → 
       {s t : Spec.State Var Val} :
       Eval p (Function.update s x (e s)) t →
         Eval (.newLocal x e p) s (Function.update t x (s x))
+  /-- `A i:= e` computes its target name from the prestate and assigns to it. -/
+  | assignAt {x : Spec.State Var Val → Var} {e : Spec.State Var Val → Val}
+      {s : Spec.State Var Val} : Eval (.assignAt x e) s (Function.update s (x s) (e s))
 
 /-- A fuelled run is an execution: the budget only restricts which derivations
 are reachable, not what they mean. -/
@@ -579,6 +623,9 @@ theorem eval_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Va
         simp only [Option.map_some, Option.some.injEq] at h
         subst h
         exact .newLocal (ih hp)
+    | assignAt x e =>
+      simp only [run_assignAt, Option.some.injEq] at h
+      exact h ▸ .assignAt
 
 /-- **Partial correctness**: an execution that terminates satisfies the denoted
 specification. -/
@@ -594,6 +641,7 @@ theorem denote_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
   | whileTrue hb _ _ ihp ihw => exact Spec.whileRel.step hb ihp ihw
   | whileFalse hb => exact Spec.whileRel.exit (by simp [hb])
   | newLocal _ ih => exact ⟨_, ih, rfl⟩
+  | assignAt => rfl
 
 /-- **Completeness**: every behaviour the denotation allows is a terminating
 execution. Together with `denote_of_eval`, execution and denotation are the same
@@ -626,6 +674,9 @@ theorem eval_of_denote : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
         ∃ t, denote p (Function.update s x (e s)) t ∧ s' = Function.update t x (s x) := h
     subst ht
     exact .newLocal (ihp hp)
+  | assignAt x e =>
+    intro s s' h
+    exact h ▸ .assignAt
 
 /-- Execution *is* the denotation: the fuel-free operational semantics and the
 Chapter 4 specification of a program are one relation. -/
@@ -734,6 +785,7 @@ def writes : Prog Var Val → Set Var
   | .cond _ p q => writes p ∪ writes q
   | .whileDo _ p => writes p
   | .newLocal x _ p => writes p \ {x}
+  | .assignAt x _ => Set.range x
 
 omit [DecidableEq Var] in
 @[simp] theorem writes_ok : writes (Prog.ok : Prog Var Val) = ∅ := rfl
@@ -756,6 +808,10 @@ omit [DecidableEq Var] in
 omit [DecidableEq Var] in
 @[simp] theorem writes_newLocal (x : Var) (e : Spec.State Var Val → Val) (p : Prog Var Val) :
     writes (.newLocal x e p) = writes p \ {x} := rfl
+
+omit [DecidableEq Var] in
+@[simp] theorem writes_assignAt (x : Spec.State Var Val → Var) (e : Spec.State Var Val → Val) :
+    writes (.assignAt x e) = Set.range x := rfl
 
 /-- A terminating execution changes no variable outside the program's write set.
 This is the frame condition of Section 5.0.1, established once and for all from
@@ -793,6 +849,10 @@ theorem unchanged_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
     · subst hvx; simp
     · have hp : v ∉ writes p := fun hw => hvx (hv hw)
       rw [Function.update_of_ne hvx, ih v hp, Function.update_of_ne hvx]
+  | @assignAt x e s =>
+    intro v hv
+    simp only [writes_assignAt, Set.mem_range, not_exists] at hv
+    exact Function.update_of_ne (Ne.symm (hv s)) _ _
 
 /-- **The frame of a program**: for a program whose writes lie inside `xs`, the
 framed specification and the denotation are the same relation,
@@ -827,6 +887,28 @@ what it held before, whatever `p` did to it. -/
 theorem eval_newLocal_self {x : Var} {e : Spec.State Var Val → Val} {p : Prog Var Val}
     {s s' : Spec.State Var Val} (h : Eval (.newLocal x e p) s s') : s' x = s x :=
   Spec.newLocal_self x e (denote p) (denote_of_eval h)
+
+/-- Assignment to a fixed name is the special case of assignment to a computed
+one: `Prog.assign` is `Prog.assignAt` with a constant name. -/
+theorem denote_assignAt_const (x : Var) (e : Spec.State Var Val → Val) :
+    denote (.assignAt (fun _ => x) e) = denote (.assign x e) := rfl
+
+/-- **Array element assignment.** An array on a flat state is the family of slots
+`arr` it indexes, and `A i:= e` is assignment to the slot the index names — the
+book's `A′i=e ∧ (∀j· j⧧i ⇒ A′j = A j) ∧ x′=x ∧ ...` of Section 5.1.0, executed. -/
+theorem denote_assignAt_arr {Idx : Type w} {arr : Idx → Var} (harr : Function.Injective arr)
+    (idx : Spec.State Var Val → Idx) (e : Spec.State Var Val → Val) :
+    denote (.assignAt (fun s => arr (idx s)) e) = Spec.assignArr arr idx e :=
+  (Spec.assignArr_eq_assignAt harr idx e).symm
+
+omit [DecidableEq Var] in
+/-- An array element assignment writes inside the array: its frame is the family
+of slots, so every variable outside the array is unchanged. -/
+theorem writes_assignAt_arr {Idx : Type w} (arr : Idx → Var)
+    (idx : Spec.State Var Val → Idx) (e : Spec.State Var Val → Val) :
+    writes (.assignAt (fun s => arr (idx s)) e) ⊆ Set.range arr := by
+  rintro v ⟨s, rfl⟩
+  exact ⟨idx s, rfl⟩
 
 /-! ### A first-order syntax, and executable demonstrations
 
@@ -1087,6 +1169,108 @@ example : Spec.IsProgram (denote (.seq (set .i (.lit 0)) (set .s (.lit 0)) : P))
   isProgram_denote (.seq (.assign _ _) (.assign _ _))
 
 end Demo
+
+/-! ### Arrays: the book's two examples, executed
+
+Section 5.1.0 shows that the Substitution Law fails for array element
+assignment, with two examples. `Arrays.example₁` and `Arrays.example₂` prove
+what those programs mean; here the same two programs are *run*. On a flat state
+the array `A` is the family of slots `a 0, a 1, ...`, so `A i:= e` is an
+assignment whose target name is computed from the prestate — which is exactly
+why substituting into the syntax does not work.
+-/
+
+namespace ArrayDemo
+
+/-- The state variables: an index `i`, another variable `x`, and the array `A`
+as the family of slots `a k`. -/
+inductive AVr
+  /-- The index variable `i`. -/
+  | i
+  /-- Another variable `x`. -/
+  | x
+  /-- The array slot `A k`. -/
+  | a (k : ℕ)
+  deriving DecidableEq, Repr
+
+/-- States over the array variables, integer-valued. -/
+abbrev ASt := Spec.State AVr ℤ
+
+/-- Distinct indices name distinct slots, so the array is an array. -/
+theorem a_injective : Function.Injective AVr.a := fun _ _ h => by cases h; rfl
+
+/-- `A i:= e`, with the index and the value expressions of the prestate. -/
+def setElem (idx : ASt → ℕ) (e : ASt → ℤ) : Prog AVr ℤ :=
+  .assignAt (fun s => AVr.a (idx s)) e
+
+/-- `A i:= e` denotes the book's array element assignment. -/
+theorem denote_setElem (idx : ASt → ℕ) (e : ASt → ℤ) :
+    denote (setElem idx e) = Spec.assignArr AVr.a idx e :=
+  denote_assignAt_arr a_injective idx e
+
+/-- The state in which every variable is zero. -/
+def zero : ASt := fun _ => 0
+
+/-! #### `A 2:= 3. i:= 2. A i:= 4. A i = A 2` -/
+
+/-- The three assignments of the book's first example. -/
+def ex₁ : Prog AVr ℤ :=
+  .seq (setElem (fun _ => 2) fun _ => 3)
+    (.seq (.assign AVr.i fun _ => 2) (setElem (fun s => (s AVr.i).toNat) fun _ => 4))
+
+-- After the three assignments `i = 2` and `A 2 = 4`, so `A i = A 2` holds.
+#eval (run 10 ex₁ zero).map fun s => (s AVr.i, s (AVr.a 2))
+
+/-- `i = 2` and `A 2 = 4` after the three assignments, so the example's final
+test `A i = A 2` holds and the program is just the assignments, as
+`Arrays.example₁` says. Checked by the kernel. -/
+theorem ex₁_run : (run 10 ex₁ zero).map (fun s => (s AVr.i, s (AVr.a 2))) = some (2, 4) := rfl
+
+/-- What the Substitution Law would have given: after `A 2:= 3` alone `A 2` is 3,
+not 4, so the substituted test `4 = A 2` is `⊥` (`Arrays.example₁_naive`). -/
+theorem ex₁_naive :
+    (run 5 (setElem (fun _ => 2) fun _ => 3) zero).map (fun s => s (AVr.a 2)) = some 3 := rfl
+
+/-! #### `A 2:= 2. A(A 2):= 3. A 2 = 2` -/
+
+/-- The two assignments of the book's second example. -/
+def ex₂ : Prog AVr ℤ :=
+  .seq (setElem (fun _ => 2) fun _ => 2) (setElem (fun s => (s (AVr.a 2)).toNat) fun _ => 3)
+
+-- `A 2 = 3` afterwards, so the example's final test `A 2 = 2` fails.
+#eval (run 10 ex₂ zero).map fun s => s (AVr.a 2)
+
+/-- From *any* prestate, `A 2 = 3` after the two assignments — the second one
+writes the slot the first one set. So the example's final test `A 2 = 2` fails
+and the program is `⊥`, "because `A 2 = 3` just before the final binary
+expression" (`Arrays.example₂`), whereas the Substitution Law would have left
+`A 2:= 2`. -/
+theorem ex₂_result {s s' : ASt} (h : Eval ex₂ s s') : s' (AVr.a 2) = 3 := by
+  obtain ⟨t, ht, hs'⟩ :
+      ∃ t, Spec.assignAt (fun _ => AVr.a 2) (fun _ => (2 : ℤ)) s t ∧
+        Spec.assignAt (fun u : ASt => AVr.a (u (AVr.a 2)).toNat) (fun _ => (3 : ℤ)) t s' :=
+    denote_of_eval h
+  subst ht
+  rw [hs']
+  simp
+
+/-- And the kernel agrees. -/
+theorem ex₂_run : (run 10 ex₂ zero).map (fun s => s (AVr.a 2)) = some 3 := rfl
+
+/-! #### The frame of an array program -/
+
+/-- Neither example touches `x`: every slot they write is in the array or is `i`. -/
+theorem writes_ex₁ : writes ex₁ ⊆ {v : AVr | v ≠ AVr.x} := by
+  rintro v hv
+  simp only [ex₁, setElem, writes_seq, writes_assignAt, writes_assign, Set.mem_union,
+    Set.mem_range, Set.mem_singleton_iff] at hv
+  rcases hv with ⟨s, rfl⟩ | rfl | ⟨s, rfl⟩ <;> simp
+
+/-- So `x` is unchanged by it, by the static frame check alone. -/
+theorem frame_ex₁ : Spec.frame {v : AVr | v ≠ AVr.x} (denote ex₁) = denote ex₁ :=
+  frame_denote writes_ex₁
+
+end ArrayDemo
 
 end Interpreter
 
