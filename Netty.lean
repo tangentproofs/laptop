@@ -6,6 +6,7 @@ import Netty.Doc
 import Netty.Render
 import Netty.Json
 import Netty.Script
+import Netty.Api
 import Netty.Replay
 
 /-!
@@ -31,6 +32,8 @@ with no user interface but a script language and `lake exe netty`:
 * `Netty.Render` — the three panes as text;
 * `Netty.Json` — saving and loading a proof;
 * `Netty.Script` — a session and the script language `lake exe netty` runs;
+* `Netty.Api` — the same session as one JSON request and one JSON answer, which
+  is what a window with three panes talks to;
 * `Netty.Replay` — the document's own example, replayed and checked in Lean.
 
 It is deliberately independent of the rest of this repository: it imports

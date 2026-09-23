@@ -34,6 +34,8 @@ structure Options where
   emitLaws : Bool := false
   /-- Run the kernel's checks on itself and stop. -/
   selftest : Bool := false
+  /-- Answer JSON requests on standard input instead of running a script. -/
+  serve : Bool := false
   /-- Print the usage message. -/
   help : Bool := false
 
@@ -53,6 +55,8 @@ usage: netty [options] [script]
   --list-laws         print the laws in force and stop
   --emit-laws         print the built-in boolean law list as a law file
   --selftest          check the shipped laws and the demonstrations, and stop
+  --serve             answer one JSON request per line of standard input with
+                      one line of JSON, for a user interface to talk to
   --help              print this message
 
 A script is one command per line; ‘#’ begins a comment.
@@ -89,6 +93,7 @@ def parseArgs (args : List String) : Except String Options :=
     else if a == "--list-laws" then .ok { o with listLaws := true }
     else if a == "--emit-laws" then .ok { o with emitLaws := true }
     else if a == "--selftest" then .ok { o with selftest := true }
+    else if a == "--serve" then .ok { o with serve := true }
     else if a.startsWith "--demo=" then .ok { o with demo := some (after 7 a) }
     else if a.startsWith "--laws=" then .ok { o with laws := o.laws ++ [after 7 a] }
     else if a.startsWith "--load=" then .ok { o with load := some (after 7 a) }
@@ -152,6 +157,44 @@ def runScript (r : Run) (cs : List (Nat × ScriptCmd)) : IO Run :=
 /-- Where the shipped boolean law file lives, relative to the repository. -/
 def lawFilePath : String := "Netty/laws/boolean.laws"
 
+/-- Check the request service a user interface talks to: every demonstration
+replays through it, a session survives being saved and loaded back through it,
+and a request the service does not know is refused rather than passed over. -/
+def apiTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean } }
+  for (name, _) in Demo.all do
+    let (s, r) := Api.respond fresh { op := "demo", arg := name }
+    if !r.ok then
+      ok := false
+      IO.eprintln s!"api: demo {name}: {r.error}"
+    else if r.state.proofPane != s.doc.renderProof then
+      ok := false
+      IO.eprintln s!"api: demo {name}: the answer's proof pane is not the document's"
+    else
+      let (_, saved) := Api.respond s { op := "save" }
+      let (s', loaded) := Api.respond fresh { op := "load", arg := saved.save }
+      if !loaded.ok then
+        ok := false
+        IO.eprintln s!"api: demo {name}: loading what save wrote: {loaded.error}"
+      else if s'.doc != s.doc then
+        ok := false
+        IO.eprintln s!"api: demo {name}: saving and loading through the service \
+          changed the document"
+      else
+        IO.println s!"api: demo {name} replays, and saves and loads unchanged"
+  let (_, answer) := Api.respondText fresh "{\"id\": 7, \"op\": \"fly\"}"
+  match Lean.Json.parse answer >>= fun j => do
+      return ((← j.getObjValAs? Nat "id"), (← j.getObjValAs? Bool "ok")) with
+  | .ok (7, false) => IO.println "api: an unknown request is refused, with its id"
+  | .ok _ =>
+      ok := false
+      IO.eprintln "api: an unknown request was not refused"
+  | .error e =>
+      ok := false
+      IO.eprintln s!"api: the answer to an unknown request does not parse: {e}"
+  return ok
+
 /-- Run the kernel's checks on itself: that every shipped law is a tautology,
 that the law list survives being written out and read back, that the law file
 on disk is the one compiled in, and that every demonstration script is the
@@ -206,7 +249,26 @@ def selftest : IO Bool := do
         let r ← runScript { session := { doc := { laws := Laws.boolean } } } quiet
         if r.ok then IO.println s!"demo {name}: script agrees with Netty.Replay, and proved"
         else ok := false
+  if !(← apiTest) then ok := false
   return ok
+
+/-- Answer JSON requests until standard input ends: one request per line in,
+one answer per line out. The requests are `Netty.Api`'s, and every change to
+the document still goes through `Netty.Doc.step`; this loop is the reading, the
+writing and the flushing, and nothing else. -/
+def serve (doc : Doc) : IO Unit := do
+  let stdin ← IO.getStdin
+  let stdout ← IO.getStdout
+  let mut session : Session := { doc := doc }
+  repeat
+    let line ← stdin.getLine
+    -- `getLine` returns the empty string only at end of input.
+    if line.isEmpty then break
+    if (Parser.trim line).isEmpty then continue
+    let (session', answer) := Api.respondText session line
+    session := session'
+    stdout.putStrLn answer
+    stdout.flush
 
 /-- Entry point. -/
 def main (args : List String) : IO UInt32 := do
@@ -234,6 +296,9 @@ def main (args : List String) : IO UInt32 := do
         | .ok d => doc := { d with laws := laws }
         | .error e => IO.eprintln s!"{path}: {e}"; return 2
     | none => pure ()
+    if o.serve then
+      serve doc
+      return 0
     let text ←
       match o.demo, o.script with
       | some name, _ =>

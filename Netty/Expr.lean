@@ -214,6 +214,30 @@ def operands : Expr → List Expr
   | bin op l r => if op.assoc then flattenOp op (bin op l r) else [l, r]
   | _ => []
 
+/-- The symbol of the main operator of `e`: what stands between its main
+operands, or before the one operand of a negation. Empty for an atom. -/
+def mainOp : Expr → String
+  | neg _ => "¬"
+  | bin op _ _ => op.symbol
+  | _ => ""
+
+/-- The main operands of `e`, each rendered with exactly the parentheses it
+carries inside `e.render`, so that a display which draws them as separate
+clickable pieces with `mainOp` between them reads as the whole line does.
+
+The one departure is the one the flattening already makes: `a ∧ (b ∧ c)` has the
+three main operands `a`, `b`, `c`, so it is drawn as `a ∧ b ∧ c`, without the
+parentheses `render` writes. That is the document's own reading of an
+associative operator, and it is why a click on `b` can zoom in. -/
+def operandTexts (e : Expr) : List String :=
+  match e with
+  | neg a => [renderAt 8 a]
+  | bin op _ _ =>
+      match operands e with
+      | [] => []
+      | x :: xs => renderAt op.prec x :: xs.map (renderAt (op.prec - 1))
+  | _ => []
+
 /-- Replace the `i`-th main operand of `e`. This is how zooming out puts the
 bottom line of a subproof back into the line it was zoomed in from. -/
 def replaceOperand (e : Expr) (i : Nat) (new : Expr) : Option Expr :=
