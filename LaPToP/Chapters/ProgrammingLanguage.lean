@@ -927,8 +927,11 @@ command-line binary outside Lean.
 The interpreter agrees with the theory. Soundness: if a run succeeds, its
 result satisfies the denoted specification. Completeness: every behaviour the
 denotation allows is achieved by a run with enough fuel. Together they give
-determinism of every denoted program — as an executed program must be — and the
-bridge from a development to an execution: if $`W \Leftarrow` the denotation of
+determinism of every denoted program — as an executed program must be. The
+last two are stated for the deterministic fragment `Interpreter.Det`, every
+notation but the choice — the one construct a deterministic interpreter cannot
+be complete for, added later in the node on assertions and backtracking. Then
+comes the bridge from a development to an execution: if $`W \Leftarrow` the denotation of
 $`p` has been proved, then every successful run of $`p` satisfies $`W`
 ({uses "refinement_laws"}[]), and for a loop developed the book's way
 ({uses "while_loop"}[]) every terminating run satisfies the specification
@@ -1108,4 +1111,58 @@ array is the whole state. Run, evaluation and denotation extend as for
 assignment case since the computed name is a function of the prestate. The
 executed examples are reductions in the kernel; the general form of the second
 unfolds the two assignments in sequence.
+:::
+
+:::theorem "interpreter_assertions" (parent := "programming_language_core") (tags := "programs, interpreter, assertions, backtracking, hehner-5.4") (effort := "medium") (lean := "LaPToP.ProgramTheory.Assertions.assert_finite, LaPToP.ProgramTheory.Interpreter.Det, LaPToP.ProgramTheory.Interpreter.run_ensure, LaPToP.ProgramTheory.Interpreter.run_or, LaPToP.ProgramTheory.Interpreter.denote_ensure, LaPToP.ProgramTheory.Interpreter.denote_or, LaPToP.ProgramTheory.Interpreter.writes_ensure, LaPToP.ProgramTheory.Interpreter.writes_or, LaPToP.ProgramTheory.Interpreter.assert, LaPToP.ProgramTheory.Interpreter.refines_denote_or_left, LaPToP.ProgramTheory.Interpreter.runAll, LaPToP.ProgramTheory.Interpreter.runAll_le, LaPToP.ProgramTheory.Interpreter.eval_of_mem_runAll, LaPToP.ProgramTheory.Interpreter.exists_mem_runAll_of_eval, LaPToP.ProgramTheory.Interpreter.mem_runAll_iff_eval, LaPToP.ProgramTheory.Interpreter.mem_runAll_iff_denote, LaPToP.ProgramTheory.Interpreter.run_eq_none_of_diverges, LaPToP.ProgramTheory.Interpreter.Demo.isOne, LaPToP.ProgramTheory.Interpreter.Demo.isOne_eval, LaPToP.ProgramTheory.Interpreter.Demo.choice, LaPToP.ProgramTheory.Interpreter.Demo.backtrack, LaPToP.ProgramTheory.Interpreter.Demo.denote_backtrack, LaPToP.ProgramTheory.Interpreter.Demo.runAll_backtrack, LaPToP.ProgramTheory.Interpreter.Demo.run_backtrack, LaPToP.ProgramTheory.Interpreter.Demo.not_det_backtrack, LaPToP.ProgramTheory.Interpreter.Demo.det_count, LaPToP.ProgramTheory.Interpreter.Demo.eval_backtrack")
+Assertions and the choice, executed. `Prog.ensure b` succeeds without changing
+anything when $`b` holds and has no poststate when it does not — the reading of
+{uses "backtracking"}[] that "when $`b` is false, ... this is unimplementable",
+now as something a machine does. An assertion is the same program: the
+else-branch of {uses "assertions"}[] prints a message and waits until
+$`\infty`, and a machine with no clock and no screen cannot tell that from
+producing nothing. The identification is proved rather than assumed: from a
+state at finite time, the behaviours of $`\mathbf{assert}\ b` that end in finite
+time are exactly $`\mathbf{ensure}\ b`, so the whole difference between them —
+that an assertion is implementable, by waiting forever, and an $`\mathbf{ensure}`
+is not — lives in the time variable this state has not got.
+
+`Prog.or` is the choice, whose point is that an implementation "must choose the
+right one to satisfy a later binary expression". It is the one construct a
+deterministic interpreter cannot be complete for, and the node says so in the
+statements: completeness and determinism now hold on the *deterministic
+fragment*, every notation but the choice. The fuelled interpreter resolves a
+choice by taking the left branch — the book's "normally this choice is made as a
+refinement" — which is sound and cannot backtrack.
+
+Backtracking is therefore given its own interpreter. `runAll` returns every
+poststate reachable within the fuel: a choice branches, an $`\mathbf{ensure}`
+filters, and more fuel never loses a result. It is sound and complete for the
+whole language, choice included — the states it finds are exactly the executions
+of {uses "interpreter_partial_correctness"}[], hence exactly the denotation.
+The demonstration is the book's own example
+$`s := 0\ \mathbf{or}\ s := 1.\ \mathbf{ensure}\ s = 1 = s := 1`: proved from the
+laws of {uses "backtracking"}[], found by the search (one poststate, with
+$`s = 1`, computed in the kernel), missed by the deterministic interpreter, and
+proved to hold of every execution from every prestate.
+
+What remains. An assertion and an $`\mathbf{ensure}` are the same program here,
+which is honest only because the state has no time variable and no output
+channel; the book distinguishes them. The error message of a failed assertion is
+not modelled. Nothing in the interpreter yet reaches concurrency, the time
+variable, or channels, and there is still no command-line binary outside Lean —
+the natural next slice.
+:::
+
+:::proof "interpreter_assertions"
+The finite-time identification is the two cases of the assertion: when $`b`
+holds it is $`\mathit{ok}`, and when it fails the final time is $`\infty`, which
+the finiteness hypothesis excludes. Run, evaluation and denotation extend to both
+new constructs as the other notations do ({uses "interpreter_soundness"}[]), the
+choice case going to the left branch. Soundness and completeness of the search
+are two inductions — on the fuel with cases on the program, and on the evaluation
+— with list membership distributing over the concatenation of a choice and the
+flat map of a composition, and the maximum of two fuels at each composition,
+appealing to monotonicity in the fuel. The example follows from the law
+$`(P \lor Q).\ \mathbf{ensure}\ b = (P.\ \mathbf{ensure}\ b) \lor (Q.\ \mathbf{ensure}\ b)`
+of {uses "backtracking"}[]; the computed results are reductions in the kernel.
 :::
