@@ -1,0 +1,110 @@
+# Boolean laws — the "Binary" list of aPToP §11.3.1 (Hehner, A Practical
+# Theory of Programming), as a Netty law list.
+#
+# A line is a comment when it is blank or begins with '#'. Otherwise it is a
+# law: an optional name before the first ':', then a boolean expression. The
+# identifiers of the expression are universally quantified, so the line
+#
+#     specialization: a ∧ b ⇒ a
+#
+# is the law ∀a, b: bool· a ∧ b ⇒ a. Write '∀a, b· …' if you want to quantify
+# some other set of identifiers, and '∀· …' to quantify none.
+#
+# '≡ ⟹ ⟸' are the book's large '= ⇒ ⇐': the same operators at the lowest
+# precedence, which a law file needs because it has no left margin to supply
+# them. Remember that aPToP's '¬' binds more weakly than '=', so 'a = ¬b' does
+# not parse; write 'a ≡ ¬b' or 'a = (¬b)'.
+#
+# The laws about 'if … then … else … fi' are not here: the kernel's grammar
+# does not have 'if' yet.
+
+mirror: a ⇐ b ≡ b ⇒ a
+double negation: ¬¬a ≡ a
+
+excluded middle: a ∨ ¬a
+noncontradiction: ¬(a ∧ ¬a)
+
+base: ¬(a ∧ ⊥)
+base: a ∨ ⊤
+base: a ⇒ ⊤
+base: ⊥ ⇒ a
+
+identity: ⊤ ∧ a ≡ a
+identity: ⊥ ∨ a ≡ a
+identity: ⊤ ⇒ a ≡ a
+identity: ⊤ = a ≡ a
+
+idempotent: a ∧ a ≡ a
+idempotent: a ∨ a ≡ a
+reflexive: a ⇒ a
+reflexive: a = a
+
+indirect proof: ¬a ⇒ ⊥ ≡ a
+indirect proof: ¬a ⇒ a ≡ a
+specialization: a ∧ b ⇒ a
+generalization: a ⇒ a ∨ b
+
+associative: a ∧ (b ∧ c) ≡ (a ∧ b) ∧ c
+associative: a ∨ (b ∨ c) ≡ (a ∨ b) ∨ c
+associative: (a = (b = c)) ≡ ((a = b) = c)
+associative: (a ⧧ (b ⧧ c)) ≡ ((a ⧧ b) ⧧ c)
+
+symmetry: a ∧ b ≡ b ∧ a
+symmetry: a ∨ b ≡ b ∨ a
+symmetry: (a = b) ≡ (b = a)
+symmetry: (a ⧧ b) ≡ (b ⧧ a)
+
+antisymmetry: (a ⇒ b) ∧ (b ⇒ a) ≡ (a = b)
+discharge: a ∧ (a ⇒ b) ≡ a ∧ b
+discharge: a ⇒ a ∧ b ≡ a ⇒ b
+
+antimonotonic: a ⇒ b ≡ ¬a ⇐ ¬b
+monotonic: (a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)
+monotonic: (a ⇒ b) ⇒ (a ∨ c ⇒ b ∨ c)
+monotonic: (a ⇒ b) ⇒ ((c ⇒ a) ⇒ (c ⇒ b))
+antimonotonic: (a ⇒ b) ⇒ ((a ⇒ c) ⇐ (b ⇒ c))
+
+duality: ¬(a ∧ b) ≡ ¬a ∨ ¬b
+duality: ¬(a ∨ b) ≡ ¬a ∧ ¬b
+
+exclusion: (a ⇒ ¬b) ≡ (b ⇒ ¬a)
+exclusion: (a ≡ ¬b) ≡ (a ⧧ b)
+exclusion: (a ⧧ b) ≡ (¬a ≡ b)
+
+inclusion: a ⇒ b ≡ ¬a ∨ b
+inclusion: a ⇒ b ≡ ((a ∧ b) = a)
+inclusion: a ⇒ b ≡ ((a ∨ b) = b)
+
+absorption: a ∧ (a ∨ b) ≡ a
+absorption: a ∨ (a ∧ b) ≡ a
+
+direct proof: (a ⇒ b) ∧ a ⇒ b
+direct proof: (a ⇒ b) ∧ ¬b ⇒ ¬a
+direct proof: (a ∨ b) ∧ ¬a ⇒ b
+
+transitive: (a ∧ b) ∧ (b ∧ c) ⇒ a ∧ c
+transitive: (a ⇒ b) ∧ (b ⇒ c) ⇒ (a ⇒ c)
+transitive: (a = b) ∧ (b = c) ⇒ (a = c)
+transitive: (a ⇒ b) ∧ (b = c) ⇒ (a ⇒ c)
+transitive: (a = b) ∧ (b ⇒ c) ⇒ (a ⇒ c)
+
+distributive: a ∧ (b ∧ c) ≡ (a ∧ b) ∧ (a ∧ c)
+distributive: a ∧ (b ∨ c) ≡ (a ∧ b) ∨ (a ∧ c)
+distributive: a ∨ (b ∧ c) ≡ (a ∨ b) ∧ (a ∨ c)
+distributive: a ∨ (b ⇒ c) ≡ (a ∨ b) ⇒ (a ∨ c)
+distributive: (a ∨ (b = c)) ≡ ((a ∨ b) = (a ∨ c))
+distributive: a ⇒ (b ∧ c) ≡ (a ⇒ b) ∧ (a ⇒ c)
+distributive: a ⇒ (b ∨ c) ≡ (a ⇒ b) ∨ (a ⇒ c)
+distributive: a ⇒ (b ⇒ c) ≡ (a ⇒ b) ⇒ (a ⇒ c)
+distributive: (a ⇒ (b = c)) ≡ ((a ⇒ b) = (a ⇒ c))
+
+antidistributive: a ∧ b ⇒ c ≡ (a ⇒ c) ∨ (b ⇒ c)
+antidistributive: a ∨ b ⇒ c ≡ (a ⇒ c) ∧ (b ⇒ c)
+portation: a ∧ b ⇒ c ≡ a ⇒ (b ⇒ c)
+portation: a ∧ b ⇒ c ≡ a ⇒ ¬b ∨ c
+
+conflation: (a ⇒ b) ∧ (c ⇒ d) ⇒ (a ∧ c ⇒ b ∧ d)
+conflation: (a ⇒ b) ∧ (c ⇒ d) ⇒ (a ∨ c ⇒ b ∨ d)
+
+equality: (a = b) ≡ (a ∧ b) ∨ (¬a ∧ ¬b)
+difference: (a ⧧ b) ≡ (a ∧ ¬b) ∨ (¬a ∧ b)

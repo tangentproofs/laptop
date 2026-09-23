@@ -26,3 +26,8 @@ lean_lib «LaPToPBlueprint» where
     `LaPToP.Blueprint,
     .submodules `LaPToP.Chapters,
   ]
+
+-- Netty: the calculational proof assistant's kernel. It is deliberately free of
+-- Mathlib and of LaPToP, so `lake build Netty` is fast and the kernel's own
+-- soundness checks are self-contained.
+lean_lib «Netty» where
