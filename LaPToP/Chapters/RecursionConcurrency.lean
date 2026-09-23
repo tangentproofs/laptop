@@ -4,6 +4,7 @@ import VersoBlueprint
 import LaPToP.RecursiveDefinition.Nat
 import LaPToP.RecursiveDefinition.Programs
 import LaPToP.RecursiveDefinition.DataConstruction
+import LaPToP.RecursiveDefinition.LoopBridge
 import LaPToP.Concurrency.Composition
 import LaPToP.Concurrency.ListConcurrency
 import LaPToP.Concurrency.Transformation
@@ -235,6 +236,54 @@ the refinement is a theorem for {uses "while_loop"}[], while any loop
 satisfying the axioms (for $`b = \top`) admits every final state at time
 $`\infty`, so the refinement fails. Uses {uses "recursive_program_zap"}[],
 {uses "nat_induction_predicate"}[] and {uses "time_variable"}[].
+:::
+
+:::theorem "loop_definition_terminating_runs" (parent := "recursion_concurrency_core") (tags := "recursion, programs, interpreter, hehner-6.1.1") (effort := "medium") (lean := "LaPToP.RecursiveDefinition.LoopDefinition.timeNondecreasing_tick, LaPToP.RecursiveDefinition.LoopDefinition.timeNondecreasing_assignX, LaPToP.RecursiveDefinition.LoopDefinition.timeNondecreasing_assignY, LaPToP.RecursiveDefinition.LoopDefinition.timeNondecreasing_seq, LaPToP.RecursiveDefinition.LoopDefinition.whileRun, LaPToP.RecursiveDefinition.LoopDefinition.whileRun_unfold, LaPToP.RecursiveDefinition.LoopDefinition.timeNondecreasing_whileRun, LaPToP.RecursiveDefinition.LoopDefinition.whileC_whileRun, LaPToP.RecursiveDefinition.LoopDefinition.whileRun_refines_of_prefixed, LaPToP.RecursiveDefinition.LoopDefinition.refines_whileRun, LaPToP.RecursiveDefinition.LoopDefinition.refines_whileRun_of_prefixed, LaPToP.RecursiveDefinition.LoopDefinition.WhileAxioms.refines_top_time_tick, LaPToP.RecursiveDefinition.LoopDefinition.whileRun_top_tick, LaPToP.RecursiveDefinition.LoopDefinition.not_refines_whileRun")
+The loop defined by {uses "loop_definition"}[] and the loop that is executed by
+{uses "interpreter"}[] are the two ends of the same fixed-point equation, and
+this node joins them. The comparison is made honest by giving the runs the
+recursive timing the axioms use: $`\mathsf{whileRun}\ b\ P` is the relation of
+the terminating executions of the loop whose body is $`P.\ t := t+1`.
+
+For any body that does not decrease time — which `tick`, $`x := e`, $`y := e`
+and their sequences are, as recorded here — the terminating runs satisfy the
+first two axioms outright: time does not decrease along them, and they unfold,
+$`\mathsf{whileRun} = t' \ge t \land \mathbf{if}\ b\ \mathbf{then}\ P.\ t := t+1.\ \mathsf{whileRun}\ \mathbf{else}\ \mathit{ok}`.
+They are moreover the strongest solution: every $`Z` with
+$`t' \ge t \land \mathbf{if}\ b\ \mathbf{then}\ P.\ t := t+1.\ Z\ \mathbf{else}\ \mathit{ok} \Leftarrow Z`
+is refined by them. The induction axiom then gives the bridge: any
+$`\mathbf{while}\ b\ \mathbf{do}\ P\ \mathbf{od}` satisfying the three axioms is
+refined by the terminating runs, so every successful execution of a loop — by
+the fuelled interpreter or by the fuel-free relation of
+{uses "interpreter_partial_correctness"}[] — is a behaviour the least
+fixed-point loop allows.
+
+The converse is false, and is proved false rather than left open. The book's
+loop is the weakest solution and the runs are the strongest, and they differ
+precisely on the nonterminating computations, which the axioms place at time
+$`\infty`. For $`\mathbf{while}\ \top\ \mathbf{do}\ t := t+1\ \mathbf{od}` the
+terminating runs are $`\bot` while any loop satisfying the axioms relates
+$`t = x = y = 0` to $`t' = \infty`. So this is a partial-correctness bridge, and
+that is all a theory of runs can supply. A second, smaller gap is one of state
+spaces: the axioms mention $`t := t+1`, so they are formalized over the concrete
+state with a time variable, while the interpreter runs over states that have
+none; the bridge is therefore stated for the loop specification itself, which is
+what the interpreter's denotation assigns to a loop. Carrying a time variable
+inside the interpreter is left for later.
+:::
+
+:::proof "loop_definition_terminating_runs"
+Unfolding is the fixed-point property of the loop relation composed with the
+Associative Law ({uses "refinement_laws"}[]), which regroups
+$`(P.\ t := t+1).\ W` as $`P.\ (t := t+1.\ W)`. That time does not decrease
+along a terminating run is an induction on the run, using the assumption on the
+body and $`t \le t+1`; with it, the constructor applied to the runs is the runs.
+Strongest-ness is the same induction, discharging the exit case by the
+$`\mathit{ok}` branch and the step case by the body, the tick and the induction
+hypothesis. The bridge is the induction axiom applied to that fixed point. The
+counterexample reuses the argument of {uses "loop_definition"}[] with $`t := t+1`
+as the body: the union of pre-fixed points contains everything at time
+$`\infty`, while a loop whose condition always holds has no terminating runs.
 :::
 
 :::theorem "nat_repeat_zero" (parent := "recursion_concurrency_core") (tags := "recursion, nat") (effort := "small")

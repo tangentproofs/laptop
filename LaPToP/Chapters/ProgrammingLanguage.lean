@@ -913,12 +913,11 @@ Honest deviations. Expressions are semantic — a Lean function of the prestate,
 as in {uses "assignment_spec"}[], where the book restricts them to implemented
 expressions — so `Prog` is data only up to its embedded expression functions;
 the demonstrations below close that gap with a first-order expression syntax of
-their own. The loop is the only unbounded construct and is executed with fuel;
-a fuel-free execution, and the tie to the least-fixed-point account of loops,
-are not done here. Out of scope this round, and claimed nowhere: concurrency,
-the time variable, channels and interaction, variable declaration and framing,
-assertions, the full surface syntax of the book, and a command-line binary
-outside Lean.
+their own. The loop is the only unbounded construct; the fuel-free account of
+running it is the next node. Out of scope this round, and claimed nowhere:
+concurrency, the time variable, channels and interaction, variable declaration
+and framing, assertions, the full surface syntax of the book, and a
+command-line binary outside Lean.
 :::
 
 :::theorem "interpreter_soundness" (parent := "programming_language_core") (tags := "programs, interpreter, execution") (effort := "medium") (lean := "LaPToP.ProgramTheory.Interpreter.denote_of_run, LaPToP.ProgramTheory.Interpreter.exists_run_of_denote, LaPToP.ProgramTheory.Interpreter.deterministic_denote, LaPToP.ProgramTheory.Interpreter.run_sound, LaPToP.ProgramTheory.Interpreter.run_while_sound, LaPToP.ProgramTheory.Interpreter.Demo.Vr, LaPToP.ProgramTheory.Interpreter.Demo.St, LaPToP.ProgramTheory.Interpreter.Demo.Exp, LaPToP.ProgramTheory.Interpreter.Demo.Exp.eval, LaPToP.ProgramTheory.Interpreter.Demo.Bexp, LaPToP.ProgramTheory.Interpreter.Demo.Bexp.eval, LaPToP.ProgramTheory.Interpreter.Demo.P, LaPToP.ProgramTheory.Interpreter.Demo.set, LaPToP.ProgramTheory.Interpreter.Demo.ifThen, LaPToP.ProgramTheory.Interpreter.Demo.loop, LaPToP.ProgramTheory.Interpreter.Demo.start, LaPToP.ProgramTheory.Interpreter.Demo.sumTo, LaPToP.ProgramTheory.Interpreter.Demo.sumTo_ten, LaPToP.ProgramTheory.Interpreter.Demo.sumTo_twenty, LaPToP.ProgramTheory.Interpreter.Demo.sumTo_no_fuel, LaPToP.ProgramTheory.Interpreter.Demo.countBody, LaPToP.ProgramTheory.Interpreter.Demo.countCond, LaPToP.ProgramTheory.Interpreter.Demo.count, LaPToP.ProgramTheory.Interpreter.Demo.W, LaPToP.ProgramTheory.Interpreter.Demo.countCond_eval, LaPToP.ProgramTheory.Interpreter.Demo.whileRefines_W, LaPToP.ProgramTheory.Interpreter.Demo.count_sound, LaPToP.ProgramTheory.Interpreter.Demo.count_seven")
@@ -953,4 +952,49 @@ the fuel. Determinism: two behaviours give two successful runs, which agree
 when both are given the larger fuel. The counting loop needs the two cases of
 Refinement by Cases ({uses "refinement_by_steps_parts_cases"}[]) and the
 Substitution Law ({uses "substitution_law"}[]) for the body.
+:::
+
+:::theorem "interpreter_partial_correctness" (parent := "programming_language_core") (tags := "programs, interpreter, execution, partial-correctness") (effort := "medium") (lean := "LaPToP.ProgramTheory.Spec.whileRel_of_always, LaPToP.ProgramTheory.Spec.whileRel_invariant, LaPToP.ProgramTheory.Interpreter.Eval, LaPToP.ProgramTheory.Interpreter.eval_of_run, LaPToP.ProgramTheory.Interpreter.denote_of_eval, LaPToP.ProgramTheory.Interpreter.eval_of_denote, LaPToP.ProgramTheory.Interpreter.eval_eq_denote, LaPToP.ProgramTheory.Interpreter.exists_run_of_eval, LaPToP.ProgramTheory.Interpreter.eval_iff_exists_run, LaPToP.ProgramTheory.Interpreter.eval_unique, LaPToP.ProgramTheory.Interpreter.eval_sound, LaPToP.ProgramTheory.Interpreter.eval_while_sound, LaPToP.ProgramTheory.Interpreter.eval_while_invariant, LaPToP.ProgramTheory.Interpreter.Diverges, LaPToP.ProgramTheory.Interpreter.diverges_iff, LaPToP.ProgramTheory.Interpreter.diverges_whileDo, LaPToP.ProgramTheory.Interpreter.Demo.countBody_preserves, LaPToP.ProgramTheory.Interpreter.Demo.count_partial, LaPToP.ProgramTheory.Interpreter.Demo.forever_diverges, LaPToP.ProgramTheory.Interpreter.Demo.forever_run_none")
+Execution without fuel, and partial correctness. The fuel of
+{uses "interpreter"}[] is an artefact of Lean's termination checking, not of the
+theory: execution is a relation between a program, a prestate and a poststate,
+and a nonterminating computation is one that relates its prestate to no
+poststate at all. `Interpreter.Eval` is that relation — the big-step operational
+semantics of the five notations, with no budget anywhere — and it coincides
+exactly with the denotation, so running a program, evaluating it and specifying
+it are one relation; a fuelled run is an evaluation, and every evaluation is
+reached by some fuel.
+
+What the coincidence buys is partial correctness, and only that: $`\mathsf{Eval}\ p\ \sigma\ \sigma'`
+says that $`p` *can* finish in $`\sigma'`, so if $`W \Leftarrow` the denotation of
+$`p` has been proved then every terminating execution of $`p` satisfies $`W`,
+and nothing is claimed about whether $`p` terminates. The loop invariant rule
+is proved in that form: if $`I` holds of the prestate and every iteration
+preserves it, then every terminating execution of
+$`\mathbf{while}\ b\ \mathbf{do}\ P\ \mathbf{od}` ends in a state satisfying
+$`I` in which $`b` is false. Neither fuel nor a variant appears in its statement
+or its proof, which is the point: this is the rule of
+{uses "while_loop"}[] with the termination obligation dropped. A program that
+relates its prestate to no poststate `Diverges`, and the interpreter reports it
+honestly, failing for every fuel rather than returning an answer.
+
+The demonstrations develop the counting loop a second way — by the invariant
+$`s = i`, with no termination argument, concluding $`s' = n` on every execution
+that finishes — and exhibit $`\mathbf{while}\ 0 \le 0\ \mathbf{do}\ \mathit{ok}\ \mathbf{od}`,
+proved to diverge from every state. The tie to the least-fixed-point loop of
+Section 6.1.1, which describes the nonterminating computations that no account
+of runs can, is the node `loop_definition_terminating_runs` in the chapter on
+recursion.
+:::
+
+:::proof "interpreter_partial_correctness"
+That a fuelled run is an evaluation is by induction on the fuel and cases on the
+program. That an evaluation satisfies the denotation is by induction on the
+evaluation, and the converse by induction on the program with an inner induction
+on the loop relation, so the two are equal as relations; the fuelled
+characterization then follows from soundness and completeness of
+{uses "interpreter_soundness"}[]. The invariant rule is an induction on the loop
+relation whose motive is the implication from the invariant, which is why no
+termination argument is needed. Divergence and failure for every fuel are each
+immediate from the other by the fuelled characterization.
 :::
