@@ -42,11 +42,14 @@ lake exe interp --demo=sumTo --n=10    # => n = 10, i = 10, s = 55
 lake exe interp --selftest             # the sources parse to the proved programs
 echo 'i:= 0. s:= 0. while i != n do i:= i+1. s:= s+i od' | lake exe interp --n=20
 echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --all   # backtracking
+echo 'while i != n do i:= i+1. tick od' | lake exe interp --n=7 --timed
 ```
 
 The state is the three integer variables `n`, `i`, `s`. `--all` searches for
 every poststate (`runAll`) instead of running the deterministic interpreter
-once, which is what a choice needs. Exit status is 1 for a parse error and 2
+once, which is what a choice needs. `--timed` adds a clock: `tick` advances it,
+and a false `assert` waits until `∞` where a false `ensure` has no poststate at
+all. Exit status is 1 for a parse error and 2
 when there is no poststate. Building the executable links the whole import
 chain, so it is a separate target: plain `lake build` and the Blueprint site do
 not build it.
@@ -128,7 +131,8 @@ LaPToP/
                              #   element assignment, assertions and backtracking choice; fuelled
                              #   run, searching runAll and fuel-free Eval; write sets and frames;
                              #   denotation into Spec), InterpreterSyntax (tokenizer + parser for
-                             #   the demonstration syntax)
+                             #   the demonstration syntax), InterpreterTime (the same syntax on a
+                             #   state with a clock; the untimed one is its finite-time part)
   RecursiveDefinition/       # Nat, DataConstruction, Programs, LoopBridge (terminating runs vs the
                              #   §6.1.1 least-fixed-point loop)
   TheoryDesign/              # Stack, SimpleStack, Queue, Tree, ProgramStack, ProgramQueue, DataTransformation,

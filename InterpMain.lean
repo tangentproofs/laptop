@@ -1,4 +1,5 @@
 import LaPToP.ProgramTheory.InterpreterSyntax
+import LaPToP.ProgramTheory.InterpreterTime
 
 /-!
 # `interp`: running the aPToP demonstration programs from a shell
@@ -16,6 +17,7 @@ does not touch it.
 
 open LaPToP.ProgramTheory.Interpreter
 open LaPToP.ProgramTheory.Interpreter.Demo
+open LaPToP.ProgramTheory.Interpreter.Timed (TState runT renderTime)
 
 /-- What the command line asked for. -/
 structure Options where
@@ -33,6 +35,8 @@ structure Options where
   fuel : Nat := 1000
   /-- Search for every poststate instead of running once. -/
   all : Bool := false
+  /-- Run on a state with a clock, and print the time. -/
+  timed : Bool := false
   /-- Check the tokenizer against the token lists the parser theorems use. -/
   selftest : Bool := false
   /-- Print the grammar. -/
@@ -52,6 +56,8 @@ usage: interp [options] [file]
   --n=K --i=K --s=K  initial values of the state variables (default 0)
   --fuel=K           execution fuel (default 1000)
   --all              search for every poststate (runAll) rather than run once
+  --timed            run on a state with a clock and print the final time;
+                     `tick` advances it and a false `assert` waits until \u221e
   --selftest         check the tokenizer against the proved token lists
   --grammar          print the grammar of the concrete syntax
   --help             print this message
@@ -99,6 +105,7 @@ def parseArgs : List String → Options → Except String Options
   | a :: rest, o =>
     if a == "--help" || a == "-h" then parseArgs rest { o with help := true }
     else if a == "--all" then parseArgs rest { o with all := true }
+    else if a == "--timed" then parseArgs rest { o with timed := true }
     else if a == "--selftest" then parseArgs rest { o with selftest := true }
     else if a == "--grammar" then parseArgs rest { o with grammar := true }
     else if a.startsWith "--demo=" then parseArgs rest { o with demo := some (optValue a 7) }
@@ -170,6 +177,16 @@ def runSelfTest : IO UInt32 := do
 /-- Run a program and print what it reaches. -/
 def runProgram (o : Options) (p : P) : IO UInt32 := do
   let st := state o.n o.i o.s
+  if o.timed then
+    match runT o.fuel p ⟨st, 0⟩ with
+    | some r =>
+      IO.println s!"{renderState r.mem}, t = {renderTime r.t}"
+      return 0
+    | none =>
+      IO.eprintln
+        "interp: no poststate — the program has none (a failed `ensure`), the fuel \
+         ran out, or the branch the deterministic interpreter chose failed"
+      return 2
   if o.all then
     let results := runAll o.fuel p st
     if results.isEmpty then
@@ -204,6 +221,10 @@ def main (args : List String) : IO UInt32 := do
       return 0
     if o.selftest then
       return (← runSelfTest)
+    if o.timed && o.all then
+      IO.eprintln "interp: --timed and --all cannot be combined (there is no searching \
+        timed interpreter yet)"
+      return 1
     match o.demo with
     | some name =>
       match demoProg name with

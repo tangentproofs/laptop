@@ -20,6 +20,7 @@ import LaPToP.ProgramTheory.Information
 import LaPToP.ProgramTheory.Functional
 import LaPToP.ProgramTheory.Interpreter
 import LaPToP.ProgramTheory.InterpreterSyntax
+import LaPToP.ProgramTheory.InterpreterTime
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1146,12 +1147,13 @@ laws of {uses "backtracking"}[], found by the search (one poststate, with
 $`s = 1`, computed in the kernel), missed by the deterministic interpreter, and
 proved to hold of every execution from every prestate.
 
-What remains. An assertion and an $`\mathbf{ensure}` are the same program here,
-which is honest only because the state has no time variable and no output
-channel; the book distinguishes them. The error message of a failed assertion is
-not modelled. Nothing in the interpreter yet reaches concurrency, the time
-variable, or channels, and there is still no command-line binary outside Lean —
-the natural next slice.
+What remains. An assertion and an $`\mathbf{ensure}` are the same program *here*,
+which is honest only because this state has no time variable and no output
+channel; the book distinguishes them, and the node `interpreter_time` gives the
+same syntax a clock and tells them apart — and proves that what this node does is
+exactly what an observer without a clock sees. The error message of a failed
+assertion is not modelled. Nothing in the interpreter yet reaches concurrency or
+channels.
 :::
 
 :::proof "interpreter_assertions"
@@ -1209,4 +1211,68 @@ agreement with the demonstration programs be a theorem closed by reflexivity
 rather than a test. The digits of a numeral are folded by hand instead of through
 the string library for the same reason. The four agreements are then reflexivity
 on closed terms.
+:::
+
+:::theorem "interpreter_time" (parent := "programming_language_core") (tags := "programs, interpreter, time, assertions, hehner-4.2") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.run_tick, LaPToP.ProgramTheory.Interpreter.run_assert, LaPToP.ProgramTheory.Interpreter.denote_tick, LaPToP.ProgramTheory.Interpreter.denote_assert, LaPToP.ProgramTheory.Interpreter.runAll_tick, LaPToP.ProgramTheory.Interpreter.runAll_assert, LaPToP.ProgramTheory.Interpreter.writes_tick, LaPToP.ProgramTheory.Interpreter.writes_assert, LaPToP.ProgramTheory.Interpreter.Timed.TState, LaPToP.ProgramTheory.Interpreter.Timed.denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_ne_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT, LaPToP.ProgramTheory.Interpreter.Timed.runT_le, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_of_runT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.denote_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT_assert_of_not, LaPToP.ProgramTheory.Interpreter.Timed.runT_ensure_of_not, LaPToP.ProgramTheory.Interpreter.Timed.implementableT_assert, LaPToP.ProgramTheory.Interpreter.Timed.not_implementable_ensure, LaPToP.ProgramTheory.Interpreter.Timed.refines_assertSpec, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_unfold, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_tick, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_whileDo, LaPToP.ProgramTheory.Interpreter.Timed.renderTime, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount_seven, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.ensure_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_ne_ensure")
+A clock in the interpreter. Two of the notations are invisible to the state of
+{uses "interpreter"}[]: $`t := t+1` does nothing observable, and
+$`\mathbf{assert}\ b` cannot be told from $`\mathbf{ensure}\ b`, because what
+separates them — a false assertion prints a message and waits until $`\infty`,
+which is implementable, where a false $`\mathbf{ensure}` is not implementable at
+all — is a statement about time. Both are now program syntax, and this node
+gives that syntax a state carrying a time variable, as
+{uses "time_variable"}[] does for specifications.
+
+Time is not charged automatically. The programmer advances it with `tick`, as
+the book writes $`t := t+1`, so a loop takes time exactly when its body ticks;
+nothing here claims a cost model for the other notations. `denoteT` is the timed
+specification of a program, `runT` its fuelled interpreter — sound always,
+complete on the deterministic fragment — and `EvalT` the fuel-free execution
+relation, equal to `denoteT` as in
+{uses "interpreter_partial_correctness"}[]. Two facts hold of every program:
+time does not decrease, which is the base axiom of {uses "loop_definition"}[]
+holding here of the whole language, and $`\infty` is absorbing — after a
+computation that never finished, nothing finishes.
+
+The theorem the node exists for is that the untimed interpreter is this one with
+the clock forgotten: from a state at finite time, the behaviours the untimed
+interpreter has are exactly the timed behaviours that end in finite time. So the
+earlier development is not a rival account of the same programs, and the
+identification it makes of $`\mathbf{assert}` with $`\mathbf{ensure}` is exactly
+right for an observer without a clock. That is
+{uses "assertions"}[]'s finite-time reading of a single assertion, proved of
+every program.
+
+With the clock the two part company, closing the gap left by
+{uses "interpreter_assertions"}[]: a false assertion is satisfied by waiting
+forever, so its run succeeds and ends at $`t = \infty`, while a false
+$`\mathbf{ensure}` has no poststate and no run at any fuel. The demonstration
+shows both, and a counting loop whose body ticks ending at $`t = 7` after seven
+iterations, computed in the kernel. The command line runs timed programs with
+`--timed`.
+
+What remains. The memory of a false assertion is left as it was, where the book
+says nothing about the memory variables, so what is implemented refines the
+book's assertion rather than equalling it; the error message is still not
+modelled. The loop whose body ends in `tick` has exactly the body
+$`P.\ t := t+1` of the axioms of {uses "loop_definition"}[] and satisfies the
+first of them, but those axioms are stated over the concrete state of that node;
+generalizing them to an arbitrary clocked state, and so restating the
+terminating-runs bridge over programs, is left. There is no searching timed
+interpreter, so a choice and a clock cannot yet be combined. Concurrency and
+channels are untouched.
+:::
+
+:::proof "interpreter_time"
+Time not decreasing is an induction on the program with an inner induction on
+the loop relation; that $`\infty` is absorbing follows from it, since
+$`\infty \le t'` forces $`t' = \infty`. Run, evaluation and denotation agree as
+in {uses "interpreter_soundness"}[], the clock being threaded through unchanged.
+The projection theorem is an induction on the program: each direction of the loop
+case is an induction on the loop relation, the forward one building a timed run
+from an untimed one with the time at each entry, the backward one using that time
+does not decrease to know each intermediate time is finite. The assertion case is
+where the two sides differ: a failed assertion has a timed behaviour, but only at
+$`t = \infty`, which the finiteness condition excludes — and that is exactly the
+untimed reading, where it has no behaviour at all.
 :::
