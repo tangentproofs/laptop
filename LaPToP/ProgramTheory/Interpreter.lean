@@ -56,6 +56,21 @@ The three soundness/completeness facts are:
 has been proved, then every successful run of `p` satisfies `W`. That is the
 bridge from a Chapter 4 development to an actual execution.
 
+## Fuel-free execution
+
+Fuel is an artefact of Lean's termination checking, not of the theory.
+`Interpreter.Eval p s s'` is the big-step operational semantics of `Prog` with
+no budget anywhere: a nonterminating computation is simply one that relates its
+prestate to no poststate. It coincides with the denotation
+(`Interpreter.eval_eq_denote`) and with the fuelled interpreter
+(`Interpreter.eval_iff_exists_run`), so all three accounts of a program are one
+relation. The theorems about it are *partial correctness* — they constrain the
+executions that terminate and claim nothing about termination:
+`Interpreter.eval_sound`, `Interpreter.eval_while_sound`, and the loop invariant
+rule `Interpreter.eval_while_invariant`, which needs no fuel and no variant.
+`Interpreter.Diverges` names the computations with no poststate; the interpreter
+reports them honestly by failing for every fuel (`Interpreter.diverges_iff`).
+
 ## Honest deviations and scope
 
 * Expressions are *semantic*: `e : State Var Val → Val` and `b : State Var Val → Bool`,
@@ -64,9 +79,13 @@ bridge from a Chapter 4 development to an actual execution.
   namespace closes that gap for the demonstrations with a first-order syntax
   (`Exp`, `Bexp` over integer variables) and its own evaluator, so the example
   programs there are honest data.
-* `whileDo` is the only unbounded construct, and it is executed with fuel; a
-  fuel-free partial-correctness execution (and the tie to the least-fixed-point
-  account of Section 6.1.1) is not done here.
+* `whileDo` is the only unbounded construct. `run` executes it with fuel and
+  `Eval` without; neither claims termination, and no variant/termination
+  argument is formalized here. The tie to the least-fixed-point account of loops
+  in Section 6.1.1 is proved in `LaPToP.RecursiveDefinition.LoopBridge`, over
+  the state `ZS` that carries the time variable those axioms mention; the
+  interpreter's own state has no time variable, so the bridge is at the level of
+  `Spec.whileRel`, the specification `denote` gives a `whileDo`.
 * Out of scope in this round, and not claimed anywhere below: concurrency (`||`),
   the time variable `t`, channels and interaction, variable declaration and
   framing, assertions, the full surface syntax of the book, and a command-line
@@ -129,6 +148,26 @@ theorem whileRel_of_not (hb : ∀ s, ¬ b s) : whileRel b R = ok :=
       | exit => rfl
       | step h' => exact absurd h' (hb _),
     fun h => by rw [show s' = s from h]; exact whileRel.exit (hb s)⟩
+
+/-- A loop whose condition always holds has no terminating runs: the relation of
+terminating executions is `⊥`. -/
+theorem whileRel_of_always (hb : ∀ s, b s) : whileRel b R = bot := by
+  refine Spec.ext fun s s' => ⟨fun h => ?_, False.elim⟩
+  show False
+  induction h with
+  | exit hb' => exact hb' (hb _)
+  | step _ _ _ ih => exact ih
+
+/-- **Partial correctness of a loop by an invariant**: if `I` holds of the
+prestate and is preserved by each iteration, then every terminating execution
+ends in a state satisfying `I` in which the condition is false. Nothing here
+asks the loop to terminate; the conclusion is about the runs that do. -/
+theorem whileRel_invariant {I : σ → Prop} (hI : ∀ s t, I s → b s → R s t → I t) :
+    ∀ {s s' : σ}, whileRel b R s s' → I s → I s' ∧ ¬ b s' := by
+  intro s s' h
+  induction h with
+  | exit hb => exact fun hs => ⟨hs, hb⟩
+  | step hb hR _ ih => exact fun hs => ih (hI _ _ hs hb hR)
 
 end Spec
 
@@ -384,6 +423,204 @@ theorem run_while_sound {W : Spec (Spec.State Var Val)} {b : Spec.State Var Val 
   Spec.refines_whileRel _ _ hW s s' (denote_of_run h)
 
 
+/-! ### Fuel-free execution
+
+`run` needs a fuel budget to be a total Lean function. That is an artefact of
+Lean's termination checking, not of the theory: execution itself is a relation
+between a program, a prestate and a poststate, and a nonterminating computation
+is simply one that relates the prestate to nothing. `Eval` is that relation —
+the big-step operational semantics of `Prog`, defined without any budget — and
+it coincides exactly with `denote` (`eval_eq_denote`), so the fuel-free account
+of execution and the Chapter 4 account of the same program are the same
+relation. Fuelled runs are the derivations of `Eval` that a budget can reach
+(`eval_iff_exists_run`).
+
+What this gives, and what it does not: `Eval p s s'` says that `p` *can* finish
+in `s'`, so the theorems below are partial correctness — they constrain the runs
+that terminate and say nothing about whether a run terminates. A program with no
+poststate at all is `Diverges`, and its `run` fails for every fuel.
+-/
+
+/-- `Eval p s s'`: started in state `s`, the program `p` terminates in state
+`s'`. The fuel-free account of execution: a budget appears nowhere, and
+nontermination is the absence of a derivation rather than a failure value. -/
+inductive Eval : Prog Var Val → Spec.State Var Val → Spec.State Var Val → Prop
+  /-- `ok` terminates immediately in the prestate. -/
+  | ok {s : Spec.State Var Val} : Eval .ok s s
+  /-- `x:= e` terminates in the state with `x` replaced by the value of `e`. -/
+  | assign {x : Var} {e : Spec.State Var Val → Val} {s : Spec.State Var Val} :
+      Eval (.assign x e) s (Function.update s x (e s))
+  /-- `p. q` terminates by terminating `p` and then `q`. -/
+  | seq {p q : Prog Var Val} {s t s' : Spec.State Var Val} :
+      Eval p s t → Eval q t s' → Eval (.seq p q) s s'
+  /-- `if b then p else q` with `b` true terminates as `p` does. -/
+  | condTrue {b : Spec.State Var Val → Bool} {p q : Prog Var Val}
+      {s s' : Spec.State Var Val} (hb : b s = true) :
+      Eval p s s' → Eval (.cond b p q) s s'
+  /-- `if b then p else q` with `b` false terminates as `q` does. -/
+  | condFalse {b : Spec.State Var Val → Bool} {p q : Prog Var Val}
+      {s s' : Spec.State Var Val} (hb : b s = false) :
+      Eval q s s' → Eval (.cond b p q) s s'
+  /-- `while b do p od` with `b` true takes one iteration and continues. -/
+  | whileTrue {b : Spec.State Var Val → Bool} {p : Prog Var Val}
+      {s t s' : Spec.State Var Val} (hb : b s = true) :
+      Eval p s t → Eval (.whileDo b p) t s' → Eval (.whileDo b p) s s'
+  /-- `while b do p od` with `b` false exits at once. -/
+  | whileFalse {b : Spec.State Var Val → Bool} {p : Prog Var Val}
+      {s : Spec.State Var Val} (hb : b s = false) : Eval (.whileDo b p) s s
+
+/-- A fuelled run is an execution: the budget only restricts which derivations
+are reachable, not what they mean. -/
+theorem eval_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
+    run f p s = some s' → Eval p s s' := by
+  intro f
+  induction f with
+  | zero => intro p s s' h; simp at h
+  | succ n ih =>
+    intro p s s' h
+    cases p with
+    | ok =>
+      simp only [run_ok, Option.some.injEq] at h
+      exact h ▸ .ok
+    | assign x e =>
+      simp only [run_assign, Option.some.injEq] at h
+      exact h ▸ .assign
+    | seq p q =>
+      simp only [run_seq] at h
+      cases hp : run n p s with
+      | none => simp [hp] at h
+      | some t =>
+        simp only [hp, Option.bind_some] at h
+        exact .seq (ih hp) (ih h)
+    | cond b p q =>
+      simp only [run_cond] at h
+      split_ifs at h with hb
+      · exact .condTrue hb (ih h)
+      · exact .condFalse (by simpa using hb) (ih h)
+    | whileDo b p =>
+      simp only [run_whileDo] at h
+      split_ifs at h with hb
+      · cases hp : run n p s with
+        | none => simp [hp] at h
+        | some t =>
+          simp only [hp, Option.bind_some] at h
+          exact .whileTrue hb (ih hp) (ih h)
+      · simp only [Option.some.injEq] at h
+        exact h ▸ .whileFalse (by simpa using hb)
+
+/-- **Partial correctness**: an execution that terminates satisfies the denoted
+specification. -/
+theorem denote_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
+    Eval p s s' → denote p s s' := by
+  intro p s s' h
+  induction h with
+  | ok => rfl
+  | assign => rfl
+  | seq _ _ ihp ihq => exact ⟨_, ihp, ihq⟩
+  | condTrue hb _ ih => exact Or.inl ⟨hb, ih⟩
+  | condFalse hb _ ih => exact Or.inr ⟨by simp [hb], ih⟩
+  | whileTrue hb _ _ ihp ihw => exact Spec.whileRel.step hb ihp ihw
+  | whileFalse hb => exact Spec.whileRel.exit (by simp [hb])
+
+/-- **Completeness**: every behaviour the denotation allows is a terminating
+execution. Together with `denote_of_eval`, execution and denotation are the same
+relation. -/
+theorem eval_of_denote : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
+    denote p s s' → Eval p s s' := by
+  intro p
+  induction p with
+  | ok => intro s s' h; exact h ▸ .ok
+  | assign x e => intro s s' h; exact h ▸ .assign
+  | seq p q ihp ihq =>
+    intro s s' h
+    obtain ⟨t, hp, hq⟩ : ∃ t, denote p s t ∧ denote q t s' := h
+    exact .seq (ihp hp) (ihq hq)
+  | cond b p q ihp ihq =>
+    intro s s' h
+    obtain ⟨hb, h⟩ | ⟨hb, h⟩ :
+        ((b s = true) ∧ denote p s s') ∨ (¬ (b s = true) ∧ denote q s s') := h
+    · exact .condTrue hb (ihp h)
+    · exact .condFalse (by simpa using hb) (ihq h)
+  | whileDo b p ihp =>
+    intro s s' h
+    replace h : Spec.whileRel (fun s => b s = true) (denote p) s s' := h
+    induction h with
+    | exit hb => exact .whileFalse (by simpa using hb)
+    | step hb hR _ ihw => exact .whileTrue hb (ihp hR) ihw
+
+/-- Execution *is* the denotation: the fuel-free operational semantics and the
+Chapter 4 specification of a program are one relation. -/
+theorem eval_eq_denote (p : Prog Var Val) : Eval p = denote p :=
+  Spec.ext fun _ _ => ⟨denote_of_eval, eval_of_denote⟩
+
+/-- A terminating execution is reached by some fuel. -/
+theorem exists_run_of_eval {p : Prog Var Val} {s s' : Spec.State Var Val}
+    (h : Eval p s s') : ∃ f, run f p s = some s' :=
+  exists_run_of_denote (denote_of_eval h)
+
+/-- The fuelled interpreter computes exactly the fuel-free executions. -/
+theorem eval_iff_exists_run {p : Prog Var Val} {s s' : Spec.State Var Val} :
+    Eval p s s' ↔ ∃ f, run f p s = some s' :=
+  ⟨exists_run_of_eval, fun ⟨_, h⟩ => eval_of_run h⟩
+
+/-- Execution is deterministic. -/
+theorem eval_unique {p : Prog Var Val} {s s₁ s₂ : Spec.State Var Val}
+    (h₁ : Eval p s s₁) (h₂ : Eval p s s₂) : s₁ = s₂ :=
+  deterministic_denote p s s₁ s₂ (denote_of_eval h₁) (denote_of_eval h₂)
+
+/-- The fuel-free counterpart of `run_sound`: if `W ⇐ denote p` has been proved,
+then every terminating execution of `p` satisfies `W`. This is partial
+correctness — it says nothing about whether `p` terminates. -/
+theorem eval_sound {W : Spec (Spec.State Var Val)} {p : Prog Var Val}
+    (hW : Spec.Refines W (denote p)) {s s' : Spec.State Var Val} (h : Eval p s s') : W s s' :=
+  hW s s' (denote_of_eval h)
+
+/-- The fuel-free counterpart of `run_while_sound`: a loop developed the book's
+way satisfies its specification on every terminating execution. -/
+theorem eval_while_sound {W : Spec (Spec.State Var Val)} {b : Spec.State Var Val → Bool}
+    {p : Prog Var Val} (hW : Spec.WhileRefines W (fun s => b s = true) (denote p))
+    {s s' : Spec.State Var Val} (h : Eval (.whileDo b p) s s') : W s s' :=
+  Spec.refines_whileRel _ _ hW s s' (denote_of_eval h)
+
+/-- **The loop invariant rule**, fuel-free: if `I` holds of the prestate and each
+iteration preserves it, then every terminating execution of the loop ends in a
+state satisfying `I` with the condition false. No termination argument, and no
+fuel, enters the statement or the proof. -/
+theorem eval_while_invariant {b : Spec.State Var Val → Bool} {p : Prog Var Val}
+    {I : Spec.State Var Val → Prop} (hI : ∀ s t, I s → b s = true → Eval p s t → I t)
+    {s s' : Spec.State Var Val} (h : Eval (.whileDo b p) s s') (hs : I s) :
+    I s' ∧ b s' = false := by
+  have h' : Spec.whileRel (fun s => b s = true) (denote p) s s' := denote_of_eval h
+  obtain ⟨hI', hb⟩ :=
+    Spec.whileRel_invariant _ _ (fun u v hu hb hd => hI u v hu hb (eval_of_denote hd)) h' hs
+  exact ⟨hI', by simpa using hb⟩
+
+/-- `p` *diverges* from `s`: no state is a poststate, so the computation does not
+terminate. -/
+def Diverges (p : Prog Var Val) (s : Spec.State Var Val) : Prop := ∀ s', ¬ Eval p s s'
+
+/-- A divergent computation is reported honestly by the interpreter: the run
+fails for every fuel, rather than returning a wrong answer. -/
+theorem diverges_iff {p : Prog Var Val} {s : Spec.State Var Val} :
+    Diverges p s ↔ ∀ f, run f p s = none := by
+  constructor
+  · intro h f
+    cases hr : run f p s with
+    | none => rfl
+    | some s' => exact absurd (eval_of_run hr) (h s')
+  · intro h s' he
+    obtain ⟨f, hf⟩ := exists_run_of_eval he
+    rw [h f] at hf
+    simp at hf
+
+/-- A loop whose condition always holds diverges. -/
+theorem diverges_whileDo {b : Spec.State Var Val → Bool} {p : Prog Var Val}
+    (hb : ∀ s, b s = true) (s : Spec.State Var Val) : Diverges (.whileDo b p) s := by
+  intro s' h
+  have := denote_of_eval h
+  rw [denote_whileDo, Spec.whileRel_of_always _ _ fun s => hb s] at this
+  exact this
+
 /-! ### A first-order syntax, and executable demonstrations
 
 The core `Prog` above keeps expressions semantic, as `Spec.assign` does. For
@@ -546,6 +783,49 @@ theorem count_sound {f : ℕ} {st st' : St} (h : run f count st = some st')
 
 /-- The same fact, instantiated at `n = 7` and checked by the kernel. -/
 theorem count_seven : (run 100 count (start 7)).map (fun st => st .s) = some 7 := rfl
+
+/-! #### Partial correctness, with no fuel and no termination argument
+
+The same loop developed by an invariant instead: `s = i` is preserved by the
+body, and the loop exits only when `i = n`, so every terminating execution ends
+with `s = n`. Nothing in this development mentions fuel, and nothing claims the
+loop terminates. -/
+
+/-- The body `i:= i+1. s:= s+1` preserves `s = i`. -/
+theorem countBody_preserves {u v : St} (h : Eval countBody u v) (hu : u Vr.s = u Vr.i) :
+    v Vr.s = v Vr.i := by
+  obtain ⟨w, hw, hv⟩ :
+      ∃ w, Spec.assign Vr.i (Exp.eval (.add (.var .i) (.lit 1))) u w ∧
+        Spec.assign Vr.s (Exp.eval (.add (.var .s) (.lit 1))) w v := denote_of_eval h
+  rw [Spec.assign_iff] at hw hv
+  have hwi : w Vr.i = u Vr.i + 1 := by simpa [Exp.eval] using hw.1
+  have hws : w Vr.s = u Vr.s := hw.2 Vr.s (by decide)
+  have hvs : v Vr.s = w Vr.s + 1 := by simpa [Exp.eval] using hv.1
+  have hvi : v Vr.i = w Vr.i := hv.2 Vr.i (by decide)
+  omega
+
+/-- Partial correctness of the counting loop by the invariant rule: from `s = i`,
+every terminating execution ends with `s = n`. -/
+theorem count_partial {st st' : St} (h : Eval count st st') (hst : st Vr.s = st Vr.i) :
+    st' Vr.s = st' Vr.n := by
+  obtain ⟨hinv, hb⟩ :=
+    eval_while_invariant (I := fun u => u Vr.s = u Vr.i)
+      (fun _ _ hu _ hbody => countBody_preserves hbody hu) h hst
+  have hin : st' Vr.i = st' Vr.n := by
+    by_contra hne
+    rw [(countCond_eval st').mpr hne] at hb
+    exact Bool.noConfusion hb
+  omega
+
+/-- `while 0 ≤ 0 do ok od` diverges: it has no poststate at all. -/
+theorem forever_diverges (st : St) : Diverges (loop (.le (.lit 0) (.lit 0)) .ok) st :=
+  diverges_whileDo (fun _ => by simp [Bexp.eval, Exp.eval]) st
+
+/-- So the interpreter fails on it for every fuel, rather than returning a wrong
+answer. -/
+theorem forever_run_none (f : ℕ) (st : St) :
+    run f (loop (.le (.lit 0) (.lit 0)) .ok) st = none :=
+  diverges_iff.mp (forever_diverges st) f
 
 /-- A loop-free program denotes a program in the sense of Section 4.0.3. -/
 example : Spec.IsProgram (denote (.seq (set .i (.lit 0)) (set .s (.lit 0)) : P)) :=
