@@ -1053,3 +1053,59 @@ evaluation and denotation extend to the new construct exactly as the other four
 notations do ({uses "interpreter_soundness"}[]), the fuel case mapping over the
 restore.
 :::
+
+:::theorem "interpreter_arrays" (parent := "programming_language_core") (tags := "programs, interpreter, arrays, hehner-5.1.0") (effort := "medium") (lean := "LaPToP.ProgramTheory.Spec.assignAt, LaPToP.ProgramTheory.Spec.assignAt_const, LaPToP.ProgramTheory.Spec.assignAt_seq, LaPToP.ProgramTheory.Spec.assignArr, LaPToP.ProgramTheory.Spec.assignArr_eq_assignAt, LaPToP.ProgramTheory.Arrays.assignElem_iff_assignArr, LaPToP.ProgramTheory.Interpreter.run_assignAt, LaPToP.ProgramTheory.Interpreter.denote_assignAt, LaPToP.ProgramTheory.Interpreter.writes_assignAt, LaPToP.ProgramTheory.Interpreter.denote_assignAt_const, LaPToP.ProgramTheory.Interpreter.denote_assignAt_arr, LaPToP.ProgramTheory.Interpreter.writes_assignAt_arr, LaPToP.ProgramTheory.Interpreter.ArrayDemo.AVr, LaPToP.ProgramTheory.Interpreter.ArrayDemo.ASt, LaPToP.ProgramTheory.Interpreter.ArrayDemo.a_injective, LaPToP.ProgramTheory.Interpreter.ArrayDemo.setElem, LaPToP.ProgramTheory.Interpreter.ArrayDemo.denote_setElem, LaPToP.ProgramTheory.Interpreter.ArrayDemo.zero, LaPToP.ProgramTheory.Interpreter.ArrayDemo.ex₁, LaPToP.ProgramTheory.Interpreter.ArrayDemo.ex₁_run, LaPToP.ProgramTheory.Interpreter.ArrayDemo.ex₁_naive, LaPToP.ProgramTheory.Interpreter.ArrayDemo.ex₂, LaPToP.ProgramTheory.Interpreter.ArrayDemo.ex₂_result, LaPToP.ProgramTheory.Interpreter.ArrayDemo.ex₂_run, LaPToP.ProgramTheory.Interpreter.ArrayDemo.writes_ex₁, LaPToP.ProgramTheory.Interpreter.ArrayDemo.frame_ex₁")
+Array element assignment, executed. The lesson of {uses "data_structures"}[] is
+that $`A\,i := e` does not have a name on its left that the syntax fixes: it
+writes the slot that $`i` names in the *prestate*, which is why substituting
+into the syntax goes wrong. `Prog.assignAt` is precisely that construct —
+assignment to a computed name — and `Spec.assignAt_seq` is the substitution that
+does work, the book's rule "change $`A\,i := e` to $`A := i \to e \mid A` before
+applying any programming theory". The assignment of {uses "assignment_spec"}[],
+whose name is fixed and for which the Substitution Law is sound, is the special
+case with a constant name.
+
+An array reaches a flat state as the family of slots it indexes: "in program
+theory, an array is a list variable", and a list variable on a state that maps
+names to values is the family $`a\,0, a\,1, \ldots`. `Spec.assignArr` is the
+book's $`A'i = e \land (\forall j \cdot j \neq i \Rightarrow A'j = A\,j) \land x' = x \land \ldots`
+read that way, and it is assignment to the computed slot as soon as distinct
+indices name distinct slots — the flat-state form of
+$`A\,i := e = A := i \to e \mid A`. Nothing is duplicated: the new reading is
+proved to be the book's element assignment on the array component of the record
+state of {uses "data_structures"}[], with the scalar variables framed. Run,
+evaluation and denotation extend to the new construct as the other notations do,
+and the frame machinery of {uses "interpreter_scope"}[] covers it unchanged,
+since the write set of an element assignment is the range of its computed name.
+
+The demonstration runs the book's own two examples.
+$`A\,2 := 3.\ i := 2.\ A\,i := 4` ends with $`i = 2` and $`A\,2 = 4`, so the
+example's final test $`A\,i = A\,2` holds — where the Substitution Law had
+claimed $`4 = A\,2` after $`A\,2 := 3`, which the run refutes. And
+$`A\,2 := 2.\ A(A\,2) := 3` ends with $`A\,2 = 3` from any prestate, so the final
+test $`A\,2 = 2` fails and the program is $`\bot` — where the Substitution Law
+had left $`A\,2 := 2`. The three numerical facts are reductions in the kernel,
+and the second example is also proved for every prestate, not only the one that
+is run.
+
+What remains. An array is the family of slots it indexes, not one variable
+holding a list, because a flat state has no room for a list value; the two
+readings are related but not identified. Two-dimensional arrays and records get
+no syntax of their own — on this encoding they are the same construct with a
+different index type, which is said rather than proved. Assertions are still
+specifications only, not program syntax, and there is no command-line binary
+outside Lean.
+:::
+
+:::proof "interpreter_arrays"
+The flat-state element assignment is assignment to the computed slot by
+extensionality on the poststate, splitting a variable into the indexed slot,
+another slot of the array, and a variable outside it; injectivity of the family
+is needed only for the second. The bridge to the record state is unfolding on
+both sides, the clause about variables outside the array being vacuous when the
+array is the whole state. Run, evaluation and denotation extend as for
+{uses "interpreter_soundness"}[], the new case being as immediate as the
+assignment case since the computed name is a function of the prestate. The
+executed examples are reductions in the kernel; the general form of the second
+unfolds the two assignments in sequence.
+:::

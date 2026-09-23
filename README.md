@@ -101,8 +101,9 @@ LaPToP/
                              #   OldTheory, AssertionLaws, WhileLoop, ForLoop, ExitLoop, TwoDimSearch, GoTo, Scope,
                              #   Arrays, TimeDependence, Assertions, Subprograms, Alias, Probabilistic,
                              #   ProbabilisticSums, RandomNumbers, Blackjack, Information, Functional,
-                             #   Interpreter (executable AST with local declarations, fuelled run
-                             #   and fuel-free Eval, write sets and frames, denotation into Spec)
+                             #   Interpreter (executable AST with local declarations and array
+                             #   element assignment, fuelled run and fuel-free Eval, write sets
+                             #   and frames, denotation into Spec)
   RecursiveDefinition/       # Nat, DataConstruction, Programs, LoopBridge (terminating runs vs the
                              #   §6.1.1 least-fixed-point loop)
   TheoryDesign/              # Stack, SimpleStack, Queue, Tree, ProgramStack, ProgramQueue, DataTransformation,
