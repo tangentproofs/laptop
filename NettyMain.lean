@@ -47,7 +47,7 @@ usage: netty [options] [script]
 
   script              run this file of commands (default: standard input)
   --demo=NAME         run a built-in demonstration instead: portation,
-                      discharge, gap, minimize, fold, merge
+                      discharge, gap, minimize, segment, fold, merge
   --laws=FILE         add a law file; may be repeated
   --bare              start with no laws but those given by --laws
   --load=FILE         start from a saved proof file
@@ -161,14 +161,16 @@ def lawFilePath : String := "Netty/laws/boolean.laws"
 is a sound step. Most are associations longer than the two operands most laws
 are written with, which is what matching modulo associativity reads apart and
 modulo symmetry rearranges; all of them have main operands that a law can be
-applied to as *parts*, in positive, negative and neutral positions, which is
-what the margin connective of a part rewrite has to get right. The last two
-write a unit where a law need not mention one, which is what matching modulo the
-identity element strikes out. -/
+applied to as *parts*, in positive, negative and neutral positions, and the
+longer associations among them have contiguous *segments* as well, which is what
+the margin connective of a part rewrite has to get right in both cases. Two write
+a unit where a law need not mention one, which is what matching modulo the
+identity element strikes out, and the last repeats an operand in the middle of an
+association, which is the shape only a segment site reaches. -/
 def soundnessLines : List String :=
   ["x ∧ y ∧ z", "x ∨ y ∨ z", "x ∧ y ∧ z ∧ w", "x ∧ (y ∨ z)", "¬(x ∧ y ∧ z)",
    "x ⇒ y ∧ z", "(x ∧ y ∧ z) ∨ w", "x ∧ (y ∨ y)", "(x ⇒ y) = (y ⇐ x)",
-   "x ∧ ⊤ ∧ y", "x ∨ ⊥ ∨ y"]
+   "x ∧ ⊤ ∧ y", "x ∨ ⊥ ∨ y", "x ∧ y ∧ y ∧ z"]
 
 /-- Check the matching that the suggestions rest on. Every suggestion the
 whole law list offers for those lines, under each of the three directions,
@@ -177,13 +179,15 @@ would put in the margin has to hold under every assignment. That is the check on
 matching modulo associativity, symmetry and the identity element, which reads a
 line apart, rearranges it and strikes its units out, and on applying a law to a
 part of a line, which turns the law's own connective into the margin's according
-to the part's position — all of them could offer more than they may. Three
+to the part's position — all of them could offer more than they may. Four
 readings are witnessed by name: from `x ∧ y ∧ z`, specialization must offer
 every sub-conjunction, the two that associativity alone gives first and the four
 that need symmetry after; from `x ∧ (y ∨ y)`, which idempotence cannot match as
-a whole, it must offer `x ∧ y`, the fold of the second main operand; and a law
-written with a unit — `a ∧ ⊤`, here as a law list of its own — must read a line
-that never writes one. -/
+a whole, it must offer `x ∧ y`, the fold of the second main operand; from
+`x ∧ y ∧ y ∧ z`, which idempotence matches neither whole nor at any single
+operand, it must offer `x ∧ y ∧ z`, the fold of the contiguous *segment*
+`y ∧ y`; and a law written with a unit — `a ∧ ⊤`, here as a law list of its own
+— must read a line that never writes one. -/
 def matchTest : IO Bool := do
   let mut ok := true
   let mut checked := 0
@@ -251,6 +255,34 @@ def matchTest : IO Bool := do
         ok := false
         IO.eprintln s!"matching: idempotence offers {folds.length} ways to fold \
           y ∨ y inside x ∧ (y ∨ y), not one"
+  -- The reading a contiguous *segment* of an association adds: the middle two
+  -- conjuncts of `x ∧ y ∧ y ∧ z` are a site of their own, and idempotence folds
+  -- them where they stand. Neither the whole line nor any single main operand —
+  -- the bare identifiers `x`, `y`, `y`, `z` — matches, so no other site can make
+  -- this step.
+  match Parser.expr "x ∧ y ∧ y ∧ z" with
+  | .error e =>
+      ok := false
+      IO.eprintln s!"matching: {e}"
+  | .ok line =>
+    match Doc.steps { laws := Laws.boolean } [.start .boolean .same line] with
+    | .error e =>
+        ok := false
+        IO.eprintln s!"matching: {e}"
+    | .ok d =>
+      let folds := d.suggestions.filter fun s =>
+        s.law == "idempotent" && s.result.render == "x ∧ y ∧ z"
+      let whole := Expr.matchAll (Expr.bin .and (Expr.mvar "a") (Expr.mvar "a")) line []
+      let parts := line.operands.filter fun o =>
+        !(Expr.matchAll (Expr.bin .and (Expr.mvar "a") (Expr.mvar "a")) o []).isEmpty
+      if folds.length == 1 && whole.isEmpty && parts.isEmpty then
+        IO.println "matching: idempotence folds the segment y ∧ y inside x ∧ y ∧ y ∧ z, \
+          which neither the whole line nor a single operand can reach"
+      else
+        ok := false
+        IO.eprintln s!"matching: idempotence offers {folds.length} ways to fold the \
+          segment y ∧ y inside x ∧ y ∧ y ∧ z, with {whole.length} whole-line and \
+          {parts.length} single-operand matches"
   -- The reading matching modulo the identity element adds: a law written with a
   -- unit reads a line that never writes one. `a ∧ ⊤ ⇒ ¬¬a` is not a law of the
   -- shipped list, so it stands here as a law list of its own; against the line

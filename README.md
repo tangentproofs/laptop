@@ -71,6 +71,7 @@ lake exe netty --demo=portation       # the example proof from page 0 of the doc
 lake exe netty --demo=discharge       # zooming in, and the context a zoom in supplies
 lake exe netty --demo=gap             # a gap left by direct entry, and closing it
 lake exe netty --demo=minimize        # a law applied to a part of a line
+lake exe netty --demo=segment         # a law applied to a segment of an association
 lake exe netty --list-laws            # the boolean laws in force
 lake exe netty --selftest             # laws, law file and demonstrations
 printf 'start ⇐ a ⇒ (b ⇒ a)\nsuggest\n' | lake exe netty
@@ -92,19 +93,24 @@ associative laws, and applying a law reads a line the same way, so
 `specialization`, `a ∧ b ⇒ a`, offers both `x` and `x ∧ y` from `x ∧ y ∧ z`.
 Each reading is a suggestion of its own.
 
-A law is also matched against each **main operand** of the line, which is the
+A law is also matched against each **part** of the line, which is the
 document's applying it "to a part, as a result of minimization": `a ∨ a = a`
 does not match `x ∧ (y ∨ y)` at all, but it folds its second operand, so
 `x ∧ (y ∨ y) = x ∧ y` is one step instead of a zoom in, an application and a
-zoom out. The margin connective is the one zooming out would have written, so a
-negative position turns the step around: `x ≤ x + 1` on the subtrahend of
-`n - m` gives `n - m ≥ n - (m + 1)`.
+zoom out. The parts are the main operands and, when the main operator is
+associative, every contiguous **segment** of the association — the document
+reads `x ∧ y ∧ z` as having the part `y ∧ z` just as it has the part `y` — so
+`a ∧ a = a` takes `x ∧ y ∧ y ∧ z` to `x ∧ y ∧ z` in one step, folding the middle
+two conjuncts and leaving the rest alone. The margin connective is the one
+zooming out would have written, so a negative position turns the step around:
+`x ≤ x + 1` on the subtrahend of `n - m` gives `n - m ≥ n - (m + 1)`, and a
+neutral one — a factor of `×`, say — admits only `=`.
 
 Laws are plain text files (`Netty/laws/boolean.laws` holds the Binary laws of
 aPToP §11.3.1); add your own with `--laws=FILE`. `Netty/Laws.lean` reads the
 shipped file at compile time and `Netty.boolean_isTautology` checks in Lean's
-kernel that every law in it is a tautology; `Netty/Replay.lean` replays all
-four demonstrations in Lean and proves that each ends with no gaps, fully
+kernel that every law in it is a tautology; `Netty/Replay.lean` replays every
+demonstration in Lean and proves that each ends with no gaps, fully
 zoomed out, and proving the formula it claims. Exit status is 1 when a `check`
 fails and 2 for a bad script or law file.
 

@@ -227,6 +227,23 @@ proof
 check x ∧ (y ∨ y) ≡ x ∧ y
 "
 
+/-- A law applied to a contiguous *segment* of an association: idempotence
+matches the middle two operands of `x ∧ y ∧ y ∧ z` and folds them where they
+stand. Neither the whole line nor any single main operand matches — the operands
+are the bare identifiers `x`, `y`, `y`, `z` — so before a segment was a site this
+step did not exist at all. -/
+def segment : String :=
+"# A law applied to a contiguous segment of an association: idempotence matches
+# y ∧ y, the middle two of four conjuncts, and folds them where they stand,
+# leaving x and z alone. The whole line does not match, and neither does any
+# single main operand.
+start = x ∧ y ∧ y ∧ z
+suggest
+apply idempotent : = x ∧ y ∧ z
+proof
+check x ∧ y ∧ y ∧ z ≡ x ∧ y ∧ z
+"
+
 /-- The first of the display collapses: a subproof that is a single law
 application is *drawn* as its parent line with the law's name moved up onto
 it. The proof pane is printed twice, once while the subproof is still open and
@@ -274,7 +291,7 @@ check x ∧ (y ∨ (¬¬z ∧ ¬¬z)) ≡ x ∧ (y ∨ z)
 /-- The demonstrations, by name. -/
 def all : List (String × String) :=
   [("portation", portation), ("discharge", discharge), ("gap", gap),
-   ("minimize", minimize), ("fold", fold), ("merge", merge)]
+   ("minimize", minimize), ("segment", segment), ("fold", fold), ("merge", merge)]
 
 end Demo
 end Netty

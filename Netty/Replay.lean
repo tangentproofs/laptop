@@ -22,7 +22,9 @@ More replays are checked the same way: one that zooms in to a subexpression and
 uses the context that zooming in supplies, one that reaches an outer line by a
 click instead of by zooming out, one that leaves a gap by direct entry and then
 closes it, one that applies a law to a *part* of a line instead of to the whole
-of it, and two that exercise the display collapses — a one-step subproof folded
+of it, one that applies a law to a contiguous *segment* of an association that
+neither the whole line nor a single operand can reach, and two that exercise the
+display collapses — a one-step subproof folded
 into its parent line, and two zoom-ins matched by two zoom-outs drawn as one
 zoom step.
 
@@ -251,14 +253,19 @@ theorem specialization_reads_every_way :
          (.imp, var "z"), (.imp, var "y")] := by decide
 
 /-- Symmetry rearranges the three operands every way but the one it started
-with, which the identity-rewrite gate drops. -/
+with, which the identity-rewrite gate drops. The last two come from the *segment*
+sites — `x ∧ y` and `y ∧ z`, each turned around where it stands and the third
+operand left alone — which is why a swap inside a longer association needs no
+zoom. -/
 theorem symmetry_reads_every_way :
     suggestedBy "symmetry" .down conjunction
       = [(.eq, bin .and (bin .and (var "y") (var "z")) (var "x")),
          (.eq, bin .and (var "z") (bin .and (var "x") (var "y"))),
          (.eq, bin .and (var "x") (bin .and (var "y") (var "z"))),
          (.eq, bin .and (var "y") (bin .and (var "x") (var "z"))),
-         (.eq, bin .and (bin .and (var "x") (var "z")) (var "y"))] := by decide
+         (.eq, bin .and (bin .and (var "x") (var "z")) (var "y")),
+         (.eq, bin .and (bin .and (var "y") (var "x")) (var "z")),
+         (.eq, bin .and (var "x") (bin .and (var "z") (var "y")))] := by decide
 
 /-- A proof that the reading associativity adds really can be taken: one step
 from `x ∧ y ∧ z` to `x`, where before it took an associative law first. -/
@@ -358,6 +365,77 @@ theorem minimize_proves :
 theorem minimize_complete :
     ((session.steps minimize).toOption.map fun d => (d.gaps, d.stack.length))
       = some ([], 1) := by decide
+
+/-! ### A law applied to a contiguous segment of an association
+
+The document reads `x ∧ y ∧ z` as having the part `y ∧ z` just as it has the part
+`y`, so a contiguous run of two or more operands of an association is a site of
+its own. An associative operator puts all of its operands in one position, so a
+run of them is in that same position: the type, the direction and the connective
+a rewrite there writes are word for word those of a single main operand, and the
+soundness argument is the one minimization already had. -/
+
+/-- `x ∧ y ∧ y ∧ z`, whose middle two operands idempotence folds. -/
+def segmentLine : Expr :=
+  bin .and (bin .and (bin .and (var "x") (var "y")) (var "y")) (var "z")
+
+/-- The segments of a four-operand association: every contiguous run of two or
+three of its operands. A run of one is a main operand and the run of all four is
+the line, so neither is listed. -/
+theorem segmentLine_segments :
+    segmentLine.segments = [(0, 2), (0, 3), (1, 2), (1, 3), (2, 2)] := by decide
+
+/-- A two-operand association has no segments at all: `x ∧ (y ∨ y)` has the two
+main operands `minimize` already reaches, and nothing between them. -/
+theorem a_pair_has_no_segments : part.segments = [] := by decide
+
+/-- Idempotence matches neither the whole line — no sharing out of
+`x ∧ y ∧ y ∧ z` makes its two halves equal … -/
+theorem idempotence_misses_the_whole_association :
+    Expr.matchAll (bin .and (mvar "a") (mvar "a")) segmentLine [] = [] := by decide
+
+/-- … nor any single main operand, which are the bare identifiers `x`, `y`, `y`,
+`z`. So neither site the kernel had before this can fold the repetition. -/
+theorem idempotence_misses_every_operand :
+    segmentLine.operands.all
+      (fun o => Expr.matchAll (bin .and (mvar "a") (mvar "a")) o [] == []) = true := by decide
+
+/-- The segment `y ∧ y` it does match, and the suggestion folds it where it
+stands, leaving `x` and `z` alone. -/
+def segmentFold : List Cmd :=
+  [ .start .boolean .same segmentLine,
+    .applyNamed "idempotent"
+      (some (.eq, bin .and (bin .and (var "x") (var "y")) (var "z"))) ]
+
+theorem segmentFold_proves :
+    proved segmentFold
+      = some (bin .eq segmentLine (bin .and (bin .and (var "x") (var "y")) (var "z"))) := by
+  decide
+
+theorem segmentFold_complete :
+    ((session.steps segmentFold).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
+/-- And it is the only way idempotence reaches `x ∧ y ∧ z` from that line: one
+suggestion, from the one segment that matches. -/
+theorem segmentFold_is_the_only_fold :
+    ((session.steps [.start .boolean .same segmentLine]).toOption.map fun d =>
+      (d.suggestions.filter fun s =>
+        s.law == "idempotent" && s.result == bin .and (bin .and (var "x") (var "y")) (var "z")).length)
+      = some 1 := by decide
+
+/-- `×` is associative, so it has segments, and its operands are neutral — the
+document's position table leaves `×` out, since a factor is monotonic only when
+the other is nonnegative. So a segment of it is a neutral site whatever the
+level's direction: `=` inside, and `=` in the margin outside. That is the
+position table read for a run of operands exactly as it is read for one. -/
+theorem times_segments_are_neutral :
+    (Doc.sites { ty := .number, dir := .down, start := 0 }
+        (bin .mul (bin .mul (var "n") (var "m")) (var "k"))).filterMap
+      (fun s => match s.part with
+        | .segment start len => some (start, len, s.pos, s.dir)
+        | _ => none)
+      = [(0, 2, .neutral, .same), (1, 2, .neutral, .same)] := by decide
 
 /-! ### Numbers: the directions are `≤ = ≥`, and a negative position turns them
 
@@ -582,6 +660,7 @@ def demos : List (String × String × List Cmd) :=
    ("discharge", Demo.discharge, discharge),
    ("gap", Demo.gap, gap),
    ("minimize", Demo.minimize, minimize),
+   ("segment", Demo.segment, segmentFold),
    ("fold", Demo.fold, fold),
    ("merge", Demo.merge, merge)]
 

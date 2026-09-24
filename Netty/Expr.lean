@@ -23,10 +23,12 @@ Three things live here besides the syntax tree itself.
 * **Associativity, symmetry and units.** The document says that clicking any
   operand of `a+b+c` zooms in to it, with no need of associative laws. So the
   *main operands* of an expression whose main operator is associative are the
-  flattened list. `BinOp.comm` and `BinOp.identity` name the operators the
-  document declares symmetric and the units it names for them; they are what
-  `Netty.Expr.matchFuel` reads a line modulo, and they change nothing about how
-  a line is drawn or zoomed in to.
+  flattened list, and a contiguous run of two or more of them — a *segment*,
+  `b+c` inside `a+b+c` — is a place of its own that a law can be applied to
+  (`segments`, `segmentExpr`, `replaceSegment`). `BinOp.comm` and
+  `BinOp.identity` name the operators the document declares symmetric and the
+  units it names for them; they are what `Netty.Expr.matchFuel` reads a line
+  modulo, and they change nothing about how a line is drawn or zoomed in to.
 -/
 
 namespace Netty
@@ -288,6 +290,67 @@ def replaceOperand (e : Expr) (i : Nat) (new : Expr) : Option Expr :=
       else if i == 1 then some (bin op l new)
       else none
   | _ => none
+
+/-- The contiguous multi-operand *segments* of `e`, as `(start, length)` pairs
+into the flattened association of its main operator.
+
+A segment is a run of two or more consecutive main operands: `y ∧ z` inside
+`x ∧ y ∧ z`. The runs of length one are the main operands themselves and the run
+of the whole length is `e`, so neither is listed here; an expression whose main
+operator is not associative, and an association of only two operands, have no
+segments at all. Ordered by where a run starts, then by how long it is. -/
+def segments : Expr → List (Nat × Nat)
+  | bin op l r =>
+      if !op.assoc then [] else
+        let n := (flattenOp op (bin op l r)).length
+        (List.range n).flatMap fun start =>
+          (List.range (n + 1)).filterMap fun len =>
+            if 2 ≤ len && len < n && start + len ≤ n then some (start, len) else none
+  | _ => []
+
+/-- The subexpression a segment of `e` is: its `len` main operands from `start`,
+rebuilt to the left as `rebuildOp` does. It is what a law is matched against at
+a segment site, and what zooming in to that run of operands would put on the
+first line of the subproof. -/
+def segmentExpr (e : Expr) (start len : Nat) : Option Expr :=
+  match e with
+  | bin op l r =>
+      if !op.assoc then none else
+        let es := flattenOp op (bin op l r)
+        if 2 ≤ len && start + len ≤ es.length then
+          rebuildOp op ((es.drop start).take len)
+        else none
+  | _ => none
+
+/-- Replace a segment of `e` — the `len` main operands from `start` — by the one
+expression `new`, rebuilding the association to the left. This is how a law
+applied to a contiguous segment writes its result back into the line, and it is
+what zooming out of that run of operands would write. -/
+def replaceSegment (e : Expr) (start len : Nat) (new : Expr) : Option Expr :=
+  match e with
+  | bin op l r =>
+      if !op.assoc then none else
+        let es := flattenOp op (bin op l r)
+        if 2 ≤ len && start + len ≤ es.length then
+          rebuildOp op (es.take start ++ new :: es.drop (start + len))
+        else none
+  | _ => none
+
+/-- The position of a segment of `e`. An associative operator puts every one of
+its operands in the same position, so a run of them is in that position too —
+the very one `operandPos` gives for a single operand of the same association. -/
+def segmentPos : Expr → Pos
+  | bin op _ _ => op.posOf 0
+  | _ => .neutral
+
+/-- The type of a segment of `e`. A segment is itself an application of `e`'s
+main operator, so its type is that operator's result type — which, for the
+associative operators, is also the type the operator forces on its operands, so
+a segment and a single operand of one association have the same type. -/
+def segmentTy (e : Expr) (parent : Ty) : Ty :=
+  match e with
+  | bin op _ _ => op.resultTy
+  | _ => parent
 
 /-- The position of the `i`-th main operand. -/
 def operandPos (e : Expr) (i : Nat) : Pos :=

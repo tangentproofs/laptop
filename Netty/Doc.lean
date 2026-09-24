@@ -39,19 +39,33 @@ recorded in a frame.
 ## Suggestions, and laws applied to a part
 
 A suggestion comes from matching a law's variant against the line before the
-focus — either against the whole of it, or against one of its *main operands*,
-which is the document's applying a law "to a part, as a result of minimization".
-A part rewrite writes the line back with that part replaced, and takes for its
-margin connective the one that zooming in to the part, applying the law and
-zooming out would have written: the part's position turns the direction on the
-way in (`Dir.zoom`) and turns it back on the way out, so a step that is the
-part's direction inside is the level's direction outside, and a neutral position
-admits only `=`. That is why no new soundness argument is needed here. See
-`Doc.sites`, `Doc.rewriteAt` and `Doc.suggestions`.
+focus — either against the whole of it, or against one of its *parts*, which is
+the document's applying a law "to a part, as a result of minimization". A part
+rewrite writes the line back with that part replaced, and takes for its margin
+connective the one that zooming in to the part, applying the law and zooming out
+would have written: the part's position turns the direction on the way in
+(`Dir.zoom`) and turns it back on the way out, so a step that is the part's
+direction inside is the level's direction outside, and a neutral position admits
+only `=`. That is why no new soundness argument is needed here. See `Doc.sites`,
+`Doc.rewriteAt` and `Doc.suggestions`.
 
-Only the main operands are sites — one level, the parts a single `zoomIn` can
-reach and a display draws as separate pieces. Deeper positions are still reached
-by zooming in.
+The parts are the *main operands* of the line — what a single `zoomIn` reaches
+and a display draws as separate pieces — and, when the main operator is
+associative, every contiguous *segment* of the association: a run of two or more
+consecutive operands, shorter than the whole line. The document reads `x ∧ y ∧ z`
+as having the part `y ∧ z` just as it has the part `y`, so a law that matches two
+of three conjuncts folds them where they stand and leaves the third alone
+(`Expr.segments`, `Expr.replaceSegment`, `Doc.Part`). An associative operator
+puts all of its operands in one position, so a run of them is in that same
+position, and the direction and type of a segment site are word for word those of
+a single operand of the same association — the soundness argument is the one
+above, unchanged. Segments come after the single operands, and a rewrite that
+merely repeats the line is dropped as before, so a longer suggestion list is the
+whole of the difference a user sees.
+
+Still one level: deeper positions are reached by zooming in, and `Cmd.zoomIn`
+still takes a main operand only — a segment is a place a law is applied to, not
+(yet) a level to work inside.
 
 ## Focus
 
@@ -313,21 +327,49 @@ structure Suggestion where
   holes : List String
   deriving Repr, DecidableEq, Inhabited
 
+/-- Which part of a line a site is. -/
+inductive Part
+  /-- The whole line. -/
+    | whole
+  /-- The `i`-th main operand. -/
+    | operand (i : Nat)
+  /-- A contiguous run of `len` main operands of an association, starting at the
+  `start`-th: `len` is at least two and less than the whole association, so a
+  segment is neither a single operand nor the line (`Expr.segments`). -/
+    | segment (start len : Nat)
+  deriving Repr, DecidableEq, Inhabited
+
+namespace Part
+
+/-- Put `r` where this part of `line` stood. `none` for the whole line, which is
+not put back into anything, and `none` when the part is not there to replace. -/
+def replace : Part → Expr → Expr → Option Expr
+  | whole, _, _ => none
+  | operand i, line, r => line.replaceOperand i r
+  | segment start len, line, r => line.replaceSegment start len r
+
+end Part
+
 /-- A place in the line before the focus where a law may be applied: the whole
-line, or one of its main operands.
+line, one of its main operands, or a contiguous segment of its association.
 
-Applying a law to a main operand is what the document calls applying it "to a
-part, as a result of minimization". The step it makes is the one a zoom in, a
-single application and a zoom out would make, so the numbers a site carries are
-the ones the zoom stack would compute: the part's type and direction are what
-zooming in to it gives (`Expr.operandTy`, `Dir.zoom`), and the connective the
-step writes in the outer margin is what zooming out of it would write. That is
-why no new soundness argument is needed here — only the old one, spelled without
-the two lines that zooming would have added to the proof.
+Applying a law to anything but the whole line is what the document calls
+applying it "to a part, as a result of minimization". The step it makes is the
+one a zoom in, a single application and a zoom out would make, so the numbers a
+site carries are the ones the zoom stack would compute: the part's type and
+direction are what zooming in to it gives (`Expr.operandTy`, `Expr.segmentTy`,
+`Dir.zoom`), and the connective the step writes in the outer margin is what
+zooming out of it would write. That is why no new soundness argument is needed
+here — only the old one, spelled without the two lines that zooming would have
+added to the proof.
 
-Only the *main* operands are sites, which is one level: the parts a single
-`zoomIn` can reach, and the parts a display draws as separate pieces
-(`Expr.operandTexts`). Deeper positions are still reached by zooming in. -/
+The parts are one level deep: the main operands, which a single `zoomIn` reaches
+and a display draws as separate pieces (`Expr.operandTexts`), and the runs of two
+or more of them that an *associative* main operator makes available, since the
+document reads `x ∧ y ∧ z` as having the part `y ∧ z` just as it has the part
+`y`. An associative operator puts all of its operands in one position, so a run
+of them is in that same position and the direction story is word for word the
+one for a single operand. Deeper positions are still reached by zooming in. -/
 structure Site where
   /-- The subexpression a law is matched against. -/
   expr : Expr
@@ -338,8 +380,8 @@ structure Site where
   /-- Its position in the line; `positive` for the whole line, which is not in
   any position at all. -/
   pos : Pos
-  /-- Which main operand it is; `none` for the whole line. -/
-  operand : Option Nat
+  /-- Which part of the line it is. -/
+  part : Part
   deriving Repr, DecidableEq, Inhabited
 
 /-- A line as a display draws it, after the collapses of `Doc.shownLines`.
@@ -456,29 +498,38 @@ def contextLaws (d : Doc) : List Law := d.stack.flatMap (·.ctx)
 def allLaws (d : Doc) : List Law := d.contextLaws ++ d.laws
 
 /-- The places a law may be applied to in the line `e` of a level whose frame
-is `f`: the whole line first, then each of its main operands in order. -/
+is `f`: the whole line first, then each of its main operands in order, then each
+contiguous segment of its association (`Expr.segments`, which is empty unless
+the main operator is associative and has more than two operands). -/
 def sites (f : Frame) (e : Expr) : List Site :=
-  { expr := e, ty := f.ty, dir := f.dir, pos := .positive, operand := none } ::
+  ({ expr := e, ty := f.ty, dir := f.dir, pos := .positive, part := .whole } ::
     (List.range e.operands.length).filterMap fun i =>
       e.operands[i]?.map fun sub =>
         let p := e.operandPos i
         { expr := sub, ty := e.operandTy i f.ty, dir := f.dir.zoom p,
-          pos := p, operand := some i }
+          pos := p, part := .operand i }) ++
+    e.segments.filterMap fun (start, len) =>
+      (e.segmentExpr start len).map fun sub =>
+        let p := e.segmentPos
+        { expr := sub, ty := e.segmentTy f.ty, dir := f.dir.zoom p,
+          pos := p, part := .segment start len }
 
 /-- The line that rewriting the part at `s` to `r` writes, and the connective
 the step puts in the outer margin. `none` when the part cannot be put back.
 
-For the whole line the connective is the variant's own. For a main operand it is
-what zooming out would write: `=` when the rewrite was an equality or the
-operand's position is neutral, and otherwise the level's own direction — the
-operand's position has already turned the direction once on the way in, so a
-step that is a direction inside is that same direction outside. -/
+For the whole line the connective is the variant's own. For a part — a main
+operand or a segment of an association — it is what zooming out would write: `=`
+when the rewrite was an equality or the part's position is neutral, and otherwise
+the level's own direction, since the part's position has already turned the
+direction once on the way in, so a step that is a direction inside is that same
+direction outside. A segment goes back left-associated, exactly as `rebuildOp`
+writes an association. -/
 def rewriteAt (f : Frame) (line : Expr) (s : Site) (o : BinOp) (r : Expr) :
     Option (BinOp × Expr) :=
-  match s.operand with
-  | none => some (o, r)
-  | some i => do
-      let e ← line.replaceOperand i r
+  match s.part with
+  | .whole => some (o, r)
+  | part => do
+      let e ← part.replace line r
       let rel ← o.rel?
       let out : Rel :=
         if s.pos == .neutral || rel.dir == .same then ⟨.same, false⟩ else ⟨f.dir, false⟩
@@ -489,10 +540,13 @@ before the focus (`Doc.sites`) and every variant of every law in force whose
 connective that place's direction allows, the result of matching the place
 against the variant's left side and putting the variant's right side back.
 
-A place is the whole line or one of its main operands, so a law applies "to a
-part, as a result of minimization" as well as to the line entire: `a ∨ a = a`
-takes `x ∧ (y ∨ y)` to `x ∧ y` in one step, where before it took a zoom in and
-a zoom out. Whole-line suggestions come first, then the parts in order.
+A place is the whole line, one of its main operands, or a contiguous segment of
+its association, so a law applies "to a part, as a result of minimization" as
+well as to the line entire: `a ∨ a = a` takes `x ∧ (y ∨ y)` to `x ∧ y` in one
+step, where before it took a zoom in and a zoom out, and `a ∧ a = a` takes
+`x ∧ y ∧ y ∧ z` to `x ∧ y ∧ z`, which no rewrite of the whole line or of a single
+operand can reach. Whole-line suggestions come first, then the single operands,
+then the segments.
 
 Matching is modulo associativity, so one variant can match one place in several
 ways — `a ∧ b ⇒ a` reads `x ∧ y ∧ z` as `x ∧ (y ∧ z)` and as `(x ∧ y) ∧ z` —
