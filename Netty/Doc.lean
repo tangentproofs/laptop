@@ -39,11 +39,18 @@ recorded in a frame.
 
 ## Conditional laws
 
-A law whose consequent is a *number* relation — `x ≤ x + y ⇐ 0 ≤ y` — cannot be
-applied to a number line as it stands: its own main operator is `⇐`, which no
-number margin admits. Its conditional reading (`Law.conditional`) puts the
-consequent in the margin and leaves the antecedent over as a premise, and
-`Doc.suggestions` asks the laws in force whether they settle it (`Law.settles`,
+A law whose consequent is a relation — `x ≤ x + y ⇐ 0 ≤ y`, or
+`(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` — has a reading in which that relation stands in the
+margin and the antecedent is left over as a premise (`Law.conditional`). For a
+number law it is the only reading a number line can take, its own main operator
+`⇐` being one no number margin admits; for a boolean law it is a second reading
+beside the one its own operator gives, kept from burying that one by the two
+guards `Law.conditional` describes — conditional readings last in `Law.variants`,
+so a dedup keeps the reading that needs nothing, and `Doc.rank` putting every
+step that needs nothing first.
+
+Either way, `Doc.suggestions` asks the laws in force whether they settle the
+premise (`Law.settles`,
 which is the same match the pane would make on a line holding the premise, so a
 `context` law that zooming in supplied settles a domain condition such as
 `0 ≤ y`). A settled premise is no premise: the step is an ordinary step. An

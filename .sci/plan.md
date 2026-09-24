@@ -909,3 +909,24 @@
       a gap what it would leave to prove.
       Left parked: the boolean conditional reading, a better check for number laws, ML ranking,
       distributivity, arithmetic and normalisation, and phase 2e.
+- [x] Netty: the conditional reading at the boolean level (2026-09-24; on main) — item 19 of
+      `.sci/netty-plan.md`. Item 18's deliberate limit lifted: `Law.conditional` now reads any margin
+      connective, so `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` offers `a ∧ c ⇒ b ∧ c` with `a ⇒ b` as a premise. No
+      new machinery — the premise, `Law.settles` and the gap are item 18's. The guard that replaces the
+      limit is written into the law's comment: conditional readings come last in `Law.variants` so the
+      dedup keeps the reading that needs nothing, and `Doc.rank` puts steps that need nothing first.
+      Measured on `x ∧ y ∧ y ∧ z`: 227 rows → 247, **applicable unchanged at 207**, every new row
+      greyed — and not by accident, since monotonicity and transitivity laws relate the line to a third
+      formula the line does not determine. Supplying that by hand is the document's small dialog box,
+      which the kernel lacks; it is now the named next thing rather than a silent limit. What the lift
+      does buy is the *context*, which is ground: `Replay.ponens` proves
+      `a ⇒ ((a ⇒ (b ⇒ c)) ⇒ (b ⇒ c))` by the context rewriting `b` to `c` with `a` as the premise it
+      needs, and dropping the outer `a ⇒ …` turns the same step into a gap that claims nothing.
+      `matchTest`'s soundness check now reads a conditional row as `premise ⇒ (line op result)` — the
+      right justification, and 5353 suggested steps pass it. `Replay.key` had been missing the premise
+      key since item 18 (it passed only because no boolean line had a conditional row); fixed.
+      Ten witnesses by `decide`, `propext` only; `conditionalTest` drives the boolean half through the
+      request service; `netty-web/` needed nothing. Cost: `lake build netty` about 4m20 → about 6m, and
+      one replay needed `maxHeartbeats` raised.
+      Left parked: supplying a law variable by hand, a better check for number laws, ML ranking,
+      distributivity, arithmetic and normalisation, and phase 2e.

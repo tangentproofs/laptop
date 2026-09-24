@@ -291,24 +291,36 @@ A law of the form `Q ⇒ P` or `P ⇐ Q` whose consequent `P` is itself a relati
 that can stand in a left margin gives a step in *that* margin, with `Q` left over
 as a premise. So `x ≤ x + y ⇐ 0 ≤ y` lets a number line `x + y` be written `x`
 with `≥` in the margin, and a number line `x` be written `x + y` with `≤`,
-provided `0 ≤ y`. Its unconditional readings put its own main operator — `⇐`, a
-*boolean* connective — in the margin, so without this reading the law is not a
-step a number calculation can take at all.
+provided `0 ≤ y`; and `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` lets a boolean line `a ∧ c` be
+written `b ∧ c` with `⇒`, provided `a ⇒ b`.
 
 Both directions of the consequent are offered, as `Law.forms` offers both
 directions of a law: `a op b` is `b op.flip a`, and a premise that licenses the
 one licenses the other.
 
-The reading is generated only where the consequent's connective is one of the
-*number* directions, `≤ < ≥ >`. That is where a law is otherwise unusable: a
-boolean conditional law is already a step a boolean line can take, its own main
-operator `⇒` standing in a boolean margin, so reading it conditionally as well
-would offer every such law a second time with a premise attached and bury the
-steps that need nothing. `=` belongs to both types and is left out for the same
-reason. Reading a boolean conditional law conditionally — which would let
-`(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` rewrite `a ∧ c` to `b ∧ c` under the premise
-`a ⇒ b` — is a later round's work, and the ranking key it needs is already
-here.
+Every margin connective is read this way, of both types. A *number* law has no
+other reading a number line can take at all — its own main operator is `⇐`, which
+no number margin admits — and that is why this began with numbers only. At the
+boolean level the law is already a step a boolean line can take, so the concern
+was that a second reading would bury the readings that need nothing. Two things
+answer that, and neither is new:
+
+* the conditional readings come **last** in `Law.variants`, so when a law can
+  write one and the same line both with a premise and without, the dedup in
+  `Doc.suggestions` keeps the one that needs nothing; and
+* `Doc.rank` puts every step that needs nothing before every step that leaves a
+  gap, so the pane a user reads down is the pane they read before.
+
+As it happens nothing of the shipped boolean list becomes *applicable* by this
+reading: a monotonicity or transitivity law relates the line to a third formula
+the line does not determine, so matching always leaves a variable free and the
+kernel will not apply it. Those readings are rows that say what the law would do
+and what it would need — the document's small dialog box, which this kernel does
+not have yet. What the reading does buy at the boolean level is the *context*: a
+context law is ground, so when the fact a zoom in supplied is itself an
+implication whose consequent is a relation, its conditional reading has nothing
+left unconstrained and is a step that can be taken, licensed by another fact in
+force. That is modus ponens as the document would have a user do it.
 
 The premise is not a new kind of obligation. `Doc.suggestions` instantiates it
 along with the rest of the reading and asks whether the laws in force settle it
@@ -317,13 +329,9 @@ is a step with a gap — the document's warning sign, the same one direct entry
 leaves. Nothing is claimed that has not been justified. -/
 def conditional (l : Law) : List Variant :=
   let name := if l.name.isEmpty then "unnamed law" else l.name
-  -- The number directions: the margin connectives that belong to the number type
-  -- and cannot stand in a boolean margin.
-  let numberDir : BinOp → Bool := fun o =>
-    match o with | .le | .lt | .ge | .gt => true | _ => false
   match l.stmt with
   | .bin .imp q (.bin o a b) | .bin .rimp (.bin o a b) q =>
-      if numberDir o then
+      if o.isMargin then
         { law := name, lhs := a, op := o, rhs := b, premise := some q } ::
           (match o.flip with
            | some f => [{ law := name, lhs := b, op := f, rhs := a, premise := some q }]

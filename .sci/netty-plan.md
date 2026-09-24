@@ -91,10 +91,11 @@ Everything the window made visible is done (2026-09-23/24): applying a law to a 
 anywhere-focus, the display collapses, matching modulo symmetry and an identity element, contiguous
 association segments as sites, zooming into one, clicking one in the window, ranking the suggestion
 list, the gap-on-splice justification, highlighting the site a suggestion would rewrite, and going
-back into a closed level, and conditional laws at the number level. What is left is the named chunks
-of the grammar below, and the two things the kernel says out loud that it cannot do: read a boolean
-conditional law conditionally, and check a number law by anything better than small integers. Phase 2e
-(LoopBridge / concurrency) stays parked.
+back into a closed level, and conditional laws at both levels. What is left is the named chunks of the
+grammar below, and the two things the kernel says out loud that it cannot do: supply a law variable by
+hand (the document's small dialog box, which is what would make the shipped monotonicity and
+transitivity laws usable as conditional steps), and check a number law by anything better than small
+integers. Phase 2e (LoopBridge / concurrency) stays parked.
 
 ### Kernel residuals to pick up alongside or after the UI
 
@@ -126,13 +127,18 @@ conditional law conditionally, and check a number law by anything better than sm
 - No `if … then … else … fi`, quantifiers, bunches, strings, lists, functions, scope (`〈v: d → b〉`),
   function application, hiding, deleting a region, or law query — each is a named section of the
   document and a named chunk of the grammar below.
-- A conditional law is read conditionally where its consequent is a *number* relation (2026-09-24,
-  item 18): `x ≤ x + y ⇐ 0 ≤ y` is a step a number line can take, with `0 ≤ y` as a premise that the
-  laws in force either settle — the `context` a zoom in supplies is how a domain condition gets in
-  force — or do not, in which case the step leaves the document's warning sign with the premise
-  recorded beside it. A *boolean* conditional law is not read that way: its own `⇒` already stands in
-  a boolean margin, so the reading would offer every such law a second time with a premise attached.
-  That is a deliberate limit, not an oversight, and lifting it is a later round.
+- A law of the form `Q ⇒ P` whose consequent is a relation is read with `P` in the margin and `Q` as a
+  premise, at both types (2026-09-24, items 18 and 19): `x ≤ x + y ⇐ 0 ≤ y` is a step a number line can
+  take and `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` one a boolean line can. The premise is settled by the laws in
+  force — the `context` a zoom in supplies is how a domain condition or a hypothesis gets in force — or
+  it is not, in which case the step leaves the document's warning sign with the premise recorded beside
+  it. Nothing that needs nothing is buried: conditional readings come last in `Law.variants`, so a
+  dedup keeps the reading with no premise, and `Doc.rank` puts every step that needs nothing first.
+- What no conditional reading of the shipped *boolean* list can do is be *applied*: monotonicity and
+  transitivity relate the line to a third formula the line does not determine, so matching always
+  leaves a variable free. Supplying one by hand is the document's small dialog box, and the kernel
+  does not have it. The boolean readings that can be taken are the *context's*, a context law being
+  ground.
 - `Netty/laws/number.laws` is a small example list, not §11.3.2, and it is not *decided* the way the
   boolean list is: `Law.holdsOnInts` checks each law on the integers `-2 … 2`, which a law false in
   general can pass. Number laws are trusted as transcribed; arithmetic stays out of scope.
@@ -563,6 +569,54 @@ conditional law conditionally, and check a number law by anything better than sm
    the undischarged case. `netty --selftest` gained `conditionalTest`, which reads all of that off the
    request service the client talks to, and a staleness check for the new law file beside the old one.
    Not done here: the boolean conditional reading, a better check for number laws, ML ranking,
+   distributivity, arithmetic or normalisation.
+
+19. [x] **The conditional reading at the boolean level**, 2026-09-24 on main. Item 18 read a law
+   conditionally only where its consequent was a *number* relation, and said why: a boolean conditional
+   law's own `⇒` already stands in a boolean margin, so a second reading might bury the readings that
+   need nothing. That limit is lifted — `Law.conditional` now takes any margin connective — and the two
+   things that kept it honest are written down in the law's own comment, because they are what replaces
+   it: the conditional readings come **last** in `Law.variants`, so when a law can write one and the
+   same line both with a premise and without, the dedup in `Doc.suggestions` keeps the one that needs
+   nothing; and `Doc.rank` puts every step that needs nothing before every step that leaves a gap. No
+   new machinery: the premise, the settling and the gap are item 18's.
+   Measured, on `x ∧ y ∧ y ∧ z`: the suggestion list goes from 227 rows to 247, and the **applicable**
+   list is unchanged at 207. Every one of the 20 new rows is greyed, and that is not an accident of the
+   line — a monotonicity or transitivity law relates the line to a third formula the line does not
+   determine (`(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` read from `a ∧ c` must be told what `b` is), so matching
+   always leaves a variable free and the kernel will not apply it. Those rows say what the law would do
+   and what it would need; taking them needs the document's small dialog box, which this kernel has
+   not got. That is now the named next thing rather than a silent limit.
+   What the lift *does* buy at the boolean level is the context. A context law is ground — a zoom in
+   supplies a fact, not a schema — so when the fact is itself an implication whose consequent is a
+   relation, its conditional reading has nothing left unconstrained and is a step that can be taken,
+   licensed by another fact in force. `Netty.Replay.ponens` is that: `a ⇒ ((a ⇒ (b ⇒ c)) ⇒ (b ⇒ c))`,
+   two zoom-ins putting `a ⇒ (b ⇒ c)` and `a` in force, and then the context rewriting the operand `b`
+   of `b ⇒ c` to `c` with `a` as the premise it needs — modus ponens as the document would have a user
+   do it. Drop the outer `a ⇒ …` and the goal stops being a theorem: the same reading is then offered
+   *with* its premise, and taking it leaves the warning sign and claims nothing.
+   The selftest's soundness check was the one thing that had to change, and it changed for the better.
+   `matchTest` built `line op result` and required a tautology; a conditional reading is a sound step
+   *given its premise*, so it now requires `premise ⇒ (line op result)`. That is the justification the
+   feature wanted all along, and it holds for every row: **5353 suggested steps are sound**, the
+   conditional ones checked as conditionals. `Netty.Replay.key`, the ranking key the witness sorts by,
+   had been left without the premise key when item 18 added it to `Doc.rank` — it passed then because
+   no boolean line had a conditional row, and it does not pass now; it is fixed, and
+   `suggestions_are_ranked` checks the whole order again.
+   Witnessed in Lean, all by `decide`, all `propext` only: `conditional_variants_come_last` (the dedup
+   guard, over both shipped law lists), `shipped_boolean_conditional_readings_are_all_greyed` (there are
+   some, and every one is greyed), `ponens_proves` and `ponens_complete`,
+   `ponens_offers_discharged_boolean_steps` (the three readings of the context that can be taken there,
+   none carrying a premise), and `ponensGappy_offers_them_with_the_premise`,
+   `ponensGappy_leaves_the_premise_as_a_gap`, `ponensGappy_proves_nothing` for the undischarged case.
+   `netty --selftest`'s `conditionalTest` now drives the boolean half through the request service as
+   well as the number half. `netty-web/` needed nothing: the premise travels in the fields item 18
+   added, and a boolean premise reads as a boolean formula.
+   The cost is worth writing down: `lake build netty` goes from about 4m20 to about 6m, because every
+   `decide` that computes a suggestion list now computes twenty-odd more rows, and one replay needed
+   `maxHeartbeats` raised. If that grows again, the witnesses to shrink are the ones that replay a whole
+   proof under the full law list.
+   Not done here: supplying a law variable by hand, a better check for number laws, ML ranking,
    distributivity, arithmetic or normalisation.
 
 ## Then grow language ↔ Netty grammar

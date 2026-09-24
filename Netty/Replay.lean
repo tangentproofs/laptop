@@ -164,6 +164,7 @@ theorem anywhere_says_which_clicks_reopen :
 /-- Carrying on from there proves what `discharge` proves … -/
 theorem anywhere_proves : proved anywhere = some dischargeGoal := by decide
 
+set_option maxHeartbeats 1000000 in
 /-- … and in fact writes the very same document: clicking an outer line did
 what `Cmd.zoomOut` does. -/
 theorem anywhere_is_discharge :
@@ -358,6 +359,130 @@ theorem gapped_writes_the_law_s_line :
       d.lines[1]?.map fun l => (l.conn, l.expr, l.why))
       = some (some .ge, var "n", "upper bound") := by decide
 
+/-! ### The conditional reading at the boolean level
+
+Item 18 read a law conditionally only where its consequent was a *number*
+relation, because a boolean conditional law's own `⇒` already stands in a boolean
+margin and a second reading would offer every such law twice. That limit is lifted
+now, and the two things that kept it honest are still what keep it honest: the
+conditional readings come last in `Law.variants`, so the dedup in
+`Doc.suggestions` keeps the reading that needs nothing when two write the same
+line, and `Doc.rank` puts every step that needs nothing before every step that
+leaves a gap.
+
+What the lift buys at the boolean level is the *context*. A context law is ground
+— a zoom in supplies a fact, not a schema — so when the fact is itself an
+implication whose consequent is a relation, its conditional reading has nothing
+left unconstrained and is a step that can be taken. That is modus ponens as the
+document would have a user do it: the implication in the context rewrites the
+line, and what licenses the rewrite is another fact in the context. -/
+
+/-- The conditional readings come last in every law the kernel ships with, which
+is what makes the dedup keep the reading that needs nothing. -/
+theorem conditional_variants_come_last :
+    (Laws.boolean ++ Laws.number).all (fun l =>
+      l.variants == l.variants.filter (·.premise.isNone)
+        ++ l.variants.filter (·.premise.isSome)) = true := by decide
+
+/-- Whether a document offers any conditional reading, and whether every one it
+offers is greyed. -/
+def conditionalRows (d : Doc) : Bool × Bool :=
+  let cond := d.suggestions.filter (·.premise.isSome)
+  (!cond.isEmpty, cond.all fun s => !s.holes.isEmpty)
+
+/-- Every conditional reading the *shipped boolean* laws offer is greyed. A
+monotonicity or transitivity law relates the line to a third formula that the line
+does not determine — `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` read from `a ∧ c` must be told
+what `b` is — so matching leaves a variable free and the kernel will not apply it.
+Supplying it by hand is the document's small dialog box, which the kernel does not
+have; until it does, these readings are rows that say what the law would do and
+what it would need. So the applicable list is the one it was before the reading
+existed, which is the whole of the duplication guard's promise. -/
+theorem shipped_boolean_conditional_readings_are_all_greyed :
+    ((session.steps
+        [.start .boolean .down (bin .and (var "x") (bin .and (var "y") (var "z")))]).toOption.map
+      conditionalRows) = some (true, true) := by decide
+
+/-- `a ⇒ ((a ⇒ (b ⇒ c)) ⇒ (b ⇒ c))`: modus ponens, with the implication and its
+antecedent both to be supplied by the context. -/
+def ponensGoal : Expr :=
+  bin .imp (var "a")
+    (bin .imp (bin .imp (var "a") (bin .imp (var "b") (var "c"))) (bin .imp (var "b") (var "c")))
+
+/-- The three shipped laws this proof needs, and nothing else. What is witnessed
+below is the *context's* own conditional reading, and a short list makes that
+plain — and keeps a nine-command replay inside the kernel's budget. -/
+def ponensSession : Doc :=
+  { laws := Laws.boolean.filter fun l => l.name == "reflexive" || l.name == "base" }
+
+/-- Two zoom-ins put `a ⇒ (b ⇒ c)` and `a` in the context. The first is a ground
+conditional law, so its conditional reading is one the kernel can take: at the
+operand `b` of the line `b ⇒ c` it writes `c`, which is `c ⇒ c` put back, and the
+premise it needs is `a` — the other context law. Then reflexivity, and the two
+zoom-outs. -/
+def ponens : List Cmd :=
+  [ .start .boolean .up ponensGoal,
+    .zoomIn (.operand 1),
+    .zoomIn (.operand 1),
+    .applyNamed "context" (some (.rimp, bin .imp (var "c") (var "c"))),
+    .applyNamed "reflexive" (some (.eq, .top)),
+    .zoomOut,
+    .applyNamed "base" (some (.eq, .top)),
+    .zoomOut,
+    .applyNamed "base" (some (.eq, .top)) ]
+
+/-- It proves the goal, with no gap and fully zoomed out: the premise was
+discharged, so nothing is left over. -/
+theorem ponens_proves : provedIn ponensSession ponens = some ponensGoal := by decide
+
+theorem ponens_complete :
+    ((ponensSession.steps ponens).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
+/-- The three readings of the context that can be taken there: the fact itself,
+written on the whole line, and the conditional reading at each operand of
+`b ⇒ c`. None of them carries a premise, because `a` is in force. -/
+theorem ponens_offers_discharged_boolean_steps :
+    ((ponensSession.steps (ponens.take 3)).toOption.map fun d =>
+      (d.suggestions.filter fun s => s.law == "context" && s.holes.isEmpty).map
+        fun s => (s.part, s.op, s.result, s.premise))
+      = some
+        [(Part.whole, .rimp, var "a", none),
+         (Part.operand 0, .rimp, bin .imp (var "c") (var "c"), none),
+         (Part.operand 1, .rimp, bin .imp (var "b") (var "b"), none)] := by decide
+
+/-- The same law with nothing in force to settle its premise: drop the outer
+`a ⇒ …`, and the goal is no longer a theorem. -/
+def ponensGappy : List Cmd :=
+  [ .start .boolean .up
+      (bin .imp (bin .imp (var "a") (bin .imp (var "b") (var "c"))) (bin .imp (var "b") (var "c"))),
+    .zoomIn (.operand 1),
+    .applyNamed "context" (some (.rimp, bin .imp (var "c") (var "c"))) ]
+
+/-- Both readings are still offered, and both now say what they would leave to
+prove. -/
+theorem ponensGappy_offers_them_with_the_premise :
+    ((ponensSession.steps (ponensGappy.take 2)).toOption.map fun d =>
+      (d.suggestions.filter fun s =>
+        s.law == "context" && s.holes.isEmpty && s.premise.isSome).map
+        fun s => (s.part, s.result, s.premise))
+      = some
+        [(Part.operand 0, bin .imp (var "c") (var "c"), some (var "a")),
+         (Part.operand 1, bin .imp (var "b") (var "b"), some (var "a"))] := by decide
+
+/-- Taking one writes the line and leaves the document's warning sign on the line
+the step was taken from, with the premise recorded there as what would close
+it. -/
+theorem ponensGappy_leaves_the_premise_as_a_gap :
+    ((ponensSession.steps ponensGappy).toOption.map fun d =>
+      (d.gaps, d.note 1, d.lines[1]?.bind Line.premise))
+      = some ([1], "!", some (var "a")) := by decide
+
+/-- And the proof claims nothing — which is right, because without `a` the goal is
+not a theorem. The gap is not a formality: it is the difference between this and
+`ponens`. -/
+theorem ponensGappy_proves_nothing : provedIn ponensSession ponensGappy = none := by decide
+
 /-! ### A gap, and closing it -/
 
 /-- Type `a` in directly under `¬¬a`, which leaves a warning sign; then move
@@ -442,7 +567,8 @@ what it means for the order to be total and the sort stable. -/
 
 /-- The numbers `Doc.rank` sorts by, most important first. -/
 def key (s : Suggestion) : List Nat :=
-  [if s.holes.isEmpty then 0 else 1, s.holes.length, s.result.size, s.part.rank]
+  [if s.holes.isEmpty then 0 else 1, if s.premise.isNone then 0 else 1,
+   s.holes.length, s.result.size, s.part.rank]
 
 /-- Lexicographic `≤` on those keys. -/
 def leKey : List Nat → List Nat → Bool

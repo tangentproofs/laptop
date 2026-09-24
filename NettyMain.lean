@@ -212,7 +212,13 @@ def matchTest : IO Bool := do
             IO.eprintln s!"matching: ‘{text}’: {e}"
         | .ok d =>
           for s in d.suggestions do
-            let step : Law := { stmt := Expr.bin s.op line s.result }
+            -- A conditional reading is a sound step *given its premise* — that is
+            -- what the gap it leaves records — so what has to be a tautology is
+            -- the premise implying the step. For a reading that needs nothing
+            -- that is the step itself, as it always was.
+            let claim := Expr.bin s.op line s.result
+            let step : Law := { stmt :=
+              match s.premise with | some q => Expr.bin .imp q claim | none => claim }
             if (step.stmt.mvars ++ step.stmt.vars).length > 8 then
               skipped := skipped + 1
             else if step.isTautology then
@@ -779,6 +785,62 @@ def conditionalTest : IO Bool := do
   | none =>
       ok := false
       IO.eprintln "conditional: the answer has no line 1"
+  -- The same machinery at the *boolean* level, where what a conditional reading
+  -- needs comes from the context: two zoom-ins put `a ⇒ (b ⇒ c)` and `a` in
+  -- force, and a context law is ground, so its conditional reading has nothing
+  -- left unconstrained. It rewrites the operand `b` of `b ⇒ c` to `c`, and what
+  -- licenses it is the other fact in force.
+  let mut u := fresh
+  for arg in ["start ⇐ a ⇒ ((a ⇒ (b ⇒ c)) ⇒ (b ⇒ c))", "zoom 1", "zoom 1"] do
+    let (u', r) := run u arg
+    u := u'
+    if !r.ok then
+      ok := false
+      IO.eprintln s!"conditional: ‘{arg}’: {r.error}"
+  let deep := Api.stateView u
+  match (deep.suggestions.filter fun g =>
+      g.law == "context" && g.holes.isEmpty && g.result == "c ⇒ c") with
+  | [g] =>
+      if g.premise == "" then
+        IO.println "conditional: a context law rewrites a boolean line, its premise \
+          settled by another fact in force"
+      else
+        ok := false
+        IO.eprintln s!"conditional: the context's reading still needs ‘{g.premise}’"
+  | gs =>
+      ok := false
+      IO.eprintln s!"conditional: {gs.length} context readings write ‘c ⇒ c’, not one"
+  let (_, r3) := run u "apply context : ⇐ c ⇒ c"
+  if !r3.ok then
+    ok := false
+    IO.eprintln s!"conditional: taking the boolean conditional step: {r3.error}"
+  else if r3.state.lines.all (fun l => !l.gap) then
+    IO.println "conditional: taking it leaves no gap either"
+  else
+    ok := false
+    IO.eprintln "conditional: the discharged boolean step left a gap"
+  -- Drop the outer `a ⇒ …` and nothing settles the premise: the same reading is
+  -- offered with it, and taking it leaves the warning sign.
+  let mut v := fresh
+  for arg in ["start ⇐ (a ⇒ (b ⇒ c)) ⇒ (b ⇒ c)", "zoom 1", "apply context : ⇐ c ⇒ c"] do
+    let (v', r) := run v arg
+    v := v'
+    if !r.ok then
+      ok := false
+      IO.eprintln s!"conditional: ‘{arg}’: {r.error}"
+  let vv := Api.stateView v
+  match vv.lines.find? (fun l => l.index == 1) with
+  | some l =>
+      if l.gap && l.premise == "a" && !vv.proved then
+        IO.println "conditional: without that fact the boolean reading leaves the \
+          premise as a gap and claims nothing"
+      else
+        ok := false
+        IO.eprintln s!"conditional: line 1 has gap {l.gap}, premise ‘{l.premise}’, and \
+          the proof is {if vv.proved then "proved" else "unproved"}"
+  | none =>
+      ok := false
+      IO.eprintln "conditional: the boolean answer has no line 1"
   return ok
 
 /-- Check that a gap is carried out of the subproof that holds it, through the
