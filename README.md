@@ -115,6 +115,14 @@ where the part stood — the same `Part.replace` a one-step rewrite uses, so the
 long way round and the short way round write the same line and the display draws
 them alike.
 
+The suggestions are *ranked*, by a heuristic written down in `Doc.rank` rather
+than learned: the steps that can be taken before the ones that leave a law
+variable free, the whole line before a single operand before the shorter runs of
+operands, fewer free variables, then the shorter line a step writes — so a fold
+comes before the padding of the same law — and last the law file's own order. The
+same line and the same laws always give the same list, so a number read off the
+pane means the same thing the next time.
+
 Laws are plain text files (`Netty/laws/boolean.laws` holds the Binary laws of
 aPToP §11.3.1); add your own with `--laws=FILE`. `Netty/Laws.lean` reads the
 shipped file at compile time and `Netty.boolean_isTautology` checks in Lean's

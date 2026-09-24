@@ -185,8 +185,8 @@ line apart, rearranges it and strikes its units out, and on applying a law to a
 part of a line, which turns the law's own connective into the margin's according
 to the part's position — all of them could offer more than they may. Four
 readings are witnessed by name: from `x ∧ y ∧ z`, specialization must offer
-every sub-conjunction, the two that associativity alone gives first and the four
-that need symmetry after; from `x ∧ (y ∨ y)`, which idempotence cannot match as
+every sub-conjunction — the three single conjuncts before the three pairs, which
+is `Doc.rank` putting the shorter line first; from `x ∧ (y ∨ y)`, which idempotence cannot match as
 a whole, it must offer `x ∧ y`, the fold of the second main operand; from
 `x ∧ y ∧ y ∧ z`, which idempotence matches neither whole nor at any single
 operand, it must offer `x ∧ y ∧ z`, the fold of the contiguous *segment*
@@ -232,7 +232,7 @@ def matchTest : IO Bool := do
         IO.eprintln s!"matching: {e}"
     | .ok d =>
       let offered := (d.suggestions.filter (·.law == "specialization")).map (·.result.render)
-      if offered == ["x", "x ∧ y", "y ∧ z", "x ∧ z", "z", "y"] then
+      if offered == ["x", "z", "y", "x ∧ y", "y ∧ z", "x ∧ z"] then
         IO.println "matching: specialization reads every sub-conjunction of x ∧ y ∧ z"
       else
         ok := false
@@ -366,6 +366,85 @@ def focusTest : IO Bool := do
       IO.eprintln "focus: a line of a closed subproof was focused"
     else
       IO.println "focus: a line of the closed subproof is refused"
+  return ok
+
+/-- Check the order the suggestions come in, on a line long enough for the order
+to matter: `x ∧ y ∧ y ∧ z` under the whole shipped law list, which offers a couple
+of hundred steps from nine places.
+
+`Doc.rank` is a heuristic, so what is checked is not which step is first but that
+the order really is the order the rule describes: the keys never go backwards
+(applicable before unconstrained, then the more specific place, then fewer
+unconstrained variables, then the shorter line), ranking the ranked list changes
+nothing — which is what it means for the order to be total and the sort stable —
+and asking twice gives the same list, since a user's `apply #N` has to mean the
+same thing the second time they look. One concrete consequence is checked too:
+`x ∧ y ∧ z`, the fold no whole-line rewrite and no single operand can make, leads
+the steps offered on a *run* of operands — it writes the shortest line any run
+can, and its run is shorter than the two that overlap it. -/
+def rankTest : IO Bool := do
+  let mut ok := true
+  match Parser.expr "x ∧ y ∧ y ∧ z" with
+  | .error e =>
+      IO.eprintln s!"rank: {e}"
+      return false
+  | .ok line =>
+    match Doc.steps { laws := Laws.boolean } [.start .boolean .same line] with
+    | .error e =>
+        IO.eprintln s!"rank: {e}"
+        return false
+    | .ok d =>
+      let ss := d.suggestions
+      let key := fun (s : Suggestion) =>
+        [if s.holes.isEmpty then 0 else 1, s.part.rank, s.holes.length, s.result.size]
+      -- Lexicographic ≤ on those keys, and whether a list of them ever goes back.
+      let rec le : List Nat → List Nat → Bool
+        | [], _ => true
+        | _, [] => false
+        | a :: as, b :: bs => if a == b then le as bs else a < b
+      let keys := ss.map key
+      let backwards := (List.range keys.length).filter fun i =>
+        match keys[i]?, keys[i + 1]? with
+        | some a, some b => !le a b
+        | _, _ => false
+      if backwards.isEmpty then
+        IO.println s!"rank: the {ss.length} suggestions for x ∧ y ∧ y ∧ z are in \
+          ranking order"
+      else
+        ok := false
+        IO.eprintln s!"rank: the order goes backwards after suggestion \
+          {String.intercalate ", " (backwards.map toString)}"
+      if Doc.rank ss == ss && d.suggestions == ss then
+        IO.println "rank: ranking the ranked list changes nothing, and asking twice \
+          gives the same list"
+      else
+        ok := false
+        IO.eprintln "rank: ranking the ranked list is not the ranked list"
+      -- Applicable before unconstrained is the key a user sees most: the greyed
+      -- rows are the tail of the list and nothing applicable hides among them.
+      let blocked := ss.dropWhile (·.holes.isEmpty)
+      if blocked.all (fun s => !s.holes.isEmpty) then
+        IO.println s!"rank: every one of the {ss.length - blocked.length} applicable \
+          steps comes before all {blocked.length} that leave a variable free"
+      else
+        ok := false
+        IO.eprintln "rank: an applicable suggestion comes after an unconstrained one"
+      -- The fold of the middle two conjuncts is the first step offered at a *run*
+      -- of operands, because it is the shortest line any run can write. A smaller
+      -- run comes before a larger one, so it also beats every step on `0:3` and
+      -- `1:3`, which overlap it.
+      match (ss.filter fun s => s.part.rank ≥ 2).head? with
+      | some s =>
+          if s.result.render == "x ∧ y ∧ z" && s.part.render == "1:2" then
+            IO.println "rank: the fold of the run y ∧ y leads the steps on a run \
+              of operands, ahead of the longer runs that overlap it"
+          else
+            ok := false
+            IO.eprintln s!"rank: the first step on a run is ‘{s.result.render}’ at \
+              {s.part.render}, not x ∧ y ∧ z at 1:2"
+      | none =>
+          ok := false
+          IO.eprintln "rank: no step on a run of operands is offered"
   return ok
 
 /-- Check the click path a window takes to zoom in, through the same request
@@ -539,10 +618,11 @@ def apiTest : IO Bool := do
 that the law list survives being written out and read back, that the law file
 on disk is the one compiled in, that every demonstration script is the command
 list `Netty.Replay` checks in Lean and still proves what it claims, that every
-suggestion the law list offers is a sound step, that the focus can land on an
-outer line through the request service, that a click can zoom in to every part of
-a line through it — the runs of operands as well as the single ones — and that the
-display collapses reach it too. -/
+suggestion the law list offers is a sound step, that the suggestions come in the
+order `Doc.rank` describes, that the focus can land on an outer line through the
+request service, that a click can zoom in to every part of a line through it — the
+runs of operands as well as the single ones — and that the display collapses reach
+it too. -/
 def selftest : IO Bool := do
   let mut ok := true
   let bad := Laws.boolean.filter fun l => !l.isTautology
@@ -594,6 +674,7 @@ def selftest : IO Bool := do
         if r.ok then IO.println s!"demo {name}: script agrees with Netty.Replay, and proved"
         else ok := false
   if !(← matchTest) then ok := false
+  if !(← rankTest) then ok := false
   if !(← focusTest) then ok := false
   if !(← zoomTest) then ok := false
   if !(← collapseTest) then ok := false

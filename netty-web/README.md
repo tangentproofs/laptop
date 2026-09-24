@@ -101,15 +101,23 @@ neither is checked in.
 ## What it does not do yet
 
 The kernel's own residuals are listed in `.sci/netty-plan.md` and are visible
-here: a law applies to the whole line and to each of its main operands, but not
-to deeper subterms or to a contiguous segment of an association. There is no ML
-ranking of the suggestions, no VS Code webview, and no editing of law files from
-the window — laws are files, and `NETTY_CMD` is how to add one.
+here: a law applies to the whole line, to each of its main operands and to each
+contiguous run of them, but not to deeper subterms — those are reached by zooming
+in. The pane does not yet show *which* part a suggestion would rewrite, though the
+kernel knows. There is no ML ranking of the suggestions, no VS Code webview, and
+no editing of law files from the window — laws are files, and `NETTY_CMD` is how
+to add one.
 
 Matching is modulo associativity, symmetry and the identity element, so the
-suggestion list is long: a law reads a line every way those three allow, and
-each way is a suggestion of its own. The readings that need no rearrangement
-come first.
+suggestion list is long: a law reads a line every way those three allow, and each
+way is a suggestion of its own. The kernel *ranks* it (`Doc.rank`) and the window
+draws that order without re-sorting, so `apply #N` and the keys `0`–`9` are the
+ranked positions. The order is: the ones that can be taken before the greyed ones
+that leave a law variable free; then the steps on the whole line, then on a single
+operand, then on the shorter runs of operands; then, among the greyed ones, the
+fewest free variables; then the shorter line a step writes, so a fold comes before
+the padding of the same law; and last the law file's own order, which is the part
+of it you write yourself.
 
 The document's two display collapses *are* done, in the kernel: a subproof that
 is a single law application is drawn as its parent line with the law's name

@@ -74,6 +74,22 @@ zoom out — writes the very line the one-step site rewrite writes, and `Part` i
 the single place that says what a part *is*. `Part.whole` is refused: it is the
 level one is already on. Deeper positions are still reached by zooming in again.
 
+## Ranking the suggestions
+
+Every widening of matching has made the list longer: modulo associativity,
+symmetry and the identity element, then every main operand and every contiguous
+segment of an association as a place a law may be applied to. `Doc.rank` puts the
+list in order, by a heuristic that is written down rather than learned, so that
+the same line and the same laws always give the same list and a number a user
+reads off the pane means the same thing the next time. Most important key first:
+applicable before unconstrained, then the more specific place (the whole line,
+the single operands, the shorter runs, the longer runs), then fewer unconstrained
+variables, then the shorter line it writes, then the order the law file itself is
+in. `Doc.rank` has the whole rule and the reason for each part of it. Nothing
+there decides whether a step is *sound* — every suggestion in the list is one the
+kernel would take — so the order is free to be a guess about usefulness and
+nothing more.
+
 ## Focus
 
 There is always exactly one focus, just after the line `Doc.focus`. Moving it
@@ -356,6 +372,16 @@ def zoomable : Part → Bool
   | whole => false
   | _ => true
 
+/-- How specific this part is, as a number to sort by: the whole line is `0`, a
+single main operand `1`, and a run of operands its own length. So the whole line
+comes before the operands, the operands before the runs, and a shorter run before
+a longer one — smaller means more specific, and more specific comes first
+(`Doc.rank`). -/
+def rank : Part → Nat
+  | whole => 0
+  | operand _ => 1
+  | segment _ len => len
+
 end Part
 
 /-- A line of the proof. `why` names what produced it: a law's name, or one of
@@ -425,6 +451,12 @@ structure Suggestion where
   result : Expr
   /-- Law variables the match left unconstrained. -/
   holes : List String
+  /-- The place of the line the step rewrites: the whole line, one main operand,
+  or a contiguous segment of the association. Two places can write one and the
+  same line, and then the step is offered once, credited to the first of them
+  (`Doc.suggestions`); what this field is for is the *order* the suggestions come
+  in (`Doc.rank`). -/
+  part : Part
   deriving Repr, DecidableEq, Inhabited
 
 /-- A place in the line before the focus where a law may be applied: the whole
@@ -517,6 +549,33 @@ structure Outcome where
 /-- Keep the first occurrence of each element. -/
 private def dedup {α} [BEq α] (xs : List α) : List α :=
   (xs.foldl (fun acc x => if acc.contains x then acc else x :: acc) []).reverse
+
+/-- Keep the first element with each `key`. -/
+private def dedupBy {α β} [BEq β] (key : α → β) (xs : List α) : List α :=
+  (xs.foldl (fun acc x => if acc.any (fun y => key y == key x) then acc else x :: acc) []).reverse
+
+/-- Put `k` into a list of numbers that is already sorted, before the first one
+it is not greater than — so an equal number already there stays before it. -/
+private def insertNat (k : Nat) : List Nat → List Nat
+  | [] => [k]
+  | j :: js => if k ≤ j then k :: j :: js else j :: insertNat k js
+
+/-- Sort a list of numbers, smallest first. -/
+private def sortNats : List Nat → List Nat
+  | [] => []
+  | k :: ks => insertNat k (sortNats ks)
+
+/-- Reorder `xs` so that a smaller `key` comes first, keeping the order `xs`
+already had among elements of equal key.
+
+It is one pass over `xs` per distinct key value, which is a handful wherever it
+is used here, and — unlike a comparison sort — it is plainly structurally
+recursive, which is what lets `decide` run a whole session inside Lean's kernel
+(`Netty.Replay`). Being stable is what lets several of these compose into one
+order: run for the least important key first and the most important key last, and
+each pass keeps what the passes before it decided. -/
+private def stableBy {α} (key : α → Nat) (xs : List α) : List α :=
+  (sortNats (dedup (xs.map key))).flatMap fun k => xs.filter fun x => key x == k
 
 /-- `Option` to `Except`, so that the command transitions can explain
 themselves. -/
@@ -617,6 +676,46 @@ def rewriteAt (f : Frame) (line : Expr) (s : Site) (o : BinOp) (r : Expr) :
         if s.pos == .neutral || rel.dir == .same then ⟨.same, false⟩ else ⟨f.dir, false⟩
       return (out.op f.ty, e)
 
+/-- Put the suggestions in the order a window offers them, and `apply #N`
+numbers them in.
+
+It is a heuristic, and it is written down here rather than learned: the same line
+and the same laws always give the same list, so a number a user reads off the
+pane means the same thing the next time they see it. Most important key first:
+
+1. **Applicable before unconstrained.** A suggestion whose match left a law
+   variable free cannot be applied until the variable is supplied, so every
+   suggestion that *can* be taken comes before every suggestion that cannot.
+   This is the split the pane already drew, as greyed rows at the end.
+2. **The more specific place first** (`Part.rank`): the whole line, then the
+   single main operands, then the contiguous runs of operands, shortest run
+   first. A step on the whole line is the one a reader of the proof sees as one
+   step; a step on a run of three operands is the most surgical thing the kernel
+   offers and the least likely to be what was meant.
+3. **Fewer unconstrained variables first.** Among the suggestions that cannot yet
+   be taken, the one that needs one variable supplied is nearer to being a step
+   than the one that needs three.
+4. **The shorter line first.** A calculation is usually looking for the step that
+   makes the line smaller — `x ∧ y ∧ y ∧ z = x ∧ y ∧ z` rather than
+   `x ∧ y ∧ y ∧ z = ¬¬(x ∧ y ∧ y ∧ z)` — and every law that can fold a line has
+   a variant that can pad it, so without this key the padding buries the folding.
+5. **Then the order the suggestions were made in**, which is: the context's laws
+   before the loaded ones, the law list's own order within that, the variants of
+   a law in order, and the readings of one variant in the order `Expr.matchAll`
+   finds them (the ones needing no rearrangement first). So the last word belongs
+   to the law file, which is the one part of the order a user writes themselves.
+
+Nothing here decides *whether* a step is sound — every suggestion in the list is
+one the kernel would take — so the order is free to be a guess about usefulness
+and nothing more. -/
+def rank (ss : List Suggestion) : List Suggestion :=
+  -- Least important key first: each pass keeps the order the passes before it
+  -- left, so the last pass has the first word.
+  stableBy (fun s => if s.holes.isEmpty then 0 else 1)
+    (stableBy (fun s => s.part.rank)
+      (stableBy (fun s => s.holes.length)
+        (stableBy (fun s => s.result.size) ss)))
+
 /-- The suggestions for the line after the focus: for every place of the line
 before the focus (`Doc.sites`) and every variant of every law in force whose
 connective that place's direction allows, the result of matching the place
@@ -627,14 +726,14 @@ its association, so a law applies "to a part, as a result of minimization" as
 well as to the line entire: `a ∨ a = a` takes `x ∧ (y ∨ y)` to `x ∧ y` in one
 step, where before it took a zoom in and a zoom out, and `a ∧ a = a` takes
 `x ∧ y ∧ y ∧ z` to `x ∧ y ∧ z`, which no rewrite of the whole line or of a single
-operand can reach. Whole-line suggestions come first, then the single operands,
-then the segments.
+operand can reach.
 
 Matching is modulo associativity, so one variant can match one place in several
 ways — `a ∧ b ⇒ a` reads `x ∧ y ∧ z` as `x ∧ (y ∧ z)` and as `(x ∧ y) ∧ z` —
-and each way is a suggestion of its own. Suggestions that leave law variables
-unconstrained come last, and a suggestion that would merely repeat the line —
-`a ⇐ a` from reflexivity, say — is dropped. -/
+and each way is a suggestion of its own. A suggestion that would merely repeat
+the line — `a ⇐ a` from reflexivity, say — is dropped, two places that write one
+and the same line are offered once, and what is left is put in the order
+`Doc.rank` describes. -/
 def suggestions (d : Doc) : List Suggestion :=
   match d.frame?, d.focusLine? with
   | some f, some line =>
@@ -646,10 +745,14 @@ def suggestions (d : Doc) : List Suggestion :=
               match rewriteAt f line.expr site v.op (v.rhs.instantiate σ) with
               | some (o, r) =>
                   if r == line.expr then none
-                  else some { law := v.law, op := o, result := r, holes := r.mvars }
+                  else some { law := v.law, op := o, result := r, holes := r.mvars,
+                              part := site.part }
               | none => none
-      let ds := dedup raw
-      ds.filter (·.holes.isEmpty) ++ ds.filter (fun s => !s.holes.isEmpty)
+      -- Two places can write one line: rewriting `x ∧ y` inside `x ∧ y ∧ z` and
+      -- rewriting the whole line can come to the same thing. That is one step,
+      -- not two, so it is offered once — credited to the first place that made
+      -- it, which `Doc.sites` visits in the order `Doc.rank` prefers.
+      rank (dedupBy (fun s => (s.law, s.op, s.result)) raw)
   | _, _ => []
 
 /-- Write a suggestion into the focus. When the line already below the focus is
