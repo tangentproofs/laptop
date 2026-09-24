@@ -66,6 +66,8 @@ A script is one command per line; ‘#’ begins a comment.
   apply NAME                                    take a law's suggestion
   apply NAME : CONNECTIVE EXPRESSION            …when the law offers several
   apply #N                                      take the N-th suggestion
+  apply … with x := E, y := F                   …supplying the law variables the
+                                                match left unconstrained
   direct CONNECTIVE EXPRESSION                  type the next line in
   zoom N                                        zoom in to the N-th operand
   zoom S:L                                      …or to the L operands from the
@@ -843,6 +845,101 @@ def conditionalTest : IO Bool := do
       IO.eprintln "conditional: the boolean answer has no line 1"
   return ok
 
+/-- Check the document's small dialog box through the request service the window
+talks to: a suggestion that leaves a law variable free is offered, refused while
+the variable is missing, and taken once it is supplied.
+
+Inside `(x ⇒ y) ⇒ (x ∧ z ⇒ y ∧ z)`, where zooming in has put `x ⇒ y` in the
+context, monotonicity offers to rewrite the operand `x ∧ z` and is greyed: nothing
+on the line says what `b` is. `apply #N` must be refused, `apply #N with b := y`
+must go through, and because the premise is then `x ⇒ y` — which the context
+settles — it must leave no gap. On a bare line, where nothing settles it, the same
+binding must still leave the warning sign and claim nothing. -/
+def dialogTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean } }
+  let run := fun (s : Session) (arg : String) => Api.respond s { op := "cmd", arg := arg }
+  let mut s := fresh
+  for arg in ["start ⇐ (x ⇒ y) ⇒ (x ∧ z ⇒ y ∧ z)", "zoom 1"] do
+    let (s', r) := run s arg
+    s := s'
+    if !r.ok then
+      ok := false
+      IO.eprintln s!"dialog: ‘{arg}’: {r.error}"
+  let st := Api.stateView s
+  match st.suggestions.filter fun g =>
+      g.law == "monotonic" && g.result == "b ∧ z ⇒ y ∧ z" with
+  | [g] =>
+      if g.holes == ["b"] && g.premise == "x ⇒ b" then
+        IO.println "dialog: a monotonicity reading is offered, waiting for b"
+      else
+        ok := false
+        IO.eprintln s!"dialog: that reading leaves {g.holes.length} free and needs \
+          ‘{g.premise}’"
+      -- Refused while `b` is missing …
+      let (_, bare) := run s s!"apply #{g.index}"
+      if bare.ok then
+        ok := false
+        IO.eprintln "dialog: a suggestion with a free variable was applied"
+      else
+        IO.println "dialog: and refused until it is given"
+      -- … and a binding for a variable it has not got is refused too.
+      let (_, stray) := run s s!"apply #{g.index} with q := y"
+      if stray.ok then
+        ok := false
+        IO.eprintln "dialog: a binding for a variable the suggestion has not was taken"
+      else
+        IO.println "dialog: a binding it has no variable for is refused"
+      -- With the binding it is a step, and the context settles what it needs.
+      let (_, bound) := run s s!"apply #{g.index} with b := y"
+      if !bound.ok then
+        ok := false
+        IO.eprintln s!"dialog: ‘apply #{g.index} with b := y’: {bound.error}"
+      else
+        let after := bound.state
+        let wrote := after.lines.any fun l => l.expr == "y ∧ z ⇒ y ∧ z"
+        if wrote && after.lines.all (fun l => !l.gap) then
+          IO.println "dialog: supplying b takes the step, and the context settles \
+            the premise it needs"
+        else
+          ok := false
+          IO.eprintln s!"dialog: after the binding the line was \
+            {if wrote then "written" else "not written"} and there \
+            {if after.lines.all (fun l => !l.gap) then "is no gap" else "is a gap"}"
+  | gs =>
+      ok := false
+      IO.eprintln s!"dialog: {gs.length} monotonicity readings write ‘b ∧ z ⇒ y ∧ z’, not one"
+  -- The same law and binding on a bare line: nothing settles the premise, so the
+  -- step still leaves the warning sign and the proof still claims nothing.
+  let (u, r0) := run fresh "start ⇒ x ∧ z"
+  if !r0.ok then
+    ok := false
+    IO.eprintln s!"dialog: ‘start ⇒ x ∧ z’: {r0.error}"
+  match (Api.stateView u).suggestions.filter fun g =>
+      g.law == "monotonic" && g.result == "b ∧ z" with
+  | [g] =>
+      let (_, bound) := run u s!"apply #{g.index} with b := y"
+      if !bound.ok then
+        ok := false
+        IO.eprintln s!"dialog: on a bare line: {bound.error}"
+      else
+        let after := bound.state
+        match after.lines.find? (fun l => l.index == 0) with
+        | some l =>
+            if l.gap && l.premise == "x ⇒ y" && !after.proved then
+              IO.println "dialog: with nothing to settle it the step still leaves the \
+                premise as a gap"
+            else
+              ok := false
+              IO.eprintln s!"dialog: line 0 has gap {l.gap} and premise ‘{l.premise}’"
+        | none =>
+            ok := false
+            IO.eprintln "dialog: the answer has no line 0"
+  | gs =>
+      ok := false
+      IO.eprintln s!"dialog: {gs.length} monotonicity readings write ‘b ∧ z’ on a bare line"
+  return ok
+
 /-- Check that a gap is carried out of the subproof that holds it, through the
 request service the window talks to.
 
@@ -1017,6 +1114,7 @@ def selftest : IO Bool := do
   if !(← collapseTest) then ok := false
   if !(← gapTest) then ok := false
   if !(← conditionalTest) then ok := false
+  if !(← dialogTest) then ok := false
   if !(← siteTest) then ok := false
   if !(← apiTest) then ok := false
   return ok

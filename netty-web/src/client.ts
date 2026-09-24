@@ -326,6 +326,44 @@ function contextPane(s: StateView | null): HTMLElement {
 }
 
 /** One suggestion: what a law would write next. */
+/** The document's small dialog box: one field per law variable the match left
+ * unconstrained, and a button that sends `apply #N with x := …`. It is opened by
+ * clicking the greyed row itself — the row stays greyed, because the step is not
+ * takeable until the fields are filled — and it is a sibling of the row rather
+ * than a child, a form inside a button being no form at all. */
+function holeDialog(g: SuggestionView, row: HTMLElement): void {
+  const open = row.nextElementSibling;
+  if (open !== null && open.classList.contains('holes')) {
+    open.remove();
+    return;
+  }
+  document.querySelectorAll('.holes').forEach((f) => f.remove());
+  const form = el('form', { class: 'holes' });
+  const fields = g.holes.map((h) => {
+    const input = el('input', {
+      type: 'text', name: h, size: '10', autocomplete: 'off',
+      'aria-label': `what ${h} is`, placeholder: 'expression',
+    });
+    form.append(el('label', {}, `${h} :=`, input));
+    return [h, input] as const;
+  });
+  form.append(el('button', { type: 'submit', class: 'go' }, 'apply'));
+  form.append(el('button', { type: 'button', class: 'drop' }, 'cancel'));
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const given = fields.filter(([, i]) => i.value.trim() !== '');
+    if (given.length !== fields.length) return;
+    const withClause = given.map(([h, i]) => `${h} := ${i.value.trim()}`).join(', ');
+    void cmd(`apply #${g.index} with ${withClause}`);
+  });
+  form.querySelector('.drop')?.addEventListener('click', () => form.remove());
+  form.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') { form.remove(); row.focus(); }
+  });
+  row.after(form);
+  fields[0]?.[1].focus();
+}
+
 function suggestionRow(g: SuggestionView): HTMLElement {
   const blocked = g.holes.length > 0;
   // A conditional law whose premise nothing in force settles is still a step,
@@ -335,12 +373,12 @@ function suggestionRow(g: SuggestionView): HTMLElement {
   const row = el('button', {
     class: 'suggestion' + (blocked ? ' blocked' : '') + (gappy ? ' gappy' : ''),
     title: blocked
-      ? `${g.holes.join(', ')} unconstrained: this law needs more than the line to settle it`
+      ? `${g.holes.join(', ')} unconstrained: this law needs more than the line to \
+settle it — click to say what ${g.holes.join(', ')} ${g.holes.length === 1 ? 'is' : 'are'}`
       : gappy
         ? `apply #${g.index} — ${g.law}, leaving ${g.premise} to prove`
         : `apply #${g.index} — ${g.law}`,
   });
-  if (blocked) row.setAttribute('disabled', 'disabled');
   row.append(el('span', { class: 'gutter' }, String(g.index)));
   row.append(el('span', { class: 'margin' }, g.op));
   row.append(el('span', { class: 'formula' }, g.result));
@@ -348,7 +386,8 @@ function suggestionRow(g: SuggestionView): HTMLElement {
     blocked ? `${g.law} (${g.holes.join(', ')}?)`
       : gappy ? `${g.law} ! ${g.premise}`
         : g.law));
-  if (!blocked) row.addEventListener('click', () => void cmd(`apply #${g.index}`));
+  row.addEventListener('click', () =>
+    blocked ? holeDialog(g, row) : void cmd(`apply #${g.index}`));
   // Pointing at a suggestion — or reaching it with the keyboard — lights up the
   // part of the line it would rewrite. A disabled row gets the listeners too:
   // the browser sends it no pointer events, but its neighbours' leaving clears
@@ -457,6 +496,11 @@ function keys(e: KeyboardEvent): void {
   if (/^[0-9]$/.test(e.key)) {
     const g = s.suggestions[Number(e.key)];
     if (g !== undefined && g.holes.length === 0) void cmd(`apply #${g.index}`);
+    else if (g !== undefined) {
+      // A row with a free variable wants the dialog, not a refusal.
+      const row = document.querySelectorAll<HTMLElement>('.suggestion')[Number(e.key)];
+      if (row !== undefined) holeDialog(g, row);
+    }
     e.preventDefault();
   } else if (e.key === 'u') {
     if (s.canUndo) void cmd('undo');

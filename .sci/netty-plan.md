@@ -91,11 +91,10 @@ Everything the window made visible is done (2026-09-23/24): applying a law to a 
 anywhere-focus, the display collapses, matching modulo symmetry and an identity element, contiguous
 association segments as sites, zooming into one, clicking one in the window, ranking the suggestion
 list, the gap-on-splice justification, highlighting the site a suggestion would rewrite, and going
-back into a closed level, and conditional laws at both levels. What is left is the named chunks of the
-grammar below, and the two things the kernel says out loud that it cannot do: supply a law variable by
-hand (the document's small dialog box, which is what would make the shipped monotonicity and
-transitivity laws usable as conditional steps), and check a number law by anything better than small
-integers. Phase 2e (LoopBridge / concurrency) stays parked.
+back into a closed level, conditional laws at both levels, and the small dialog box that supplies a law
+variable by hand. What is left is the named chunks of the grammar below, and the one thing the kernel
+still says out loud that it cannot do: check a number law by anything better than small integers. Phase
+2e (LoopBridge / concurrency) stays parked.
 
 ### Kernel residuals to pick up alongside or after the UI
 
@@ -134,11 +133,14 @@ integers. Phase 2e (LoopBridge / concurrency) stays parked.
   it is not, in which case the step leaves the document's warning sign with the premise recorded beside
   it. Nothing that needs nothing is buried: conditional readings come last in `Law.variants`, so a
   dedup keeps the reading with no premise, and `Doc.rank` puts every step that needs nothing first.
-- What no conditional reading of the shipped *boolean* list can do is be *applied*: monotonicity and
-  transitivity relate the line to a third formula the line does not determine, so matching always
-  leaves a variable free. Supplying one by hand is the document's small dialog box, and the kernel
-  does not have it. The boolean readings that can be taken are the *context's*, a context law being
-  ground.
+- A suggestion that leaves a law variable free is taken by *supplying* it, and only by supplying it
+  (2026-09-24, item 20): `Cmd.apply` and `Cmd.applyNamed` carry a `Subst`, the script says
+  `apply … with b := y`, and the window opens one field per free variable when the greyed row is
+  clicked. The kernel never guesses: a missing binding is refused as before, a binding for a variable
+  the suggestion has not got is refused too, and the premise is asked again after the bindings, because
+  supplying a variable can turn a premise nothing could settle into one the context settles. That is
+  what makes monotonicity and transitivity — which relate the line to a third formula the line does not
+  determine — usable at all.
 - `Netty/laws/number.laws` is a small example list, not §11.3.2, and it is not *decided* the way the
   boolean list is: `Law.holdsOnInts` checks each law on the integers `-2 … 2`, which a law false in
   general can pass. Number laws are trusted as transcribed; arithmetic stays out of scope.
@@ -618,6 +620,50 @@ integers. Phase 2e (LoopBridge / concurrency) stays parked.
    proof under the full law list.
    Not done here: supplying a law variable by hand, a better check for number laws, ML ranking,
    distributivity, arithmetic or normalisation.
+
+20. [x] **The small dialog box: supplying a law variable by hand**, 2026-09-24 on main. Item 19 measured
+   that every conditional reading of the shipped *boolean* laws is greyed, because a monotonicity or
+   transitivity law relates the line to a third formula the line does not determine:
+   `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` read from `a ∧ c` must be told what `b` is. The document's answer is a
+   small dialog box, and this round is it — as a command, as a script clause, and as a form in the
+   window.
+   `Cmd.apply` and `Cmd.applyNamed` carry a `Subst`, and `Doc.applySuggestion` takes one and
+   instantiates the reading with it before taking the step. There is no new kind of suggestion and no
+   new argument for soundness: matching pinned some of the law's variables, the law holds for *every*
+   instantiation of the rest, so any expression may stand in their place. What the bindings change is
+   which line the step writes and which premise it needs — and **the premise is asked again after
+   them**, because supplying a variable can turn a premise the laws in force could not settle into one
+   they can. That is what makes the worked example work.
+   The kernel still never guesses. A hole left unbound is refused as it always was; a binding for a
+   variable the suggestion has not got is refused rather than ignored, because that is a typo and not a
+   step; and `apply NAME : …` with bindings matches on the line the suggestion writes *after* they are
+   supplied, which is the line a user would name.
+   The script clause is `apply #N with x := E, y := F`, and `apply NAME : CONN E with …` too. `with` is
+   a word of the `apply` command, so a proof about a variable actually named `with` cannot use the
+   clause; the clause is taken off before the `:` of `apply NAME : …` is looked for, so a binding's
+   `:=` is never mistaken for that colon. The bindings are separated by `,`, which no expression
+   contains. It is one line, so the window sends it as `{"op":"cmd","arg":"…"}` and no request changed.
+   In `netty-web/`, clicking a greyed row opens `holeDialog`: one field per free variable, `apply` and
+   `cancel`, Escape to close, and the same dialog on the number-key shortcut. The row **stays greyed**
+   until the fields are filled, because the step is not takeable until then; the form is a sibling of
+   the row rather than a child, a form inside a button being no form at all. One CSS block, no new
+   request, no change to the three panes.
+   The worked example is monotonicity proving itself, which is the honest one to reach for: inside
+   `(x ⇒ y) ⇒ (x ∧ z ⇒ y ∧ z)`, zooming in puts `x ⇒ y` in the context; the monotonicity reading of the
+   operand `x ∧ z` is offered and greyed, waiting for `b`; supplying `b := y` writes
+   `y ∧ z ⇒ y ∧ z`, and the premise it then needs is `x ⇒ y`, which the context settles — so the step
+   leaves no gap and the proof goes through. On a bare line, where nothing settles it, the same law and
+   the same binding still leave the warning sign with the premise recorded beside it, and the proof
+   still claims nothing.
+   Witnessed in Lean, all by `decide`, all `propext` only: `dialog_rows_are_greyed_until_bound` (both
+   readings at that operand, each naming the variable it waits for and the premise it would then need,
+   with `b` still in it), `dialog_proves` and `dialog_complete`, `dialog_needs_the_binding` (the same
+   command without the binding finds nothing), `dialog_refuses_a_stray_binding`, and
+   `dialogGappy_leaves_the_premise_as_a_gap` / `dialogGappy_proves_nothing` for the undischarged case.
+   `netty --selftest` gained `dialogTest`, which drives all five of those through the request service
+   the window talks to, and the `/api` path was smoke tested against the running server.
+   Not done here: a better check for number laws, ML ranking, distributivity, arithmetic or
+   normalisation, and the named grammar chunks.
 
 ## Then grow language ↔ Netty grammar
 

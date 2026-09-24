@@ -390,14 +390,13 @@ def conditionalRows (d : Doc) : Bool × Bool :=
   let cond := d.suggestions.filter (·.premise.isSome)
   (!cond.isEmpty, cond.all fun s => !s.holes.isEmpty)
 
-/-- Every conditional reading the *shipped boolean* laws offer is greyed. A
-monotonicity or transitivity law relates the line to a third formula that the line
-does not determine — `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` read from `a ∧ c` must be told
-what `b` is — so matching leaves a variable free and the kernel will not apply it.
-Supplying it by hand is the document's small dialog box, which the kernel does not
-have; until it does, these readings are rows that say what the law would do and
-what it would need. So the applicable list is the one it was before the reading
-existed, which is the whole of the duplication guard's promise. -/
+/-- Every conditional reading the *shipped boolean* laws offer is greyed until a
+variable is supplied. A monotonicity or transitivity law relates the line to a
+third formula that the line does not determine — `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` read
+from `a ∧ c` must be told what `b` is — so matching leaves a variable free and the
+kernel will not apply it unasked. That is the whole of the duplication guard's
+promise: the list a user reads down is the list they read before, and a row that
+needs telling says so. Saying it is the dialog box below (`Replay.dialog`). -/
 theorem shipped_boolean_conditional_readings_are_all_greyed :
     ((session.steps
         [.start .boolean .down (bin .and (var "x") (bin .and (var "y") (var "z")))]).toOption.map
@@ -482,6 +481,101 @@ theorem ponensGappy_leaves_the_premise_as_a_gap :
 not a theorem. The gap is not a formality: it is the difference between this and
 `ponens`. -/
 theorem ponensGappy_proves_nothing : provedIn ponensSession ponensGappy = none := by decide
+
+/-! ### Supplying a law variable by hand
+
+Item 19 measured that every conditional reading of the shipped boolean laws is
+greyed: a monotonicity or transitivity law relates the line to a third formula the
+line does not determine, so matching leaves a variable free and the kernel will
+not apply it. The document's answer is a small dialog box, and this is it as a
+command: `Cmd.apply` and `Cmd.applyNamed` carry a `Subst`, and
+`Doc.applySuggestion` instantiates the reading with it before taking the step.
+
+Supplying a variable is not a new kind of step and needs no new argument for
+soundness. Matching pinned some of the law's variables; the law holds for *every*
+instantiation of the rest; so any expression may stand in their place. What the
+bindings change is only which line the step writes and which premise it needs —
+and the premise is asked again afterwards, because supplying a variable can turn
+a premise the laws in force could not settle into one they can. That is what
+happens here. -/
+
+/-- The three shipped laws this proof needs, and nothing else. -/
+def dialogSession : Doc :=
+  { laws := Laws.boolean.filter fun l =>
+      l.name == "monotonic" || l.name == "reflexive" || l.name == "base" }
+
+/-- `(x ⇒ y) ⇒ (x ∧ z ⇒ y ∧ z)`: monotonicity of `∧`, which is one of the laws
+in force. -/
+def monoGoal : Expr :=
+  bin .imp (bin .imp (var "x") (var "y"))
+    (bin .imp (bin .and (var "x") (var "z")) (bin .and (var "y") (var "z")))
+
+/-- Zoom in to the consequent, where `x ⇒ y` becomes context. There the
+monotonicity reading offers to rewrite the operand `x ∧ z`, and it is greyed:
+nothing on the line says what `b` is, and the premise it would need is stated with
+`b` still in it. Supplying `b := y` by hand makes it a step — and the premise is
+then `x ⇒ y`, which the context settles, so it leaves no gap. -/
+def dialog : List Cmd :=
+  [ .start .boolean .up monoGoal,
+    .zoomIn (.operand 1),
+    .applyNamed "monotonic"
+      (some (.rimp, bin .imp (bin .and (var "y") (var "z")) (bin .and (var "y") (var "z"))))
+      [("b", var "y")],
+    .applyNamed "reflexive" (some (.eq, .top)),
+    .zoomOut,
+    .applyNamed "base" (some (.eq, .top)) ]
+
+/-- Before the binding, the two readings at that operand are both greyed, and each
+says which variable it is waiting for and what it would then need. -/
+theorem dialog_rows_are_greyed_until_bound :
+    ((dialogSession.steps (dialog.take 2)).toOption.map fun d =>
+      (d.suggestions.filter fun s => s.law == "monotonic" && s.part == .operand 0).map
+        fun s => (s.holes, s.result, s.premise))
+      = some
+        [(["b"], bin .imp (bin .and (mvar "b") (var "z")) (bin .and (var "y") (var "z")),
+          some (bin .imp (var "x") (mvar "b"))),
+         (["b"], bin .imp (bin .and (mvar "b") (var "x")) (bin .and (var "y") (var "z")),
+          some (bin .imp (var "z") (mvar "b")))] := by decide
+
+/-- With the binding the proof goes through: the greyed row became a step, and the
+premise it needed was settled by the context, so there is no gap. -/
+theorem dialog_proves : provedIn dialogSession dialog = some monoGoal := by decide
+
+theorem dialog_complete :
+    ((dialogSession.steps dialog).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
+/-- Without the binding the very same command finds nothing: a suggestion that
+leaves a variable free is not one `apply` will take, which is what it was before
+and what keeps the dialog box honest — the kernel never guesses. -/
+theorem dialog_needs_the_binding :
+    ((dialogSession.steps (dialog.take 2 ++
+      [.applyNamed "monotonic"
+        (some (.rimp, bin .imp (bin .and (var "y") (var "z")) (bin .and (var "y") (var "z"))))
+        []])).toOption).isSome = false := by decide
+
+/-- A binding for a variable the suggestion has not got is refused too, rather
+than quietly ignored: it is a typo, not a step. -/
+theorem dialog_refuses_a_stray_binding :
+    ((dialogSession.steps (dialog.take 2)).toOption.bind fun d =>
+      (d.suggestions.filter fun s => s.law == "monotonic" && !s.holes.isEmpty).head?.map
+        fun s => (d.applySuggestion s [("q", var "y")]).toOption.isSome)
+      = some false := by decide
+
+/-- The premise path is unchanged. On a bare line, with nothing in force to settle
+it, the same law and the same binding still write the line the law licenses and
+still leave the document's warning sign, with the premise the binding made ground
+recorded beside it. -/
+def dialogGappy : List Cmd :=
+  [ .start .boolean .down (bin .and (var "x") (var "z")),
+    .applyNamed "monotonic" (some (.imp, bin .and (var "y") (var "z"))) [("b", var "y")] ]
+
+theorem dialogGappy_leaves_the_premise_as_a_gap :
+    ((dialogSession.steps dialogGappy).toOption.map fun d =>
+      (d.gaps, d.note 0, d.lines[0]?.bind Line.premise))
+      = some ([0], "!", some (bin .imp (var "x") (var "y"))) := by decide
+
+theorem dialogGappy_proves_nothing : provedIn dialogSession dialogGappy = none := by decide
 
 /-! ### A gap, and closing it -/
 

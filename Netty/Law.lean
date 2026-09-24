@@ -311,12 +311,13 @@ answer that, and neither is new:
 * `Doc.rank` puts every step that needs nothing before every step that leaves a
   gap, so the pane a user reads down is the pane they read before.
 
-As it happens nothing of the shipped boolean list becomes *applicable* by this
-reading: a monotonicity or transitivity law relates the line to a third formula
-the line does not determine, so matching always leaves a variable free and the
-kernel will not apply it. Those readings are rows that say what the law would do
-and what it would need — the document's small dialog box, which this kernel does
-not have yet. What the reading does buy at the boolean level is the *context*: a
+Nothing of the shipped boolean list becomes applicable by this reading *on its
+own*: a monotonicity or transitivity law relates the line to a third formula the
+line does not determine, so matching always leaves a variable free. Those readings
+are rows that say what the law would do and what it would need, and the way to
+take one is to say what the free variable is — the document's small dialog box,
+which `Cmd.apply`'s bindings are. What the reading buys without any of that is the
+*context*: a
 context law is ground, so when the fact a zoom in supplied is itself an
 implication whose consequent is a relation, its conditional reading has nothing
 left unconstrained and is a step that can be taken, licensed by another fact in

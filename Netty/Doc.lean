@@ -506,8 +506,9 @@ structure Doc where
   deriving Repr, DecidableEq, Inhabited
 
 /-- What the tool offers as a possible next line. `holes` are the law variables
-that matching left unconstrained — the document's "small dialog box" — which
-the kernel will not apply until they are supplied. -/
+that matching left unconstrained — the document's "small dialog box" — which the
+kernel will not apply until they are supplied. They are supplied by name, as the
+`bind` of `Cmd.apply`; the kernel never guesses one. -/
 structure Suggestion where
   /-- The name of the law it comes from. -/
   law : String
@@ -588,11 +589,15 @@ them is a pure function on the document. -/
 inductive Cmd
   /-- Enter the type, direction and first line. -/
     | start (ty : Ty) (dir : Dir) (e : Expr)
-  /-- Take the `n`-th suggestion. -/
-    | apply (n : Nat)
+  /-- Take the `n`-th suggestion, supplying the law variables the match left
+  unconstrained — the document's small dialog box. With no bindings this is the
+  command it always was. -/
+    | apply (n : Nat) (bind : Subst := [])
   /-- Take the applicable suggestion from the named law; when several apply,
-  `expect` says which by giving the line it would write. -/
-    | applyNamed (name : String) (expect : Option (BinOp × Expr))
+  `expect` says which by giving the line it would write. `bind` supplies the law
+  variables the match left unconstrained, and then `expect` is the line the
+  suggestion writes *after* they are supplied. -/
+    | applyNamed (name : String) (expect : Option (BinOp × Expr)) (bind : Subst := [])
   /-- Type the next line in directly, leaving a gap. -/
     | direct (op : BinOp) (e : Expr)
   /-- Zoom in to a part of the line before the focus: a main operand, or a
@@ -866,30 +871,46 @@ def suggestions (d : Doc) : List Suggestion :=
 /-- Write a suggestion into the focus. When the line already below the focus is
 exactly what the suggestion offers, no line is added: the suggestion justifies
 the step that was there, and the warning sign becomes the law's name. -/
-def applySuggestion (d : Doc) (s : Suggestion) : Except String Doc := do
-  if !s.holes.isEmpty then
-    throw s!"the suggestion leaves {String.intercalate ", " s.holes} unconstrained"
+def applySuggestion (d : Doc) (s : Suggestion) (bind : Subst := []) : Except String Doc := do
+  -- The bindings are the document's small dialog box: they supply the law
+  -- variables that matching left unconstrained. Supplying one is not a new kind
+  -- of step and needs no new argument for soundness — matching pinned some of
+  -- the law's variables and the law holds for *every* instantiation of the rest,
+  -- so any expression may stand in their place. All they do is instantiate.
+  for (n, _) in bind do
+    if !s.holes.contains n then
+      throw s!"this suggestion has no unconstrained variable ‘{n}’\
+        {if s.holes.isEmpty then "" else s!"; it leaves {String.intercalate ", " s.holes}"}"
+  let result := s.result.instantiate bind
+  -- A premise is asked again after the bindings, because supplying a variable can
+  -- turn a premise the laws in force could not settle into one they can.
+  let premise := (s.premise.map (·.instantiate bind)).bind fun q =>
+    if Law.settles d.allLaws q then none else some q
+  let holes := (result.mvars ++ (premise.elim [] Expr.mvars)).eraseDups
+  if !holes.isEmpty then
+    throw s!"the suggestion leaves {String.intercalate ", " holes} unconstrained; \
+      supply them by name"
   let fl ← orElseError "the proof has not been started" d.focusLine?
   -- A conditional reading whose premise the laws in force did not settle leaves
   -- the document's warning sign, on the line the step is taken from, and records
   -- the premise there: the same gap direct entry leaves, with its reason written
   -- down. A step that needs nothing clears the sign as it always did.
-  let here : Line := { fl with gap := s.premise.isSome, premise := s.premise }
+  let here : Line := { fl with gap := premise.isSome, premise := premise }
   match d.nextAtLevel d.focus with
   | some j =>
       let nl := d.lines[j]!
-      if nl.conn == some s.op && nl.expr == s.result then
+      if nl.conn == some s.op && nl.expr == result then
         return (d.withLine j { nl with why := s.law }).withLine d.focus here
       else
         -- The new line goes between, so any gap this line already carried — and
         -- what it was for — belongs to the step from the new line on.
         let line : Line :=
-          { depth := d.depth, conn := some s.op, expr := s.result, why := s.law,
+          { depth := d.depth, conn := some s.op, expr := result, why := s.law,
             gap := fl.gap, premise := fl.premise }
         return (d.withLine d.focus here).insertAfterFocus line
   | none =>
       let line : Line :=
-        { depth := d.depth, conn := some s.op, expr := s.result, why := s.law, gap := false }
+        { depth := d.depth, conn := some s.op, expr := result, why := s.law, gap := false }
       return (d.withLine d.focus here).insertAfterFocus line
 
 /-- Zoom out of the innermost level: append, to the level below, the line we
@@ -1110,17 +1131,23 @@ def step (d : Doc) : Cmd → Except String Doc
           stack := [{ ty := ty, dir := dir, start := 0 }]
           focus := 0 }
       else .error "the proof has already been started"
-  | .apply n => do
+  | .apply n bind => do
       let s ← orElseError s!"there is no suggestion {n}" d.suggestions[n]?
-      d.applySuggestion s
-  | .applyNamed name expect => do
+      d.applySuggestion s bind
+  | .applyNamed name expect bind => do
+      -- With no bindings this is what it always was: the suggestions that can be
+      -- taken as they stand. With bindings it is the suggestions whose every
+      -- unconstrained variable the bindings supply, and `expect` is then the line
+      -- the suggestion writes once they are supplied.
       let ok := d.suggestions.filter fun s =>
-        s.law == name && s.holes.isEmpty &&
+        s.law == name &&
+          (if bind.isEmpty then s.holes.isEmpty
+           else s.holes.all fun h => (bind.lookup h).isSome) &&
           (match expect with
-           | some (o, e) => s.op == o && s.result == e
+           | some (o, e) => s.op == o && s.result.instantiate bind == e
            | none => true)
       match ok with
-      | [s] => d.applySuggestion s
+      | [s] => d.applySuggestion s bind
       | [] => throw s!"no applicable suggestion from a law named ‘{name}’"
       | _ => throw s!"‘{name}’ offers {ok.length} applicable suggestions here; \
         name the line it should write, or choose one by number"

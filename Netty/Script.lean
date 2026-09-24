@@ -12,6 +12,8 @@ start [boolean|number] DIRECTION EXPRESSION   begin the proof
 apply NAME                                   take the suggestion from a law
 apply NAME : CONNECTIVE EXPRESSION           …when the law offers several
 apply #N                                     take the N-th suggestion
+apply … with x := E, y := F                  …supplying the law variables the
+                                             match left unconstrained
 direct CONNECTIVE EXPRESSION                 type the next line in (leaves a gap)
 zoom N                                       zoom in to the N-th main operand
 zoom S:L                                     …or to the L operands from the S-th
@@ -105,6 +107,28 @@ private def direction : List Tok → Except String (Ty × Dir × List Tok)
       -- unless the type was given.
       return (o.connTy.getD .boolean, r.dir, rest)
 
+/-- Split a `with x := E, y := F` clause off the end of an `apply` line, and
+parse the bindings. The clause is the document's small dialog box written as
+text: it supplies the law variables that matching left unconstrained.
+
+`with` is a word of the command here, so a proof about a variable actually named
+`with` cannot use this clause; nothing else in the grammar is affected. The
+bindings are separated by `,`, which no expression contains, and each is a name,
+`:=`, and an expression. The `with` clause is taken off before the `:` of
+`apply NAME : …` is looked for, so a binding's `:=` is never mistaken for it. -/
+private def withClause (s : String) : Except String (String × Subst) :=
+  match s.splitOn " with " with
+  | [body] => .ok (body, [])
+  | body :: rest => do
+      let binds ← (String.intercalate " with " rest).splitOn "," |>.mapM fun b =>
+        match b.splitOn ":=" with
+        | [n, e] =>
+            if (trim n).isEmpty then .error "‘with’ wants a variable name before ‘:=’"
+            else do return (trim n, ← exprOfToks (← tokenize e))
+        | _ => .error s!"‘{trim b}’ is not a binding; write ‘x := expression’"
+      return (body, binds)
+  | [] => .ok (s, [])
+
 /-- Parse one line of a script; comments and blank lines yield nothing. -/
 def scriptLine (line : String) : Except String (Option ScriptCmd) := do
   let t := trim line
@@ -115,17 +139,18 @@ def scriptLine (line : String) : Except String (Option ScriptCmd) := do
       let (ty, dir, ts) ← direction (← tokenize rest)
       return some (.doc (.start ty dir (← exprOfToks ts)))
   | "apply" => do
-      if beginsWith rest '#' then
-        let n ← orElseError s!"‘{rest}’ is not a suggestion number"
-          (String.ofList (rest.toList.drop 1)).toNat?
-        return some (.doc (.apply n))
-      match rest.splitOn ":" with
+      let (body, bind) ← withClause rest
+      if beginsWith body '#' then
+        let n ← orElseError s!"‘{trim body}’ is not a suggestion number"
+          (trim (String.ofList (body.toList.drop 1))).toNat?
+        return some (.doc (.apply n bind))
+      match body.splitOn ":" with
       | [name] =>
           if (trim name).isEmpty then throw "apply what?"
-          return some (.doc (.applyNamed (trim name) none))
+          return some (.doc (.applyNamed (trim name) none bind))
       | name :: expected =>
           let (o, ts) ← connective (← tokenize (String.intercalate ":" expected))
-          return some (.doc (.applyNamed (trim name) (some (o, ← exprOfToks ts))))
+          return some (.doc (.applyNamed (trim name) (some (o, ← exprOfToks ts)) bind))
       | [] => throw "apply what?"
   | "direct" => do
       let (o, ts) ← connective (← tokenize rest)

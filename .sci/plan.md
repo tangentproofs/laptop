@@ -930,3 +930,24 @@
       one replay needed `maxHeartbeats` raised.
       Left parked: supplying a law variable by hand, a better check for number laws, ML ranking,
       distributivity, arithmetic and normalisation, and phase 2e.
+- [x] Netty: the small dialog box — supplying a law variable by hand (2026-09-24; on main) — item 20 of
+      `.sci/netty-plan.md`. Item 19 left every shipped-boolean conditional row greyed, because
+      monotonicity and transitivity relate the line to a third formula the line does not determine.
+      `Cmd.apply` / `Cmd.applyNamed` now carry a `Subst` and `Doc.applySuggestion` instantiates the
+      reading with it: no new suggestion kind and no new soundness argument, since matching pinned some
+      of the law's variables and the law holds for every instantiation of the rest. **The premise is
+      asked again after the bindings**, because supplying a variable can turn a premise nothing could
+      settle into one the context settles — which is exactly what the worked example needs. The kernel
+      still never guesses: an unbound hole is refused as before, and a binding for a variable the
+      suggestion has not got is refused rather than ignored.
+      Script: `apply #N with x := E, y := F` and `apply NAME : CONN E with …`; the `with` clause is
+      taken off before the `:` of `apply NAME : …` is looked for, so a binding's `:=` is never mistaken
+      for it. One line, so no request changed. Client: clicking a greyed row opens one field per free
+      variable (`holeDialog`), the row staying greyed until they are filled.
+      Worked example: inside `(x ⇒ y) ⇒ (x ∧ z ⇒ y ∧ z)` the monotonicity reading of `x ∧ z` waits for
+      `b`; supplying `b := y` writes `y ∧ z ⇒ y ∧ z` with its premise `x ⇒ y` settled by the context, so
+      the proof goes through with no gap — and on a bare line the same binding still leaves the warning
+      sign and claims nothing. Seven witnesses by `decide`, `propext` only; `netty --selftest` gained
+      `dialogTest` driving them through the request service; `/api` smoke tested.
+      Left parked: a better check for number laws, ML ranking, distributivity, arithmetic and
+      normalisation, grammar growth, and phase 2e.
