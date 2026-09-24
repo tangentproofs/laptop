@@ -902,6 +902,19 @@ theorem idempotence_misses_every_operand :
     segmentLine.operands.all
       (fun o => Expr.matchAll (bin .and (mvar "a") (mvar "a")) o [] == []) = true := by decide
 
+/-- The two shipped laws the segment scripts below name, and nothing else.
+
+Every claim they make is about *those* laws — what `idempotent` folds, where the
+fold is credited, what the two ways round write and draw — so a shorter list says
+the same thing and says it plainly. It also says it quickly: a `decide` that
+replays a proof computes the whole suggestion list at every step, and under the
+full list that is several hundred rows a step. The surveys that really are about
+the whole list (`suggestions_are_ranked`,
+`shipped_boolean_conditional_readings_are_all_greyed`) keep `session`. -/
+def segmentSession : Doc :=
+  { laws := Laws.boolean.filter fun l =>
+      l.name == "idempotent" || l.name == "double negation" }
+
 /-- The segment `y ∧ y` it does match, and the suggestion folds it where it
 stands, leaving `x` and `z` alone. -/
 def segmentFold : List Cmd :=
@@ -910,18 +923,18 @@ def segmentFold : List Cmd :=
       (some (.eq, bin .and (bin .and (var "x") (var "y")) (var "z"))) ]
 
 theorem segmentFold_proves :
-    proved segmentFold
+    provedIn segmentSession segmentFold
       = some (bin .eq segmentLine (bin .and (bin .and (var "x") (var "y")) (var "z"))) := by
   decide
 
 theorem segmentFold_complete :
-    ((session.steps segmentFold).toOption.map fun d => (d.gaps, d.stack.length))
+    ((segmentSession.steps segmentFold).toOption.map fun d => (d.gaps, d.stack.length))
       = some ([], 1) := by decide
 
 /-- And it is the only way idempotence reaches `x ∧ y ∧ z` from that line: one
 suggestion, from the one segment that matches. -/
 theorem segmentFold_is_the_only_fold :
-    ((session.steps [.start .boolean .same segmentLine]).toOption.map fun d =>
+    ((segmentSession.steps [.start .boolean .same segmentLine]).toOption.map fun d =>
       (d.suggestions.filter fun s =>
         s.law == "idempotent" && s.result == bin .and (bin .and (var "x") (var "y")) (var "z")).length)
       = some 1 := by decide
@@ -932,7 +945,7 @@ what lets a window draw which part of the line a step would rewrite. The fold is
 credited to `y ∧ y`, the run of two operands from the first; a law that reads the
 whole line is credited to the whole line. -/
 theorem segmentFold_is_credited_to_the_run :
-    ((session.steps [.start .boolean .same segmentLine]).toOption.map fun d =>
+    ((segmentSession.steps [.start .boolean .same segmentLine]).toOption.map fun d =>
       ((d.suggestions.filter fun s =>
           s.law == "idempotent"
             && s.result == bin .and (bin .and (var "x") (var "y")) (var "z")).map
@@ -1061,12 +1074,17 @@ collapses two such patterns, and `Doc.shownLines` is that collapse: which lines
 a display draws, at what depth, and with what law name at the end of them. The
 document itself keeps every line, so what is checked here is the *drawing*. -/
 
-/-- What a display draws: for each line it shows, the depth it is drawn at, its
-margin connective, its formula and the name at the end of it. -/
-def shown (cs : List Cmd) : Option (List (Nat × Option BinOp × Expr × String)) :=
-  (session.steps cs).toOption.map fun d =>
+/-- What a display draws, for a given list of laws: for each line it shows, the
+depth it is drawn at, its margin connective, its formula and the name at the end
+of it. -/
+def shownIn (d₀ : Doc) (cs : List Cmd) : Option (List (Nat × Option BinOp × Expr × String)) :=
+  (d₀.steps cs).toOption.map fun d =>
     d.shownLines.map fun s =>
       (s.depth, (d.lines[s.index]!).conn, (d.lines[s.index]!).expr, s.note)
+
+/-- What a display draws under the whole shipped law list. -/
+def shown (cs : List Cmd) : Option (List (Nat × Option BinOp × Expr × String)) :=
+  shownIn session cs
 
 /-- The long way round to `x ∧ y`: zoom in to `y ∨ y`, fold it there, and zoom
 back out — the four lines that applying a law to a *part* replaces with two. -/
@@ -1310,37 +1328,34 @@ theorem the_whole_line_is_not_a_zoom_target :
 
 /-- It proves what the one-step segment rewrite proves. -/
 theorem segmentZoom_proves :
-    proved segmentZoom
+    provedIn segmentSession segmentZoom
       = some (bin .eq segmentLine (bin .and (bin .and (var "x") (var "y")) (var "z"))) := by
   decide
 
 theorem segmentZoom_complete :
-    ((session.steps segmentZoom).toOption.map fun d => (d.gaps, d.stack.length))
+    ((segmentSession.steps segmentZoom).toOption.map fun d => (d.gaps, d.stack.length))
       = some ([], 1) := by decide
 
-set_option maxHeartbeats 1000000 in
 /-- And the line the zoom out splices is, connective and formula, the line
 `segmentFold` writes in one step: the long way round and the short way round
 write the same thing, because both put the part back through `Part.replace`. -/
 theorem segmentZoom_splices_what_the_site_writes :
-    ((session.steps segmentZoom).toOption.bind fun d =>
+    ((segmentSession.steps segmentZoom).toOption.bind fun d =>
         d.lines.toList.getLast?.map fun l => (l.conn, l.expr))
-      = ((session.steps segmentFold).toOption.bind fun d =>
+      = ((segmentSession.steps segmentFold).toOption.bind fun d =>
         d.lines.toList.getLast?.map fun l => (l.conn, l.expr)) := by decide
 
-set_option maxHeartbeats 1000000 in
 /-- The document keeps all four lines, and the display draws two: the subproof is
 a single law application, so it folds into the line it was zoomed in from with
 `idempotent` moved up — line for line what `segmentFold` draws. The collapses
 needed nothing added for segment zooms. -/
 theorem segmentZoom_collapses :
-    ((session.steps segmentZoom).toOption.map fun d => (d.lines.size, d.shownLines))
+    ((segmentSession.steps segmentZoom).toOption.map fun d => (d.lines.size, d.shownLines))
       = some (4, [{ index := 0, depth := 0, note := "idempotent" },
                   { index := 3, depth := 0, note := "" }]) := by decide
 
-set_option maxHeartbeats 1000000 in
 theorem segmentZoom_shows_what_segmentFold_shows :
-    shown segmentZoom = shown segmentFold := by decide
+    shownIn segmentSession segmentZoom = shownIn segmentSession segmentFold := by decide
 
 /-- The scripts `lake exe netty --demo=…` runs, paired with the command lists
 checked above; `netty --selftest` compares them. -/

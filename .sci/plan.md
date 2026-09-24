@@ -982,3 +982,23 @@
       `--selftest`.
       Left parked: the other grammar chunks, a better check for number laws, ML ranking, distributivity,
       arithmetic and normalisation, and phase 2e.
+- [x] Netty: the witnesses read only the laws they name (2026-09-24; on main) — item 22 of
+      `.sci/netty-plan.md`, and witness cost only: no `Doc`, no `Law`, no law file, no parser, no
+      `netty-web/`, no grammar, and `--selftest` unchanged. A `decide` that replays a proof computes the
+      *whole* suggestion list at every step, and item 21's five Case laws had pushed that to 277 rows on a
+      four-variable boolean line, so three segment theorems had `maxHeartbeats` raised to a million. None
+      of them is about the whole list — they are about what `idempotent` folds, where the fold is
+      credited, and that zooming in to a segment writes and draws what folding from the outside writes and
+      draws — so the nine `segmentFold_*` / `segmentZoom_*` theorems now read a three-law `segmentSession`
+      (`idempotent`, `double negation`), as `ponensSession` / `dialogSession` / `condSession` already did.
+      All three raised-heartbeat lines are gone and the nine decide in about 8 seconds between them;
+      `shown` gained a sibling `shownIn d₀` taking the law list, with `shown := shownIn session`, so the
+      full-list displays are untouched. `lake build netty` about 5½ minutes (`Netty.Replay` 330s), down
+      from 7½. Remaining honestly: a dozen witnesses still replay under the full list — `portation`,
+      `discharge`, `anywhere`, `nested`, `reopen`, `assoc`, `swap`, `minimize`, `fold`, `merge`,
+      `mergeThenFold`, `gapInside` — and are now what the five minutes buys; the shipped-list *surveys*
+      should stay full, the rest can be trimmed the same way when a grammar chunk next lengthens the list.
+      NEXT for Netty: the next grammar chunk from the document's grammar (`.sci/netty-plan.md`
+      "Then grow language ↔ Netty grammar"). Still parked: a stronger number-law check than
+      `holdsOnInts`, ML suggestion ranking, distributivity, arithmetic/normalisation, phase 2e, the
+      Infoview UI, VS Code webview and the execute-hook.

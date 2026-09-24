@@ -715,6 +715,37 @@ concurrency) stays parked.
    Not done here: the other grammar chunks, a better check for number laws, ML ranking, distributivity,
    arithmetic or normalisation.
 
+22. [x] **The witnesses read only the laws they name**, 2026-09-24 on main. Item 21 left a bill and
+    named it: `lake build netty` at about 7½ minutes, because a `decide` that replays a proof computes
+    the *whole* suggestion list at every step of it, and the five Case laws had just pushed that list to
+    277 rows on a four-variable boolean line. Three of the segment witnesses had needed
+    `maxHeartbeats` raised to a million to get through. None of them is *about* the whole list: they are
+    about what `idempotent` folds, where the fold is credited, and that zooming in to a segment and
+    folding it in place writes and draws exactly what folding it from the outside writes and draws. So
+    they now read a `segmentSession` of the shipped laws they actually name — `idempotent` and
+    `double negation`, three lines of the file — the way `ponensSession`, `dialogSession` and
+    `condSession` already did. The nine repointed theorems are `segmentFold_proves`,
+    `segmentFold_complete`, `segmentFold_is_the_only_fold`, `segmentFold_is_credited_to_the_run`,
+    `segmentZoom_proves`, `segmentZoom_complete`, `segmentZoom_splices_what_the_site_writes`,
+    `segmentZoom_collapses` and `segmentZoom_shows_what_segmentFold_shows`; all three
+    `set_option maxHeartbeats 1000000 in` lines above them are gone, and the nine decide in about 8
+    seconds between them. `shown` grew a sibling `shownIn d₀` taking the law list as an argument, with
+    `shown := shownIn session`, so the full-list displays it was written for are untouched.
+    Nothing about the tool changed: no `Doc`, no `Law`, no law file, no parser, no `netty-web/`, no new
+    grammar, and `netty --selftest` is the same run it was. `lake build netty` is about 5½ minutes,
+    `Netty.Replay` 330s of it.
+    The honest remainder, since the point of writing the cost down is to keep it visible: a dozen
+    witnesses still replay under the full list on purpose or by inheritance — `portation`, `discharge`,
+    `anywhere`, `nested`, `reopen`, `assoc`, `swap`, `minimize`, `fold`, `merge`, `mergeThenFold`,
+    `gapInside` — and they, not the segment ones, are now what the five minutes buys. Some of them
+    *should* stay: `suggestions_are_ranked` and
+    `shipped_boolean_conditional_readings_are_all_greyed` survey the shipped list and would say nothing
+    if slimmed. The rest can be trimmed the same way when a grammar chunk next makes the list longer;
+    the trap to remember is still item 21's, that a session filtered with `String.startsWith` cannot be
+    `decide`d at all, so the filter compares names with `==`.
+    Not done here: any grammar, a better check for number laws than `holdsOnInts`, ML ranking,
+    distributivity, arithmetic or normalisation, phase 2e.
+
 ## Then grow language ↔ Netty grammar
 
 Use Netty’s LR/LL grammar as the roadmap for surface syntax and Prog constructs (var/ivar/chan/frame, `||`, `!`/`?`, quantifiers, functions, …), tying each chunk to existing LaPToP theory modules where they already exist (`Concurrency`, `Interaction`, …) and to `interp` where execution suggestions apply.
