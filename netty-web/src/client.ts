@@ -4,8 +4,12 @@
  * Netty's calculation window is a proof pane, a context pane and a
  * suggestions pane. This draws those three from the state the kernel sends,
  * and turns a click into one line of the kernel's script language: a click on
- * a suggestion is `apply #N`, a click on a main operand is `zoom N`, a click
- * on a line's number is `focus N`. Nothing about a proof is decided here.
+ * a suggestion is `apply #N`, a click on a line's number is `focus N`, and a
+ * click on a part of the line before the focus is `zoom` and the name the kernel
+ * gave that part — a number for a main operand, `start:length` for a contiguous
+ * segment of an association. Nothing about a proof is decided here, and nothing
+ * here composes a part's name: `LineView.zooms` carries it, so a click cannot
+ * mean a different part from the one a suggestion's site or a script zoom means.
  *
  * `state.lines` is the proof after the kernel's display collapses, so a line
  * the collapses hide simply does not arrive and a line they lift arrives with
@@ -13,7 +17,7 @@
  * which is what `focus N` names, so nothing here has to know about them.
  */
 
-import type { LineView, Op, Response, StateView, SuggestionView } from './protocol.js';
+import type { LineView, Op, PartView, Response, StateView, SuggestionView } from './protocol.js';
 
 /** The state the kernel last sent. */
 let state: StateView | null = null;
@@ -141,22 +145,36 @@ function directRow(s: StateView, depth: number): HTMLElement {
     el('span', { class: 'gutter' }, ''), el('span', { class: 'caret' }, '›'), conn, text, go);
 }
 
+/** A button that zooms in to one part of the line, named as the kernel names
+ * it. `zoom ${z.name}` is the script line; nothing here builds that name. */
+function zoomButton(z: PartView, extra = ''): HTMLElement {
+  const b = el('button', {
+    class: `operand zoom${extra === '' ? '' : ' ' + extra}`,
+    title: `zoom in to ${z.text} — zoom ${z.name}`,
+  }, z.text);
+  b.addEventListener('click', () => void cmd(`zoom ${z.name}`));
+  return b;
+}
+
 /** A line's formula, drawn as its main operands with the main operator
  * between them. Where the line can be zoomed in to, each operand is a
- * button: clicking it is the document's "click on a subexpression". */
+ * button: clicking it is the document's "click on a subexpression". A run of
+ * two or more operands has no place of its own in the line, so it is offered
+ * below it instead (`segmentsRow`). */
 function formula(l: LineView): HTMLElement {
   const box = el('span', { class: 'formula' });
   if (l.parts.length === 0 || (!l.zoomable && l.parts.length < 2 && l.kind !== 'neg')) {
     box.append(el('span', { class: 'atom' }, l.expr));
     return box;
   }
+  // The single-operand zoom targets, by which operand they are. A line that
+  // cannot be zoomed in to has none, and its operands are drawn as plain text.
+  const single = new Map<number, PartView>();
+  for (const z of l.zooms) if (z.len === 1) single.set(z.start, z);
   const piece = (text: string, i: number): Node => {
-    if (!l.zoomable) return el('span', { class: 'operand' }, text);
-    const b = el('button', {
-      class: 'operand zoom', title: `zoom in to ${text}`,
-    }, text);
-    b.addEventListener('click', () => void cmd(`zoom ${i}`));
-    return b;
+    const z = single.get(i);
+    if (z === undefined) return el('span', { class: 'operand' }, text);
+    return zoomButton(z);
   };
   if (l.kind === 'neg') {
     box.append(el('span', { class: 'op' }, l.op), piece(l.parts[0] ?? '', 0));
@@ -167,6 +185,24 @@ function formula(l: LineView): HTMLElement {
     box.append(piece(p, i));
   });
   return box;
+}
+
+/** The zoom targets that are runs of *two or more* main operands: the
+ * contiguous segments of an association, which the document reads as parts of
+ * the line just as it reads the single operands. A run has nowhere in the line
+ * to be clicked — its operands are not adjacent to one button — so each gets one
+ * here, under the line it belongs to. `null` when the line offers none, which is
+ * every line whose main operator is not an association of three or more. */
+function segmentsRow(l: LineView): HTMLElement | null {
+  const runs = l.zooms.filter((z) => z.len > 1);
+  if (runs.length === 0) return null;
+  const row = el('div', { class: 'entry segments', style: `--depth: ${l.depth}` },
+    el('span', { class: 'gutter' }, ''),
+    el('span', { class: 'caret' }, ''),
+    el('span', { class: 'margin' }, ''),
+    el('span', { class: 'runs-label' }, 'runs:'));
+  for (const z of runs) row.append(zoomButton(z, 'segment'));
+  return row;
 }
 
 /** One line of the proof. `l.depth` is the depth the kernel says to draw it
@@ -214,6 +250,8 @@ function proofPane(s: StateView | null): HTMLElement {
   } else {
     for (const l of s.lines) {
       body.append(lineRow(l, s.depth));
+      const runs = segmentsRow(l);
+      if (runs !== null) body.append(runs);
       if (l.focused) body.append(directRow(s, l.depth));
     }
   }
@@ -233,7 +271,7 @@ function contextPane(s: StateView | null): HTMLElement {
   if (s === null || asText) {
     body.append(el('pre', {}, s?.contextPane ?? ''));
   } else if (s.context.length === 0) {
-    body.append(el('p', { class: 'quiet' }, 'no context: zooming in to an operand gains what the others say.'));
+    body.append(el('p', { class: 'quiet' }, 'no context: zooming in to a part gains what the operands outside it say.'));
   } else {
     for (const c of s.context) body.append(el('div', { class: 'law' }, c));
   }
@@ -339,7 +377,7 @@ function draw(): void {
       toolbar(s)),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
-          'click a suggestion to take it, a subexpression to zoom in, a line number to move the focus')
+          'click a suggestion to take it, a subexpression or a run of them to zoom in, a line number to move the focus')
       : el('div', { class: 'note-bar' + (noteIsError ? ' error' : '') }, note),
     el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)),
   );

@@ -7,8 +7,9 @@ import Netty.Script
 The kernel's panes are text, and its script language is text, which is all a
 terminal needs. A window with three panes needs one thing more: the *document*
 behind those panes, in a form something other than Lean can draw — where each
-line knows its depth, its margin connective, its main operands and whether it
-can be zoomed in to, and each suggestion knows its number.
+line knows its depth, its margin connective, its main operands, the parts a
+click may zoom in to and how the script language names each of them, and each
+suggestion knows its number.
 
 That is all this module is. A request is one JSON object; the answer is one
 JSON object carrying the whole state of the session after it. Nothing here
@@ -43,6 +44,26 @@ namespace Api
 
 open Lean (Json ToJson FromJson toJson fromJson?)
 
+/-- A part of a line that a click may zoom in to.
+
+`name` is what the script language calls the part (`Netty.Part.render`), so a
+window offers a click by handing back the very argument `zoom` takes: a single
+main operand by its number, a contiguous segment of an association by
+`start:length`. The client does not compose that string, which is what keeps a
+click, a suggestion's site and a script zoom from ever meaning different things
+by the same part. -/
+structure PartView where
+  /-- What `zoom` calls it: `"1"`, or `"1:2"` for a segment. -/
+  name : String
+  /-- The part, rendered as it stands in the line. -/
+  text : String
+  /-- Which main operand the run starts at. -/
+  start : Nat
+  /-- How many main operands it takes; `1` for a single operand, two or more
+  for a segment of an association. -/
+  len : Nat
+  deriving Repr, DecidableEq, Inhabited, ToJson, FromJson
+
 /-- A line of the proof, as a client draws it. -/
 structure LineView where
   /-- Its index in `Doc.lines`, which is what the script language calls it. -/
@@ -63,6 +84,10 @@ structure LineView where
   op : String
   /-- The main operands, rendered as they stand in `expr`. -/
   parts : List String
+  /-- The parts a click may zoom in to, in the kernel's own order: each main
+  operand, then each contiguous segment of the association. Empty unless this
+  line can be zoomed in to at all, which is what `zoomable` says. -/
+  zooms : List PartView
   /-- What produced the line. -/
   why : String
   /-- Whether the step to the next line is unjustified. -/
@@ -75,7 +100,7 @@ structure LineView where
   /-- Whether the focus may be moved here. A line of an outer level may be: the
   kernel closes the levels below it, as a run of zoom-outs would. -/
   focusable : Bool
-  /-- Whether a click on one of `parts` may zoom in to it. -/
+  /-- Whether this line can be zoomed in to: whether `zooms` offers anything. -/
   zoomable : Bool
   deriving Repr, DecidableEq, Inhabited, ToJson, FromJson
 
@@ -180,6 +205,17 @@ def lineView (d : Doc) (s : Shown) : LineView :=
   let i := s.index
   let l := d.lines[i]!
   let focused := i == d.focus && !d.stack.isEmpty
+  -- Only the last line of the innermost open level can be zoomed in to, and
+  -- then every zoomable part of it can be — the main operands and the segments
+  -- of its association, exactly what `Doc.sites` offers a law.
+  let zs : List PartView :=
+    if focused && i + 1 == d.lines.size then
+      (Doc.parts l.expr).filterMap fun p =>
+        if !p.zoomable then none
+        else (p.exprOf l.expr).map fun _ =>
+          let (start, len) := p.span
+          { name := p.render, text := p.textIn l.expr, start := start, len := len }
+    else []
   { index := i
     depth := s.depth
     conn := match l.conn with | some o => o.symbol | none => ""
@@ -193,12 +229,13 @@ def lineView (d : Doc) (s : Shown) : LineView :=
       | _ => "atom"
     op := l.expr.mainOp
     parts := l.expr.operandTexts
+    zooms := zs
     why := l.why
     gap := l.gap
     note := s.note
     focused := focused
     focusable := d.canFocus i
-    zoomable := focused && i + 1 == d.lines.size && !l.expr.operands.isEmpty }
+    zoomable := !zs.isEmpty }
 
 /-- The whole state of a session. -/
 def stateView (s : Session) : StateView :=

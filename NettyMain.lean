@@ -368,6 +368,79 @@ def focusTest : IO Bool := do
       IO.println "focus: a line of the closed subproof is refused"
   return ok
 
+/-- Check the click path a window takes to zoom in, through the same request
+service the web client talks to.
+
+The answer gives each line the parts a click may zoom in to
+(`Api.LineView.zooms`), each with the name the *script language* calls it by, so
+a window sends `zoom` and that name and never composes one itself. This checks
+that the parts offered for `x ∧ y ∧ y ∧ z` are the kernel's own — every main
+operand, then every contiguous run of them, which is `Doc.parts` — that clicking
+each of them is accepted and opens a level whose first line is the part the
+button was labelled with, that clicking the run `1:2` gains the operands outside
+it as context, and that a line which is not the one before the focus offers
+nothing to a click at all. -/
+def zoomTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean } }
+  let (s, r) := Api.respond fresh { op := "cmd", arg := "start = x ∧ y ∧ y ∧ z" }
+  if !r.ok then
+    IO.eprintln s!"zoom: starting the line: {r.error}"
+    return false
+  match r.state.lines with
+  | [l] =>
+      let offered := l.zooms.map fun z => (z.name, z.text)
+      if l.zoomable && offered ==
+          [("0", "x"), ("1", "y"), ("2", "y"), ("3", "z"),
+           ("0:2", "x ∧ y"), ("0:3", "x ∧ y ∧ y"), ("1:2", "y ∧ y"),
+           ("1:3", "y ∧ y ∧ z"), ("2:2", "y ∧ z")] then
+        IO.println "zoom: a window is offered every main operand and every run of them"
+      else
+        ok := false
+        IO.eprintln s!"zoom: x ∧ y ∧ y ∧ z offers \
+          {String.intercalate ", " (offered.map fun (n, t) => s!"{n} ({t})")}"
+      -- Every part the window offers must be one the kernel accepts, and must
+      -- open the level its button was labelled with.
+      for z in l.zooms do
+        let (_, a) := Api.respond s { op := "cmd", arg := s!"zoom {z.name}" }
+        if !a.ok then
+          ok := false
+          IO.eprintln s!"zoom: clicking ‘{z.text}’ (zoom {z.name}): {a.error}"
+        else
+          match a.state.lines.getLast? with
+          | some last =>
+              if !(a.state.depth == 1 && last.expr == z.text) then
+                ok := false
+                IO.eprintln s!"zoom: clicking ‘{z.text}’ (zoom {z.name}) opened \
+                  ‘{last.expr}’ at depth {a.state.depth}"
+          | none =>
+              ok := false
+              IO.eprintln s!"zoom: clicking ‘{z.text}’ (zoom {z.name}) left no lines"
+      IO.println s!"zoom: each of the {l.zooms.length} parts opens the level its button names"
+      -- The run `y ∧ y` is the one no single operand can reach. Clicking it
+      -- gains `x` and `z` — the operands outside the run — and leaves the outer
+      -- line with nothing to click, since it is no longer the line before the
+      -- focus.
+      match l.zooms.find? (·.name == "1:2") with
+      | none =>
+          ok := false
+          IO.eprintln "zoom: the run 1:2 is not offered"
+      | some z =>
+          let (_, a) := Api.respond s { op := "cmd", arg := s!"zoom {z.name}" }
+          let outer := (a.state.lines.find? (·.index == 0)).map (fun l => l.zooms.length)
+          if a.ok && a.state.context == ["x", "z"] && outer == some 0 then
+            IO.println "zoom: clicking a run gains the operands outside it, and the \
+              outer line stops offering a click"
+          else
+            ok := false
+            IO.eprintln s!"zoom: after clicking the run, the context is \
+              {String.intercalate ", " a.state.context} and the outer line offers \
+              {repr outer}"
+  | ls =>
+      ok := false
+      IO.eprintln s!"zoom: the started proof draws {ls.length} lines, not one"
+  return ok
+
 /-- Check that the display collapses reach a user interface, through the same
 request service the web client talks to. The `fold` demonstration's four lines
 are drawn as two, with `idempotent` moved up onto the line the subproof was
@@ -467,8 +540,9 @@ that the law list survives being written out and read back, that the law file
 on disk is the one compiled in, that every demonstration script is the command
 list `Netty.Replay` checks in Lean and still proves what it claims, that every
 suggestion the law list offers is a sound step, that the focus can land on an
-outer line through the request service, and that the display collapses reach it
-too. -/
+outer line through the request service, that a click can zoom in to every part of
+a line through it — the runs of operands as well as the single ones — and that the
+display collapses reach it too. -/
 def selftest : IO Bool := do
   let mut ok := true
   let bad := Laws.boolean.filter fun l => !l.isTautology
@@ -521,6 +595,7 @@ def selftest : IO Bool := do
         else ok := false
   if !(← matchTest) then ok := false
   if !(← focusTest) then ok := false
+  if !(← zoomTest) then ok := false
   if !(← collapseTest) then ok := false
   if !(← apiTest) then ok := false
   return ok

@@ -8,6 +8,25 @@
  * standard input; one answer is one line of JSON on its standard output.
  */
 
+/** A part of a line that a click may zoom in to.
+ *
+ * `name` is what the script language calls the part, so a click sends
+ * `zoom ${name}` and nothing here composes that string: the kernel names its own
+ * parts, which is what keeps a click, a suggestion's site and a script zoom from
+ * meaning different things by the same part. A single main operand is named by
+ * its number and has `len === 1`; a contiguous segment of an association is
+ * named `start:length` and has `len > 1`. */
+export interface PartView {
+  /** What `zoom` calls it: `'1'`, or `'1:2'` for a segment. */
+  name: string;
+  /** The part, rendered as it stands in the line. */
+  text: string;
+  /** Which main operand the run starts at. */
+  start: number;
+  /** How many main operands it takes. */
+  len: number;
+}
+
 /** A line of the proof, as it is drawn — one of `Doc.shownLines`, the document
  * after the display collapses, so the lines a collapse hides are not here. */
 export interface LineView {
@@ -28,6 +47,10 @@ export interface LineView {
   op: string;
   /** The main operands, rendered as they stand in `expr`. */
   parts: string[];
+  /** The parts a click may zoom in to, in the kernel's own order: each main
+   * operand, then each contiguous segment of the association. Empty unless this
+   * line can be zoomed in to at all. */
+  zooms: PartView[];
   /** What produced the line: a law's name, `zoom in`, `direct entry`, … */
   why: string;
   /** Whether the step to the next line is unjustified. */
@@ -40,7 +63,7 @@ export interface LineView {
   /** Whether the focus may be moved here. A line of an outer level may be: the
    * kernel closes the levels below it, as a run of zoom-outs would. */
   focusable: boolean;
-  /** Whether a click on one of `parts` may zoom in to it. */
+  /** Whether this line can be zoomed in to: whether `zooms` offers anything. */
   zoomable: boolean;
 }
 

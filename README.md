@@ -139,8 +139,12 @@ cd netty-web && npm install && npm run serve   # http://127.0.0.1:4173/
 ```
 
 The model is not duplicated in TypeScript: a click on a suggestion is
-`apply #N`, a click on a subexpression is `zoom N`, a click on a line number is
-`focus N`, and every change still goes through `Netty.Doc.step`. `netty-web/README.md`
+`apply #N`, a click on a line number is `focus N`, and a click on a part of the
+line before the focus is `zoom` and the name the kernel gave that part — `N` for
+a main operand, `S:L` for a contiguous segment of an association, the runs the
+client draws under the line. The client never composes those names, so a click
+cannot mean a different part from the one a suggestion's site or a script zoom
+means, and every change still goes through `Netty.Doc.step`. `netty-web/README.md`
 has the details; `netty --selftest` checks the request service too, by replaying
 each demonstration through it and saving and loading the result.
 

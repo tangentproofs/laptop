@@ -326,11 +326,29 @@ def replace : Part → Expr → Expr → Option Expr
   | segment start len, line, r => line.replaceSegment start len r
 
 /-- How a script names this part: an operand by its number, a segment by
-`start:length`. -/
+`start:length`. This is the argument `zoom` takes, so a window that offers a
+part to a click offers this string and cannot mean anything else by it. -/
 def render : Part → String
   | whole => "the whole line"
   | operand i => toString i
   | segment start len => s!"{start}:{len}"
+
+/-- Which run of main operands this part is: where it starts, and how many it
+takes. The whole line is not a run of operands at all, and counts as `(0, 0)`. -/
+def span : Part → Nat × Nat
+  | whole => (0, 0)
+  | operand i => (i, 1)
+  | segment start len => (start, len)
+
+/-- This part of `line`, rendered as it stands in `line.render`: one main
+operand carries exactly the parentheses `Expr.operandTexts` gives it, and a run
+of them is those texts with the main operator between, so a part reads in a
+window as it reads in the line. -/
+def textIn : Part → Expr → String
+  | whole, line => line.render
+  | operand i, line => (line.operandTexts)[i]?.getD ""
+  | segment start len, line =>
+      String.intercalate s!" {line.mainOp} " (((line.operandTexts).drop start).take len)
 
 /-- Whether this part is a level of its own — something `Cmd.zoomIn` can open a
 subproof on. The whole line is not: it is the level one is already on. -/

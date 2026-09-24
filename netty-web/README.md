@@ -15,9 +15,13 @@ browser  ──POST /api──▶  node dist/server.js  ──stdin/stdout──
 ```
 
 A click is one line of the kernel's own script language — a suggestion is
-`apply #N`, a subexpression is `zoom N`, a line number is `focus N`, the next
-line typed in is `direct = …` — so anything the window can do, a script can
-do, and every change still goes through `Netty.Doc.step`.
+`apply #N`, a line number is `focus N`, a part of the line before the focus is
+`zoom` and the name the kernel gave that part (`N` for a main operand, `S:L` for
+a run of them), the next line typed in is `direct = …` — so anything the window
+can do, a script can do, and every change still goes through `Netty.Doc.step`.
+The client does not compose a part's name: the answer carries it
+(`LineView.zooms`), so a click cannot mean a different part from the one a
+suggestion's site or a script zoom means.
 
 ## Running it
 
@@ -48,14 +52,23 @@ checks both halves. The server listens on the loopback interface only.
 
 * **demonstration…** replays one of the kernel's demonstrations —
   `portation` is the document's own first example, `discharge` zooms in and
-  uses the context, `gap` leaves a gap and then closes it, and `minimize`
-  applies a law to a part of a line. **new** starts again with the same laws.
+  uses the context, `gap` leaves a gap and then closes it, `minimize` applies a
+  law to a part of a line, `segment` applies one to a contiguous run of an
+  association, `segfold` reaches the same line by zooming into that run, and
+  `fold` and `merge` show the display collapses. **new** starts again with the
+  same laws.
 * **A click on a suggestion** writes that line. Greyed suggestions are the
   ones whose match left a law variable unconstrained; the kernel will not
   apply those, and says which variable it is.
 * **A click on a subexpression** of the last line zooms in to it, which opens
   a subproof with its own direction and its own context. **zoom out** (`o`)
   closes it and puts the result back in the line it came from.
+* **A click on a run** — the dashed buttons on the `runs:` line under an
+  association of three or more operands — zooms in to that contiguous *segment*
+  of it, which the document reads as a part of the line just as it reads a single
+  operand: `y ∧ y` inside `x ∧ y ∧ y ∧ z` is a level of its own, and zooming out
+  splices it back where it stood. A run has no place of its own in the line to be
+  clicked, which is why it is offered below it.
 * **A click on a line number** moves the focus there. Any line of an open level
   will do: the kernel closes the subproofs below it, as zooming out would. A
   greyed number is a line of a subproof that has already been zoomed out of,

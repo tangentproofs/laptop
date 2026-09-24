@@ -163,6 +163,23 @@ button.operand {
 }
 button.operand:hover { background: var(--hot-soft); border-color: var(--hot); color: var(--ink); }
 
+/* the runs of two or more operands — the contiguous segments of an
+   association — which have no place of their own in the line above */
+.entry.segments { gap: 0.3rem; padding-top: 0; padding-bottom: 0.2rem; }
+.runs-label { color: var(--dim); font-size: 0.8rem; }
+button.operand.segment {
+  border-color: var(--rule);
+  border-style: dashed;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+button.operand.segment:hover {
+  border-style: solid;
+  border-color: var(--hot);
+  background: var(--hot-soft);
+  color: var(--ink);
+}
+
 .note { margin-left: auto; padding-left: 1.5rem; color: var(--dim); font-size: 0.8rem; font-family: var(--mono); }
 .note.gap { color: var(--bad); font-weight: 700; }
 
