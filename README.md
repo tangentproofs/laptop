@@ -72,6 +72,7 @@ lake exe netty --demo=discharge       # zooming in, and the context a zoom in su
 lake exe netty --demo=gap             # a gap left by direct entry, and closing it
 lake exe netty --demo=minimize        # a law applied to a part of a line
 lake exe netty --demo=segment         # a law applied to a segment of an association
+lake exe netty --demo=segfold         # the same fold, by zooming into that segment
 lake exe netty --list-laws            # the boolean laws in force
 lake exe netty --selftest             # laws, law file and demonstrations
 printf 'start ⇐ a ⇒ (b ⇒ a)\nsuggest\n' | lake exe netty
@@ -105,6 +106,14 @@ two conjuncts and leaving the rest alone. The margin connective is the one
 zooming out would have written, so a negative position turns the step around:
 `x ≤ x + 1` on the subtrahend of `n - m` gives `n - m ≥ n - (m + 1)`, and a
 neutral one — a factor of `×`, say — admits only `=`.
+
+Every part is also a **level you can work inside**: `zoom 1` opens a subproof on
+the first main operand and `zoom 1:2` on the two operands from the first, a
+contiguous segment. The subproof's first line is that part, with the type,
+direction and context the part carries, and `out` splices its bottom line back
+where the part stood — the same `Part.replace` a one-step rewrite uses, so the
+long way round and the short way round write the same line and the display draws
+them alike.
 
 Laws are plain text files (`Netty/laws/boolean.laws` holds the Binary laws of
 aPToP §11.3.1); add your own with `--laws=FILE`. `Netty/Laws.lean` reads the

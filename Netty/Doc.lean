@@ -4,9 +4,9 @@ import Netty.Law
 # The proof document
 
 A Netty calculation is a sequence of lines with a *direction* in the left
-margin, and it can be zoomed in to a main operand of the line before the focus,
-which starts a subproof of its own with its own direction, its own type and its
-own context. This module is that document, the pure transitions on it, and the
+margin, and it can be zoomed in to a *part* of the line before the focus, which
+starts a subproof of its own with its own direction, its own type and its own
+context. This module is that document, the pure transitions on it, and the
 suggestions the tool offers for the next line. It is the whole kernel: the
 command line in `NettyMain` is argument handling and printing.
 
@@ -27,10 +27,11 @@ if it proves `a = ⊥` or `a ⇒ ⊥`, it proves `¬a`.
 
 `Doc.lines` is the whole document in reading order, each line tagged with its
 nesting `depth`; `Doc.stack` is the levels that are still open, innermost
-first. Zooming in appends the chosen operand as the first line of a new level
-and pushes a frame carrying that level's type, direction and context. Zooming
-out pops the frame and appends, to the level below, the line we zoomed in from
-with the chosen operand replaced by the bottom line of the subproof.
+first. Zooming in appends the chosen part as the first line of a new level
+and pushes a frame carrying that level's type, direction, position and context.
+Zooming out pops the frame and appends, to the level below, the line we zoomed in
+from with the chosen part replaced by the bottom line of the subproof — one
+`Part`, put back by `Part.replace`, whichever kind of part it was.
 
 Because every line of a still-open level lies after every line of the levels
 below it, appending or inserting at the current level never disturbs an index
@@ -63,9 +64,15 @@ above, unchanged. Segments come after the single operands, and a rewrite that
 merely repeats the line is dropped as before, so a longer suggestion list is the
 whole of the difference a user sees.
 
-Still one level: deeper positions are reached by zooming in, and `Cmd.zoomIn`
-still takes a main operand only — a segment is a place a law is applied to, not
-(yet) a level to work inside.
+A part is also a level you can work *inside*: `Cmd.zoomIn` takes a `Part`, so
+zooming in to the segment `y ∧ z` of `x ∧ y ∧ z` opens a subproof whose first
+line is that segment, left-associated as `Expr.segmentExpr` builds it, with the
+type and direction the segment site carries and the context the operands outside
+the run supply. Zooming out splices the bottom of that subproof back through the
+same `Part.replace` a site rewrite uses, so the long way round — zoom in, apply,
+zoom out — writes the very line the one-step site rewrite writes, and `Part` is
+the single place that says what a part *is*. `Part.whole` is refused: it is the
+level one is already on. Deeper positions are still reached by zooming in again.
 
 ## Focus
 
@@ -234,31 +241,104 @@ def splitAnd : Expr → List Expr
   | bin .and a b => splitAnd a ++ splitAnd b
   | e => [e]
 
-/-- The facts a zoom in to the `i`-th main operand of `e` adds to the context
-(the document's table). Zooming in to an operand of `∧` gains the others; of
-`∨`, their negations; of `a ⇒ b` on `a`, `¬b`, and on `b`, `a`; and dually for
-`⇐`. Nothing else contributes a context. -/
-def contextOf (e : Expr) (i : Nat) : List Expr :=
+/-- The facts a zoom in to the run of `len` main operands of `e` starting at
+`start` adds to the context (the document's table). Zooming in to operands of
+`∧` gains the others; of `∨`, their negations; of `a ⇒ b` on `a`, `¬b`, and on
+`b`, `a`; and dually for `⇐`. Nothing else contributes a context.
+
+A run of more than one operand is only ever a run of an *association*, and the
+two operators whose context depends on which operand was chosen — `⇒` and `⇐` —
+are not associations, so for them `start` is the operand index and `len` is one,
+exactly as before. -/
+def contextOfRange (e : Expr) (start len : Nat) : List Expr :=
   match e with
   | bin op _ _ =>
       let ops := operands e
       let others := (List.range ops.length).filterMap fun j =>
-        if j == i then none else ops[j]?
+        if start ≤ j && j < start + len then none else ops[j]?
       match op with
       | .and => others.flatMap splitAnd
       | .or => others.flatMap (fun o => splitAnd (negate o))
       | .imp =>
           match ops[0]?, ops[1]? with
-          | some l, some r => if i == 0 then splitAnd (negate r) else splitAnd l
+          | some l, some r => if start == 0 then splitAnd (negate r) else splitAnd l
           | _, _ => []
       | .rimp =>
           match ops[0]?, ops[1]? with
-          | some l, some r => if i == 0 then splitAnd r else splitAnd (negate l)
+          | some l, some r => if start == 0 then splitAnd r else splitAnd (negate l)
           | _, _ => []
       | _ => []
   | _ => []
 
+/-- The facts a zoom in to the `i`-th main operand of `e` adds to the context:
+the run of one operand at `i`. -/
+def contextOf (e : Expr) (i : Nat) : List Expr := contextOfRange e i 1
+
 end Expr
+
+/-- Which part of a line a site is. -/
+inductive Part
+  /-- The whole line. -/
+    | whole
+  /-- The `i`-th main operand. -/
+    | operand (i : Nat)
+  /-- A contiguous run of `len` main operands of an association, starting at the
+  `start`-th: `len` is at least two and less than the whole association, so a
+  segment is neither a single operand nor the line (`Expr.segments`). -/
+    | segment (start len : Nat)
+  deriving Repr, DecidableEq, Inhabited
+
+namespace Part
+
+/-- The subexpression of `line` this part is; `none` when the part is not there.
+The whole line is itself. -/
+def exprOf : Part → Expr → Option Expr
+  | whole, line => some line
+  | operand i, line => line.operands[i]?
+  | segment start len, line => line.segmentExpr start len
+
+/-- The position this part occupies in `line`. The whole line is in no position
+at all, and counts as `positive`, which is what leaves a direction alone. -/
+def posOf : Part → Expr → Pos
+  | whole, _ => .positive
+  | operand i, line => line.operandPos i
+  | segment _ _, line => line.segmentPos
+
+/-- The type of this part of `line`, falling back to `parent` — the type of the
+level the line is on — when nothing in the part settles it. -/
+def tyOf : Part → Expr → Ty → Ty
+  | whole, _, parent => parent
+  | operand i, line, parent => line.operandTy i parent
+  | segment _ _, line, parent => line.segmentTy parent
+
+/-- The facts zooming in to this part of `line` adds to the context. The whole
+line adds none: it is the level one is already on. -/
+def contextOf : Part → Expr → List Expr
+  | whole, _ => []
+  | operand i, line => Expr.contextOf line i
+  | segment start len, line => Expr.contextOfRange line start len
+
+/-- Put `r` where this part of `line` stood. `none` for the whole line, which is
+not put back into anything, and `none` when the part is not there to replace. -/
+def replace : Part → Expr → Expr → Option Expr
+  | whole, _, _ => none
+  | operand i, line, r => line.replaceOperand i r
+  | segment start len, line, r => line.replaceSegment start len r
+
+/-- How a script names this part: an operand by its number, a segment by
+`start:length`. -/
+def render : Part → String
+  | whole => "the whole line"
+  | operand i => toString i
+  | segment start len => s!"{start}:{len}"
+
+/-- Whether this part is a level of its own — something `Cmd.zoomIn` can open a
+subproof on. The whole line is not: it is the level one is already on. -/
+def zoomable : Part → Bool
+  | whole => false
+  | _ => true
+
+end Part
 
 /-- A line of the proof. `why` names what produced it: a law's name, or one of
 `direct entry`, `zoom in`, `zoom out`; the first line of the whole proof has
@@ -291,8 +371,10 @@ structure Frame where
   start : Nat
   /-- The line we zoomed in from; `none` for the outermost level. -/
   zoomLine : Option Nat := none
-  /-- Which main operand of that line we zoomed in to. -/
-  operand : Nat := 0
+  /-- Which part of that line we zoomed in to, and so where the bottom of this
+  level goes back. The outermost level was not zoomed in to at all, and its part
+  is `whole`: the line itself. -/
+  part : Part := .whole
   /-- Its position, which decides this level's direction and the connective
   that zooming out will use. -/
   pos : Pos := .positive
@@ -327,29 +409,6 @@ structure Suggestion where
   holes : List String
   deriving Repr, DecidableEq, Inhabited
 
-/-- Which part of a line a site is. -/
-inductive Part
-  /-- The whole line. -/
-    | whole
-  /-- The `i`-th main operand. -/
-    | operand (i : Nat)
-  /-- A contiguous run of `len` main operands of an association, starting at the
-  `start`-th: `len` is at least two and less than the whole association, so a
-  segment is neither a single operand nor the line (`Expr.segments`). -/
-    | segment (start len : Nat)
-  deriving Repr, DecidableEq, Inhabited
-
-namespace Part
-
-/-- Put `r` where this part of `line` stood. `none` for the whole line, which is
-not put back into anything, and `none` when the part is not there to replace. -/
-def replace : Part → Expr → Expr → Option Expr
-  | whole, _, _ => none
-  | operand i, line, r => line.replaceOperand i r
-  | segment start len, line, r => line.replaceSegment start len r
-
-end Part
-
 /-- A place in the line before the focus where a law may be applied: the whole
 line, one of its main operands, or a contiguous segment of its association.
 
@@ -363,13 +422,15 @@ zooming out of it would write. That is why no new soundness argument is needed
 here — only the old one, spelled without the two lines that zooming would have
 added to the proof.
 
-The parts are one level deep: the main operands, which a single `zoomIn` reaches
-and a display draws as separate pieces (`Expr.operandTexts`), and the runs of two
-or more of them that an *associative* main operator makes available, since the
-document reads `x ∧ y ∧ z` as having the part `y ∧ z` just as it has the part
-`y`. An associative operator puts all of its operands in one position, so a run
-of them is in that same position and the direction story is word for word the
-one for a single operand. Deeper positions are still reached by zooming in. -/
+The parts are one level deep (`Doc.parts`): the main operands, which a display
+draws as separate pieces (`Expr.operandTexts`), and the runs of two or more of
+them that an *associative* main operator makes available, since the document
+reads `x ∧ y ∧ z` as having the part `y ∧ z` just as it has the part `y`. An
+associative operator puts all of its operands in one position, so a run of them is
+in that same position and the direction story is word for word the one for a
+single operand. Every one of them is also a `Cmd.zoomIn` target, and a site reads
+its expression, type, direction and position off the same `Part` the zoom does.
+Deeper positions are still reached by zooming in. -/
 structure Site where
   /-- The subexpression a law is matched against. -/
   expr : Expr
@@ -412,8 +473,10 @@ inductive Cmd
     | applyNamed (name : String) (expect : Option (BinOp × Expr))
   /-- Type the next line in directly, leaving a gap. -/
     | direct (op : BinOp) (e : Expr)
-  /-- Zoom in to the `i`-th main operand of the line before the focus. -/
-    | zoomIn (operand : Nat)
+  /-- Zoom in to a part of the line before the focus: a main operand, or a
+  contiguous segment of its association. `Part.whole` is refused — it is the
+  level one is already on. -/
+    | zoomIn (part : Part)
   /-- Zoom out of the innermost level. -/
     | zoomOut
   /-- Move the focus to just after the given line, at whatever level it is on,
@@ -497,22 +560,23 @@ def contextLaws (d : Doc) : List Law := d.stack.flatMap (·.ctx)
 /-- Every law in force: the context first, then the loaded law lists. -/
 def allLaws (d : Doc) : List Law := d.contextLaws ++ d.laws
 
-/-- The places a law may be applied to in the line `e` of a level whose frame
-is `f`: the whole line first, then each of its main operands in order, then each
-contiguous segment of its association (`Expr.segments`, which is empty unless
-the main operator is associative and has more than two operands). -/
+/-- The parts of the line `e` that a law may be applied to, or that a zoom can
+open a level on: the whole line first, then each main operand in order, then each
+contiguous segment of its association (`Expr.segments`, which is empty unless the
+main operator is associative and has more than two operands). -/
+def parts (e : Expr) : List Part :=
+  .whole :: (List.range e.operands.length).map Part.operand
+    ++ e.segments.map fun (start, len) => .segment start len
+
+/-- The places a law may be applied to in the line `e` of a level whose frame is
+`f`, one per part (`Doc.parts`). Each carries what zooming in to that part would
+compute — its expression, its type, the direction that holds there and its
+position — so that a site rewrite and a zoom in agree by construction. -/
 def sites (f : Frame) (e : Expr) : List Site :=
-  ({ expr := e, ty := f.ty, dir := f.dir, pos := .positive, part := .whole } ::
-    (List.range e.operands.length).filterMap fun i =>
-      e.operands[i]?.map fun sub =>
-        let p := e.operandPos i
-        { expr := sub, ty := e.operandTy i f.ty, dir := f.dir.zoom p,
-          pos := p, part := .operand i }) ++
-    e.segments.filterMap fun (start, len) =>
-      (e.segmentExpr start len).map fun sub =>
-        let p := e.segmentPos
-        { expr := sub, ty := e.segmentTy f.ty, dir := f.dir.zoom p,
-          pos := p, part := .segment start len }
+  (parts e).filterMap fun part =>
+    (part.exprOf e).map fun sub =>
+      let p := part.posOf e
+      { expr := sub, ty := part.tyOf e f.ty, dir := f.dir.zoom p, pos := p, part := part }
 
 /-- The line that rewriting the part at `s` to `r` writes, and the connective
 the step puts in the outer margin. `none` when the part cannot be put back.
@@ -592,12 +656,13 @@ def applySuggestion (d : Doc) (s : Suggestion) : Except String Doc := do
       return (d.withLine d.focus { fl with gap := false }).insertAfterFocus line
 
 /-- Zoom out of the innermost level: append, to the level below, the line we
-zoomed in from with the chosen operand replaced by the bottom line of the
-subproof, and pop the frame. The subproof's own lines stay in the document,
-which is what the `ty` and `dir` a level's first line carries are for.
+zoomed in from with the chosen part replaced by the bottom line of the subproof
+(`Part.replace`, so a segment goes back left-associated as `Expr.rebuildOp`
+writes an association), and pop the frame. The subproof's own lines stay in the
+document, which is what the `ty` and `dir` a level's first line carries are for.
 
 The connective the new line gets follows the document's three rules: `=` when
-the operand's position is neutral or the subproof proved an equality, and the
+the part's position is neutral or the subproof proved an equality, and the
 parent level's own direction otherwise. Zooming out of a level with a single
 line is an undo, as the document says: the line goes away again. -/
 def zoomOut (d : Doc) : Except String Doc :=
@@ -617,7 +682,7 @@ def zoomOut (d : Doc) : Except String Doc :=
       let bottom := (d.lines[idxs.getLast!]!).expr
       let zoomExpr := (d.lines[zl]!).expr
       let e ← orElseError "the subproof cannot be put back into its line"
-        (zoomExpr.replaceOperand f.operand bottom)
+        (f.part.replace zoomExpr bottom)
       let idx := d.lines.size
       return { d with
         lines := d.lines.push
@@ -706,23 +771,26 @@ def step (d : Doc) : Cmd → Except String Doc
         { depth := d.depth, conn := some op, expr := e, why := "direct entry",
           gap := hasNext && fl.gap }
       return (d.withLine d.focus { fl with gap := true }).insertAfterFocus line
-  | .zoomIn i => do
+  | .zoomIn part => do
       let f ← orElseError "the proof has not been started" d.frame?
       if d.focus + 1 != d.lines.size then
         throw "zoom in only from the last line; move the focus there first"
+      if !part.zoomable then
+        throw "the whole line is the level you are on; zoom in to a part of it"
       let fl ← orElseError "the proof has not been started" d.focusLine?
-      let sub ← orElseError s!"line {d.focus} has no main operand {i}" fl.expr.operands[i]?
-      let pos := fl.expr.operandPos i
+      let sub ← orElseError s!"line {d.focus} has no part {part.render}"
+        (part.exprOf fl.expr)
+      let pos := part.posOf fl.expr
       let idx := d.lines.size
-      let subTy := fl.expr.operandTy i f.ty
+      let subTy := part.tyOf fl.expr f.ty
       let subDir := f.dir.zoom pos
       return { d with
         lines := d.lines.push
           { depth := d.depth + 1, expr := sub, why := "zoom in",
             ty := some subTy, dir := some subDir }
         stack := { ty := subTy, dir := subDir, start := idx,
-                   zoomLine := some d.focus, operand := i, pos := pos,
-                   ctx := (Expr.contextOf fl.expr i).map Law.context } :: d.stack
+                   zoomLine := some d.focus, part := part, pos := pos,
+                   ctx := (part.contextOf fl.expr).map Law.context } :: d.stack
         focus := idx }
   | .zoomOut => d.zoomOut
   | .setFocus n => do

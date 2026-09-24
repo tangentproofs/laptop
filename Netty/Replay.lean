@@ -23,7 +23,8 @@ uses the context that zooming in supplies, one that reaches an outer line by a
 click instead of by zooming out, one that leaves a gap by direct entry and then
 closes it, one that applies a law to a *part* of a line instead of to the whole
 of it, one that applies a law to a contiguous *segment* of an association that
-neither the whole line nor a single operand can reach, and two that exercise the
+neither the whole line nor a single operand can reach, one that zooms *into* such
+a segment and splices it back, and two that exercise the
 display collapses — a one-step subproof folded
 into its parent line, and two zoom-ins matched by two zoom-outs drawn as one
 zoom step.
@@ -105,7 +106,7 @@ def dischargeGoal : Expr :=
 the context, zoom out, and finish with a base law. -/
 def discharge : List Cmd :=
   [ .start .boolean .up dischargeGoal,
-    .zoomIn 1,
+    .zoomIn (.operand 1),
     .applyNamed "discharge" (some (.eq, bin .imp (var "a") (var "b"))),
     -- The context law `a ⇒ b` can also be applied to a *part* of the line
     -- `a ⇒ b`, so the line it should write has to be named.
@@ -131,7 +132,7 @@ back into the line it was zoomed in from. -/
 clicks on line 0 — the outermost line — and then carries on at that level. -/
 def anywhere : List Cmd :=
   [ .start .boolean .up dischargeGoal,
-    .zoomIn 1,
+    .zoomIn (.operand 1),
     .applyNamed "discharge" (some (.eq, bin .imp (var "a") (var "b"))),
     .applyNamed "context" (some (.eq, .top)),
     .setFocus 0,
@@ -168,8 +169,8 @@ theorem anywhere_is_discharge :
 would have written. -/
 def nested : List Cmd :=
   [ .start .boolean .up dischargeGoal,
-    .zoomIn 1,
-    .zoomIn 1,
+    .zoomIn (.operand 1),
+    .zoomIn (.operand 1),
     .applyNamed "symmetry" (some (.eq, bin .and (var "b") (var "a"))),
     .setFocus 0 ]
 
@@ -191,10 +192,10 @@ are still not focusable, though both lines of the outer level and the line of th
 new level are. -/
 def reopen : List Cmd :=
   [ .start .boolean .up dischargeGoal,
-    .zoomIn 1,
+    .zoomIn (.operand 1),
     .applyNamed "discharge" (some (.eq, bin .imp (var "a") (var "b"))),
     .zoomOut,
-    .zoomIn 1 ]
+    .zoomIn (.operand 1) ]
 
 theorem reopen_keeps_the_first_subproof_closed :
     ((session.steps reopen).toOption.map fun d =>
@@ -460,7 +461,7 @@ def numberSession : Doc := { laws := [numberIdentity, numberSuccessor] }
 zoom back out. -/
 def number : List Cmd :=
   [ .start .number .down (bin .sub (var "n") (var "m")),
-    .zoomIn 1,
+    .zoomIn (.operand 1),
     .applyNamed "identity" (some (.eq, bin .add (var "m") (num 0))),
     .zoomOut ]
 
@@ -554,7 +555,7 @@ def shown (cs : List Cmd) : Option (List (Nat × Option BinOp × Expr × String)
 back out — the four lines that applying a law to a *part* replaces with two. -/
 def fold : List Cmd :=
   [ .start .boolean .same part,
-    .zoomIn 1,
+    .zoomIn (.operand 1),
     .applyNamed "idempotent" (some (.eq, var "y")),
     .zoomOut ]
 
@@ -586,8 +587,8 @@ def nest : Expr :=
 /-- Zoom in twice, take two steps, and zoom out twice. -/
 def merge : List Cmd :=
   [ .start .boolean .same nest,
-    .zoomIn 1,
-    .zoomIn 1,
+    .zoomIn (.operand 1),
+    .zoomIn (.operand 1),
     .applyNamed "idempotent" (some (.eq, neg (neg (var "z")))),
     .applyNamed "double negation" (some (.eq, var "z")),
     .zoomOut,
@@ -621,8 +622,8 @@ The pass is a fixpoint, so both collapses run. -/
 def mergeThenFold : List Cmd :=
   [ .start .boolean .same
       (bin .and (var "x") (bin .or (var "y") (bin .and (var "z") (var "z")))),
-    .zoomIn 1,
-    .zoomIn 1,
+    .zoomIn (.operand 1),
+    .zoomIn (.operand 1),
     .applyNamed "idempotent" (some (.eq, var "z")),
     .zoomOut,
     .zoomOut ]
@@ -644,7 +645,7 @@ step typed in directly instead of taken from a law, keeps all four lines and
 its warning sign. -/
 def gapInside : List Cmd :=
   [ .start .boolean .same part,
-    .zoomIn 1,
+    .zoomIn (.operand 1),
     .direct .eq (var "y"),
     .zoomOut ]
 
@@ -652,6 +653,92 @@ theorem gapInside_is_not_collapsed :
     ((session.steps gapInside).toOption.map fun d =>
       (d.shownLines.length, d.shownLines.map Shown.note))
       = some (4, ["", "!", "", ""]) := by decide
+
+/-! ### A segment as a level: zooming in to a run of operands
+
+A part is not only a place a law is applied to; it is a level you can work
+inside. `Cmd.zoomIn` takes a `Part`, so a contiguous segment of an association is
+a zoom target as much as a single main operand: the subproof's first line is the
+run, left-associated as `Expr.segmentExpr` builds it, its type and direction are
+the ones the segment *site* carries, its context is what the operands outside the
+run supply, and zooming out splices the bottom line back through the same
+`Part.replace` a site rewrite uses. -/
+
+/-- The long way round to `x ∧ y ∧ z`: zoom in to the segment `y ∧ y` — the two
+operands from the first — fold it there, and zoom back out. -/
+def segmentZoom : List Cmd :=
+  [ .start .boolean .same segmentLine,
+    .zoomIn (.segment 1 2),
+    .applyNamed "idempotent" (some (.eq, var "y")),
+    .zoomOut ]
+
+/-- The level the zoom opens has the segment for its first line, built
+left-associated as `Expr.segmentExpr` builds it. -/
+theorem segmentZoom_opens_the_segment :
+    ((session.steps (segmentZoom.take 2)).toOption.map fun d =>
+      d.lines.toList.map fun l => (l.depth, l.expr))
+      = some [(0, segmentLine), (1, bin .and (var "y") (var "y"))] := by decide
+
+/-- And the frame remembers which run it was, with the type, direction and
+position the segment *site* carries — which is what lets the zoom out splice the
+subproof back where it came from. -/
+theorem segmentZoom_remembers_the_run :
+    ((session.steps (segmentZoom.take 2)).toOption.bind fun d =>
+      d.frame?.map fun f => (f.ty, f.dir, f.pos, f.part))
+      = some (.boolean, .same, .positive, .segment 1 2) := by decide
+
+/-- Zooming in to a segment of a conjunction gains the operands *outside* the
+run as context, exactly as zooming in to one operand gains the other three:
+here `x` and `z`. -/
+theorem segmentZoom_gains_the_others :
+    ((session.steps (segmentZoom.take 2)).toOption.map fun d =>
+      d.contextLaws.map Law.stmt) = some [var "x", var "z"] := by decide
+
+/-- A segment of `×` is neutral — the document's position table leaves `×` out,
+since a factor is monotonic only for a nonnegative other — so zooming in to one
+flattens the direction to `=`, whatever the level's was. That is the rule
+`times_segments_are_neutral` reads off the site, now read off the level. -/
+theorem times_segment_zoom_is_neutral :
+    ((session.steps
+        [ .start .number .down (bin .mul (bin .mul (var "n") (var "m")) (var "k")),
+          .zoomIn (.segment 0 2) ]).toOption.bind fun d =>
+      d.frame?.map fun f => (f.ty, f.dir, f.pos)) = some (.number, .same, .neutral) := by decide
+
+/-- The whole line is not a level of its own, so `Part.whole` is refused: it is
+the level one is already on. -/
+theorem the_whole_line_is_not_a_zoom_target :
+    (session.steps [.start .boolean .same segmentLine, .zoomIn .whole]).isOk = false := by decide
+
+/-- It proves what the one-step segment rewrite proves. -/
+theorem segmentZoom_proves :
+    proved segmentZoom
+      = some (bin .eq segmentLine (bin .and (bin .and (var "x") (var "y")) (var "z"))) := by
+  decide
+
+theorem segmentZoom_complete :
+    ((session.steps segmentZoom).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
+/-- And the line the zoom out splices is, connective and formula, the line
+`segmentFold` writes in one step: the long way round and the short way round
+write the same thing, because both put the part back through `Part.replace`. -/
+theorem segmentZoom_splices_what_the_site_writes :
+    ((session.steps segmentZoom).toOption.bind fun d =>
+        d.lines.toList.getLast?.map fun l => (l.conn, l.expr))
+      = ((session.steps segmentFold).toOption.bind fun d =>
+        d.lines.toList.getLast?.map fun l => (l.conn, l.expr)) := by decide
+
+/-- The document keeps all four lines, and the display draws two: the subproof is
+a single law application, so it folds into the line it was zoomed in from with
+`idempotent` moved up — line for line what `segmentFold` draws. The collapses
+needed nothing added for segment zooms. -/
+theorem segmentZoom_collapses :
+    ((session.steps segmentZoom).toOption.map fun d => (d.lines.size, d.shownLines))
+      = some (4, [{ index := 0, depth := 0, note := "idempotent" },
+                  { index := 3, depth := 0, note := "" }]) := by decide
+
+theorem segmentZoom_shows_what_segmentFold_shows :
+    shown segmentZoom = shown segmentFold := by decide
 
 /-- The scripts `lake exe netty --demo=…` runs, paired with the command lists
 checked above; `netty --selftest` compares them. -/
@@ -661,6 +748,7 @@ def demos : List (String × String × List Cmd) :=
    ("gap", Demo.gap, gap),
    ("minimize", Demo.minimize, minimize),
    ("segment", Demo.segment, segmentFold),
+   ("segfold", Demo.segfold, segmentZoom),
    ("fold", Demo.fold, fold),
    ("merge", Demo.merge, merge)]
 

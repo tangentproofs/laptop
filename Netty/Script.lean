@@ -14,6 +14,7 @@ apply NAME : CONNECTIVE EXPRESSION           …when the law offers several
 apply #N                                     take the N-th suggestion
 direct CONNECTIVE EXPRESSION                 type the next line in (leaves a gap)
 zoom N                                       zoom in to the N-th main operand
+zoom S:L                                     …or to the L operands from the S-th
 out                                          zoom out
 focus N                                      move the focus to just after line N
 undo                                         undo one command
@@ -130,8 +131,20 @@ def scriptLine (line : String) : Except String (Option ScriptCmd) := do
       let (o, ts) ← connective (← tokenize rest)
       return some (.doc (.direct o (← exprOfToks ts)))
   | "zoom" => do
-      let n ← orElseError s!"‘{rest}’ is not an operand number" rest.toNat?
-      return some (.doc (.zoomIn n))
+      match (trim rest).splitOn ":" with
+      | [one] =>
+          let n ← orElseError s!"‘{rest}’ is not an operand number" one.toNat?
+          return some (.doc (.zoomIn (.operand n)))
+      | [start, len] =>
+          let st ← orElseError s!"‘{rest}’ is not a segment start:length"
+            (trim start).toNat?
+          let l ← orElseError s!"‘{rest}’ is not a segment start:length"
+            (trim len).toNat?
+          if l < 2 then
+            throw s!"‘{rest}’ is a segment of {l}; a segment is two operands or more, \
+              and a single operand is written ‘zoom {st}’"
+          return some (.doc (.zoomIn (.segment st l)))
+      | _ => throw s!"‘{rest}’ is not an operand number or a segment start:length"
   | "out" => return some (.doc .zoomOut)
   | "focus" => do
       let n ← orElseError s!"‘{rest}’ is not a line number" rest.toNat?
@@ -264,6 +277,28 @@ proof
 check x ∧ (y ∨ y) ≡ x ∧ y
 "
 
+/-- The long way round to the same fold: a contiguous segment of an association
+is a *level* as well as a site, so `zoom 1:2` opens a subproof on the two
+operands from the first, and zooming out splices its bottom line back into the
+middle of the association. What is left drawn is line for line what the
+`segment` demonstration, taking the step in one application, draws. -/
+def segfold : String :=
+"# A segment zoomed into rather than rewritten in place. ‘zoom 1:2’ opens a
+# subproof on y ∧ y, the two operands from the first; the context pane shows the
+# operands outside the run, x and z, which the zoom in gained; folding y ∧ y and
+# zooming out splices y back into the middle of the association. The second
+# ‘proof’ shows the subproof folded away — what the ‘segment’ demonstration,
+# taking the same step in one application, draws.
+start = x ∧ y ∧ y ∧ z
+zoom 1:2
+context
+apply idempotent : = y
+proof
+out
+proof
+check x ∧ y ∧ y ∧ z ≡ x ∧ y ∧ z
+"
+
 /-- The other display collapse: two zoom-ins matched by two zoom-outs are
 *drawn* as one zoom step. The middle level holds nothing of its own — its only
 two lines are the one the zoom in wrote and the one the zoom out wrote — so the
@@ -291,7 +326,8 @@ check x ∧ (y ∨ (¬¬z ∧ ¬¬z)) ≡ x ∧ (y ∨ z)
 /-- The demonstrations, by name. -/
 def all : List (String × String) :=
   [("portation", portation), ("discharge", discharge), ("gap", gap),
-   ("minimize", minimize), ("segment", segment), ("fold", fold), ("merge", merge)]
+   ("minimize", minimize), ("segment", segment), ("segfold", segfold),
+   ("fold", fold), ("merge", merge)]
 
 end Demo
 end Netty

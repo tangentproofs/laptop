@@ -47,7 +47,8 @@ usage: netty [options] [script]
 
   script              run this file of commands (default: standard input)
   --demo=NAME         run a built-in demonstration instead: portation,
-                      discharge, gap, minimize, segment, fold, merge
+                      discharge, gap, minimize, segment, segfold, fold,
+                      merge
   --laws=FILE         add a law file; may be repeated
   --bare              start with no laws but those given by --laws
   --load=FILE         start from a saved proof file
@@ -67,6 +68,9 @@ A script is one command per line; ‘#’ begins a comment.
   apply #N                                      take the N-th suggestion
   direct CONNECTIVE EXPRESSION                  type the next line in
   zoom N                                        zoom in to the N-th operand
+  zoom S:L                                      …or to the L operands from the
+                                                S-th, a contiguous segment of an
+                                                association
   out                                           zoom out
   focus N                                       move the focus after line N
   undo                                          undo one command
@@ -368,7 +372,9 @@ def focusTest : IO Bool := do
 request service the web client talks to. The `fold` demonstration's four lines
 are drawn as two, with `idempotent` moved up onto the line the subproof was
 zoomed in from — which is line for line what `minimize`, the same step taken in
-one application, draws. The `merge` demonstration's seven lines are drawn as
+one application, draws; and `segfold`, which zooms into a contiguous *segment* of
+an association and splices the subproof back, draws what `segment` draws for the
+same reason. The `merge` demonstration's seven lines are drawn as
 five, one level deep rather than two: the middle level held nothing but the
 subproof, so it is not drawn at all. In both, a drawn line keeps its own index
 in the document, which is what a click on it still means. -/
@@ -393,6 +399,19 @@ def collapseTest : IO Bool := do
       else
         ok := false
         IO.eprintln s!"collapse: fold draws {repr f}, minimize draws {repr m}"
+  | _, _ => ok := false
+  -- The same, for a zoom into a contiguous *segment* of an association: the
+  -- subproof `segfold` opens on `y ∧ y` folds into the line it was zoomed in
+  -- from, and what is left is what `segment` — the same step as one rewrite of
+  -- that segment — draws. This is the segment zoom driven end to end through the
+  -- request service, splice and all.
+  match ← drawn "segfold", ← drawn "segment" with
+  | some z, some r =>
+      if z.map (fun (_, d, n) => (d, n)) == r.map (fun (_, d, n) => (d, n)) then
+        IO.println "collapse: zooming into a segment draws as rewriting it in place"
+      else
+        ok := false
+        IO.eprintln s!"collapse: segfold draws {repr z}, segment draws {repr r}"
   | _, _ => ok := false
   match ← drawn "merge" with
   | some g =>

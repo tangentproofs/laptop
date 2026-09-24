@@ -300,7 +300,7 @@ function toolbar(s: StateView | null): HTMLElement {
   };
   const demos = el('select', { class: 'demos', title: 'replay a demonstration of the document' });
   demos.append(el('option', { value: '' }, 'demonstration…'));
-  for (const d of ['portation', 'discharge', 'gap', 'minimize', 'segment', 'fold', 'merge'])
+  for (const d of ['portation', 'discharge', 'gap', 'minimize', 'segment', 'segfold', 'fold', 'merge'])
     demos.append(el('option', { value: d }, d));
   demos.addEventListener('change', () => {
     if (demos.value !== '') void send('demo', demos.value);

@@ -22,12 +22,18 @@ deriving instance Lean.ToJson, Lean.FromJson for Pos
 deriving instance Lean.ToJson, Lean.FromJson for Dir
 deriving instance Lean.ToJson, Lean.FromJson for Expr
 deriving instance Lean.ToJson, Lean.FromJson for Law
+deriving instance Lean.ToJson, Lean.FromJson for Part
 deriving instance Lean.ToJson, Lean.FromJson for Line
 deriving instance Lean.ToJson, Lean.FromJson for Frame
 deriving instance Lean.ToJson, Lean.FromJson for Doc
 
-/-- The version of the save format written by this kernel. -/
-def saveFormatVersion : Nat := 1
+/-- The version of the save format written by this kernel.
+
+Format 2 records, on each open level, the `Part` of the line it was zoomed in to
+— a main operand or a contiguous segment of an association — where format 1
+recorded a main operand number. A format 1 file is refused rather than read with
+its zooms mistaken for zooms into the whole line. -/
+def saveFormatVersion : Nat := 2
 
 /-- A proof file: the format version and the document. -/
 def toSaveJson (d : Doc) : Lean.Json :=
