@@ -117,11 +117,17 @@ them alike.
 
 The suggestions are *ranked*, by a heuristic written down in `Doc.rank` rather
 than learned: the steps that can be taken before the ones that leave a law
-variable free, the whole line before a single operand before the shorter runs of
-operands, fewer free variables, then the shorter line a step writes — so a fold
-comes before the padding of the same law — and last the law file's own order. The
-same line and the same laws always give the same list, so a number read off the
-pane means the same thing the next time.
+variable free, fewer free variables, then the **shorter line** a step writes — so
+a fold comes before the padding of the same law — then the place it rewrites (the
+whole line, a single operand, the shorter runs of operands), and last the law
+file's own order. The same line and the same laws always give the same list, so a
+number read off the pane means the same thing the next time.
+
+The shorter line outranks the place on purpose. `a ∧ a ≡ a` folds
+`x ∧ y ∧ y ∧ z` to `x ∧ y ∧ z`, which no rewrite of the whole line and no rewrite
+of a single operand can do; ordering by place first buried it 124 suggestions
+deep, behind every way of reassociating and commuting the whole line. It is now
+the third of the 227 offered.
 
 Laws are plain text files (`Netty/laws/boolean.laws` holds the Binary laws of
 aPToP §11.3.1); add your own with `--laws=FILE`. `Netty/Laws.lean` reads the

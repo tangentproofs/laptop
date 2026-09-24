@@ -372,16 +372,20 @@ def focusTest : IO Bool := do
 to matter: `x ∧ y ∧ y ∧ z` under the whole shipped law list, which offers a couple
 of hundred steps from nine places.
 
-`Doc.rank` is a heuristic, so what is checked is not which step is first but that
-the order really is the order the rule describes: the keys never go backwards
-(applicable before unconstrained, then the more specific place, then fewer
-unconstrained variables, then the shorter line), ranking the ranked list changes
-nothing — which is what it means for the order to be total and the sort stable —
-and asking twice gives the same list, since a user's `apply #N` has to mean the
-same thing the second time they look. One concrete consequence is checked too:
-`x ∧ y ∧ z`, the fold no whole-line rewrite and no single operand can make, leads
-the steps offered on a *run* of operands — it writes the shortest line any run
-can, and its run is shorter than the two that overlap it. -/
+`Doc.rank` is a heuristic, so what is checked is mostly not which step is first
+but that the order really is the order the rule describes: the keys never go
+backwards (applicable before unconstrained, then fewer unconstrained variables,
+then the shorter line the step writes, then the more specific place), ranking the
+ranked list changes nothing — which is what it means for the order to be total and
+the sort stable — and asking twice gives the same list, since a user's `apply #N`
+has to mean the same thing the second time they look.
+
+The point of putting the shorter line ahead of the place is checked head on:
+`x ∧ y ∧ z`, the fold that neither the whole line nor any single operand can make,
+is the *third* of the 227 steps offered. Only two come before it, and both write a
+line of the same length: `distributive` contracting the whole line. When the place
+outranked the length this fold was the 124th, behind every way of reassociating
+and commuting the whole line. -/
 def rankTest : IO Bool := do
   let mut ok := true
   match Parser.expr "x ∧ y ∧ y ∧ z" with
@@ -396,7 +400,7 @@ def rankTest : IO Bool := do
     | .ok d =>
       let ss := d.suggestions
       let key := fun (s : Suggestion) =>
-        [if s.holes.isEmpty then 0 else 1, s.part.rank, s.holes.length, s.result.size]
+        [if s.holes.isEmpty then 0 else 1, s.holes.length, s.result.size, s.part.rank]
       -- Lexicographic ≤ on those keys, and whether a list of them ever goes back.
       let rec le : List Nat → List Nat → Bool
         | [], _ => true
@@ -429,22 +433,24 @@ def rankTest : IO Bool := do
       else
         ok := false
         IO.eprintln "rank: an applicable suggestion comes after an unconstrained one"
-      -- The fold of the middle two conjuncts is the first step offered at a *run*
-      -- of operands, because it is the shortest line any run can write. A smaller
-      -- run comes before a larger one, so it also beats every step on `0:3` and
-      -- `1:3`, which overlap it.
-      match (ss.filter fun s => s.part.rank ≥ 2).head? with
-      | some s =>
-          if s.result.render == "x ∧ y ∧ z" && s.part.render == "1:2" then
-            IO.println "rank: the fold of the run y ∧ y leads the steps on a run \
-              of operands, ahead of the longer runs that overlap it"
-          else
-            ok := false
-            IO.eprintln s!"rank: the first step on a run is ‘{s.result.render}’ at \
-              {s.part.render}, not x ∧ y ∧ z at 1:2"
-      | none =>
-          ok := false
-          IO.eprintln "rank: no step on a run of operands is offered"
+      -- The fold of the middle two conjuncts is the third step offered, and every
+      -- step before it writes a line no longer than it does. It is also the first
+      -- step offered on a *run* of operands, its run being shorter than the two
+      -- that overlap it.
+      let fold := ss.findIdx? fun s =>
+        s.result.render == "x ∧ y ∧ z" && s.part.render == "1:2"
+      let ahead := (ss.take 2).all fun s => s.result.size ≤ 5
+      let firstRun := (ss.filter fun s => s.part.rank ≥ 2).head?
+      if fold == some 2 && ahead
+          && (firstRun.map fun s => s.part.render) == some "1:2" then
+        IO.println "rank: the fold of the run y ∧ y is the third step offered, \
+          behind two whole-line steps that write a line just as short"
+      else
+        ok := false
+        let sizes := String.intercalate ", " ((ss.take 2).map fun s => toString s.result.size)
+        IO.eprintln s!"rank: the fold of the run y ∧ y is at {repr fold}, the two \
+          steps ahead of it write lines of size {sizes}, and the first step on a \
+          run is at {repr (firstRun.map fun s => s.part.render)}"
   return ok
 
 /-- Check the click path a window takes to zoom in, through the same request

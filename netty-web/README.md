@@ -113,11 +113,16 @@ suggestion list is long: a law reads a line every way those three allow, and eac
 way is a suggestion of its own. The kernel *ranks* it (`Doc.rank`) and the window
 draws that order without re-sorting, so `apply #N` and the keys `0`–`9` are the
 ranked positions. The order is: the ones that can be taken before the greyed ones
-that leave a law variable free; then the steps on the whole line, then on a single
-operand, then on the shorter runs of operands; then, among the greyed ones, the
-fewest free variables; then the shorter line a step writes, so a fold comes before
-the padding of the same law; and last the law file's own order, which is the part
-of it you write yourself.
+that leave a law variable free; then, among the greyed ones, the fewest free
+variables; then the shorter line a step writes, so a fold comes before the padding
+of the same law; then the place it rewrites — the whole line, a single operand, the
+shorter runs of operands; and last the law file's own order, which is the part of
+it you write yourself.
+
+The shorter line comes ahead of the place on purpose: a fold that only a run of
+operands can make would otherwise sit behind every rearrangement of the whole
+line. On `x ∧ y ∧ y ∧ z` that fold is the third of 227 suggestions; with the place
+first it was the 124th.
 
 The document's two display collapses *are* done, in the kernel: a subproof that
 is a single law application is drawn as its parent line with the law's name

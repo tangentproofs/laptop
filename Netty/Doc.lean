@@ -82,13 +82,15 @@ segment of an association as a place a law may be applied to. `Doc.rank` puts th
 list in order, by a heuristic that is written down rather than learned, so that
 the same line and the same laws always give the same list and a number a user
 reads off the pane means the same thing the next time. Most important key first:
-applicable before unconstrained, then the more specific place (the whole line,
-the single operands, the shorter runs, the longer runs), then fewer unconstrained
-variables, then the shorter line it writes, then the order the law file itself is
-in. `Doc.rank` has the whole rule and the reason for each part of it. Nothing
-there decides whether a step is *sound* — every suggestion in the list is one the
-kernel would take — so the order is free to be a guess about usefulness and
-nothing more.
+applicable before unconstrained, then fewer unconstrained variables, then the
+shorter line the step writes, then the more specific place (the whole line, the
+single operands, the shorter runs, the longer runs), then the order the law file
+itself is in. The shorter line outranks the place because that is what the order
+is for: a fold only a run of operands can make would otherwise sit behind every
+rearrangement of the whole line. `Doc.rank` has the whole rule and the reason for
+each part of it. Nothing there decides whether a step is *sound* — every
+suggestion in the list is one the kernel would take — so the order is free to be
+a guess about usefulness and nothing more.
 
 ## Focus
 
@@ -455,7 +457,7 @@ structure Suggestion where
   or a contiguous segment of the association. Two places can write one and the
   same line, and then the step is offered once, credited to the first of them
   (`Doc.suggestions`); what this field is for is the *order* the suggestions come
-  in (`Doc.rank`). -/
+  in, where it is the key after the length of the line (`Doc.rank`). -/
   part : Part
   deriving Repr, DecidableEq, Inhabited
 
@@ -687,34 +689,47 @@ pane means the same thing the next time they see it. Most important key first:
    variable free cannot be applied until the variable is supplied, so every
    suggestion that *can* be taken comes before every suggestion that cannot.
    This is the split the pane already drew, as greyed rows at the end.
-2. **The more specific place first** (`Part.rank`): the whole line, then the
-   single main operands, then the contiguous runs of operands, shortest run
-   first. A step on the whole line is the one a reader of the proof sees as one
-   step; a step on a run of three operands is the most surgical thing the kernel
-   offers and the least likely to be what was meant.
-3. **Fewer unconstrained variables first.** Among the suggestions that cannot yet
+2. **Fewer unconstrained variables first.** Among the suggestions that cannot yet
    be taken, the one that needs one variable supplied is nearer to being a step
-   than the one that needs three.
-4. **The shorter line first.** A calculation is usually looking for the step that
+   than the one that needs three. (Zero is fewest, so this key already says what
+   key 1 says; both are written down because both are promises.)
+3. **The shorter line first.** A calculation is usually looking for the step that
    makes the line smaller — `x ∧ y ∧ y ∧ z = x ∧ y ∧ z` rather than
    `x ∧ y ∧ y ∧ z = ¬¬(x ∧ y ∧ y ∧ z)` — and every law that can fold a line has
-   a variant that can pad it, so without this key the padding buries the folding.
+   a variant that can pad it, so the padding buries the folding unless the fold
+   is what floats.
+4. **The more specific place first** (`Part.rank`): the whole line, then the
+   single main operands, then the contiguous runs of operands, shortest run
+   first. Among steps that write a line of the same length, a step on the whole
+   line is the one a reader of the proof sees as one step, and a step on a run of
+   three operands is the most surgical thing the kernel offers.
 5. **Then the order the suggestions were made in**, which is: the context's laws
    before the loaded ones, the law list's own order within that, the variants of
    a law in order, and the readings of one variant in the order `Expr.matchAll`
    finds them (the ones needing no rearrangement first). So the last word belongs
    to the law file, which is the one part of the order a user writes themselves.
 
+Key 3 outranks key 4 because that is what the order is *for*. When the place came
+first, every rearrangement of the whole line came before any step on a part of
+it, and a fold that only a run of operands can make sat where nobody would find
+it: on `x ∧ y ∧ y ∧ z` under the shipped law list,
+`x ∧ y ∧ y ∧ z = x ∧ y ∧ z` was the 124th of 227 suggestions, behind some hundred
+ways of reassociating and commuting the whole line. With the shorter line first it
+is the 3rd, behind two contractions of the same length that `distributive` makes
+on the whole line.
+
 Nothing here decides *whether* a step is sound — every suggestion in the list is
 one the kernel would take — so the order is free to be a guess about usefulness
 and nothing more. -/
 def rank (ss : List Suggestion) : List Suggestion :=
   -- Least important key first: each pass keeps the order the passes before it
-  -- left, so the last pass has the first word.
+  -- left, so the last pass has the first word. The applicable/unconstrained pass
+  -- is implied by the one that counts the free variables; it is kept so that the
+  -- composition reads as the rule above is written.
   stableBy (fun s => if s.holes.isEmpty then 0 else 1)
-    (stableBy (fun s => s.part.rank)
-      (stableBy (fun s => s.holes.length)
-        (stableBy (fun s => s.result.size) ss)))
+    (stableBy (fun s => s.holes.length)
+      (stableBy (fun s => s.result.size)
+        (stableBy (fun s => s.part.rank) ss)))
 
 /-- The suggestions for the line after the focus: for every place of the line
 before the focus (`Doc.sites`) and every variant of every law in force whose
@@ -751,7 +766,8 @@ def suggestions (d : Doc) : List Suggestion :=
       -- Two places can write one line: rewriting `x ∧ y` inside `x ∧ y ∧ z` and
       -- rewriting the whole line can come to the same thing. That is one step,
       -- not two, so it is offered once — credited to the first place that made
-      -- it, which `Doc.sites` visits in the order `Doc.rank` prefers.
+      -- it, which is the most general of them, `Doc.sites` offering the whole
+      -- line before a part and a shorter run before a longer.
       rank (dedupBy (fun s => (s.law, s.op, s.result)) raw)
   | _, _ => []
 

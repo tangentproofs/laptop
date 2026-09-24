@@ -247,9 +247,9 @@ conjuncts and the three pairs. Only `x ∧ y` was offered before matching went
 modulo associativity, and only `x` and `x ∧ y` before it went modulo symmetry.
 
 All six are whole-line steps that can be taken as they stand, so what orders them
-is `Doc.rank`'s last two keys: the shorter line first — the single conjuncts
-before the pairs — and then the order matching found them, which is `x`, `x ∧ y`,
-`y ∧ z`, `x ∧ z`, `z`, `y`, the readings needing no rearrangement first. -/
+is `Doc.rank`'s shorter-line key — the single conjuncts before the pairs — and
+then the order matching found them, which is `x`, `x ∧ y`, `y ∧ z`, `x ∧ z`, `z`,
+`y`, the readings needing no rearrangement first. -/
 theorem specialization_reads_every_way :
     suggestedBy "specialization" .down conjunction
       = [(.imp, var "x"), (.imp, var "z"), (.imp, var "y"),
@@ -259,10 +259,11 @@ theorem specialization_reads_every_way :
 
 /-- Symmetry rearranges the three operands every way but the one it started
 with, which the identity-rewrite gate drops. Every one writes a line of the same
-size, so `Doc.rank` orders them by place: the five whole-line swaps first, then
-the two that come from the *segment* sites — `x ∧ y` and `y ∧ z`, each turned
-around where it stands and the third operand left alone, which is why a swap
-inside a longer association needs no zoom. -/
+size, so the shorter-line key cannot separate them and `Doc.rank` falls to the
+place: the five whole-line swaps first, then the two that come from the *segment*
+sites — `x ∧ y` and `y ∧ z`, each turned around where it stands and the third
+operand left alone, which is why a swap inside a longer association needs no
+zoom. -/
 theorem symmetry_reads_every_way :
     suggestedBy "symmetry" .down conjunction
       = [(.eq, bin .and (bin .and (var "y") (var "z")) (var "x")),
@@ -276,16 +277,16 @@ theorem symmetry_reads_every_way :
 /-! ### The order the suggestions come in
 
 Every widening of matching lengthened the list, and `Doc.rank` is the order it is
-offered in: applicable before unconstrained, then the more specific place, then
-fewer unconstrained variables, then the shorter line, then the law file's own
-order. Rather than write a hundred-line list out, what is checked here is that
-the keys never go backwards — which is what it means for the list to be in that
-order — and that ranking an already ranked list changes nothing, which is what it
-means for the order to be total and the sort stable. -/
+offered in: applicable before unconstrained, then fewer unconstrained variables,
+then the shorter line the step writes, then the more specific place, then the law
+file's own order. Rather than write a hundred-line list out, what is checked here
+is that the keys never go backwards — which is what it means for the list to be in
+that order — and that ranking an already ranked list changes nothing, which is
+what it means for the order to be total and the sort stable. -/
 
 /-- The numbers `Doc.rank` sorts by, most important first. -/
 def key (s : Suggestion) : List Nat :=
-  [if s.holes.isEmpty then 0 else 1, s.part.rank, s.holes.length, s.result.size]
+  [if s.holes.isEmpty then 0 else 1, s.holes.length, s.result.size, s.part.rank]
 
 /-- Lexicographic `≤` on those keys. -/
 def leKey : List Nat → List Nat → Bool
