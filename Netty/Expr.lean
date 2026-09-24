@@ -77,6 +77,10 @@ inductive Expr
   /-- `⊥`, the antitheorem. -/                       | bot
   /-- `¬a`. -/                                       | neg (a : Expr)
   /-- `l op r`. -/                                   | bin (op : BinOp) (l r : Expr)
+  /-- `if c then t else e fi`, the document's conditional expression: a form of
+  its own and not sugar for anything. The condition is boolean; the two branches
+  share the type of the whole. -/
+                                                     | cond (c t e : Expr)
   deriving Repr, DecidableEq, Inhabited
 
 namespace BinOp
@@ -177,6 +181,9 @@ private def paren (b : Bool) (s : String) : String :=
 /-- Binding power of an expression's main operator; `0` for an atom. -/
 def prec : Expr → Nat
   | var _ | mvar _ | num _ | top | bot => 0
+  -- `if … fi` closes itself, so it never needs parentheses and binds as tightly
+  -- as an identifier does.
+  | cond _ _ _ => 0
   | neg _ => 8
   | bin op _ _ => op.prec
 
@@ -192,6 +199,10 @@ def renderAt : Nat → Expr → String
   | p, bin op l r =>
       paren (op.prec > p)
         (renderAt op.prec l ++ " " ++ op.symbol ++ " " ++ renderAt (op.prec - 1) r)
+  -- `fi` is the closing bracket, so nothing inside needs parenthesizing and
+  -- nothing outside can reach in.
+  | _, cond c t e =>
+      "if " ++ renderAt 99 c ++ " then " ++ renderAt 99 t ++ " else " ++ renderAt 99 e ++ " fi"
 
 /-- Render an expression in the document's notation. -/
 def render (e : Expr) : String := renderAt 99 e
@@ -206,6 +217,7 @@ where
     | mvar n, acc => if acc.contains n then acc else n :: acc
     | neg a, acc => go a acc
     | bin _ l r, acc => go r (go l acc)
+    | cond c x y, acc => go y (go x (go c acc))
     | _, acc => acc
 
 /-- The ordinary identifiers occurring in `e`, in order of first occurrence. -/
@@ -216,6 +228,7 @@ where
     | var n, acc => if acc.contains n then acc else n :: acc
     | neg a, acc => go a acc
     | bin _ l r, acc => go r (go l acc)
+    | cond c x y, acc => go y (go x (go c acc))
     | _, acc => acc
 
 /-- Turn the named identifiers into law variables. Used when a law file
@@ -224,6 +237,7 @@ def generalize (names : List String) : Expr → Expr
   | var n => if names.contains n then mvar n else var n
   | neg a => neg (generalize names a)
   | bin op l r => bin op (generalize names l) (generalize names r)
+  | cond c x y => cond (generalize names c) (generalize names x) (generalize names y)
   | e => e
 
 /-- The number of nodes in an expression.
@@ -235,6 +249,7 @@ def size : Expr → Nat
   | var _ | mvar _ | num _ | top | bot => 1
   | neg a => 1 + a.size
   | bin _ l r => 1 + l.size + r.size
+  | cond c t e => 1 + c.size + t.size + e.size
 
 /-- Flatten an association of `op`, so that `a ∧ b ∧ c` has three operands. -/
 def flattenOp (op : BinOp) : Expr → List Expr
@@ -251,6 +266,9 @@ An associative main operator contributes its whole flattened association. -/
 def operands : Expr → List Expr
   | neg a => [a]
   | bin op l r => if op.assoc then flattenOp op (bin op l r) else [l, r]
+  -- The condition and the two branches, in reading order: three places a user can
+  -- zoom in to, and three places a law can be applied to.
+  | cond c t e => [c, t, e]
   | _ => []
 
 /-- The symbol of the main operator of `e`: what stands between its main
@@ -258,6 +276,10 @@ operands, or before the one operand of a negation. Empty for an atom. -/
 def mainOp : Expr → String
   | neg _ => "¬"
   | bin op _ _ => op.symbol
+  -- Nothing single stands between the three operands of `if … fi`; this is the
+  -- word the form begins with, and a display draws its own `if`, `then`, `else`
+  -- and `fi` around the pieces rather than repeating one symbol between them.
+  | cond _ _ _ => "if"
   | _ => ""
 
 /-- The main operands of `e`, each rendered with exactly the parentheses it
@@ -275,6 +297,8 @@ def operandTexts (e : Expr) : List String :=
       match operands e with
       | [] => []
       | x :: xs => renderAt op.prec x :: xs.map (renderAt (op.prec - 1))
+  -- The keywords delimit, so no piece of an `if … fi` carries parentheses.
+  | cond c t e' => [renderAt 99 c, renderAt 99 t, renderAt 99 e']
   | _ => []
 
 /-- Replace the `i`-th main operand of `e`. This is how zooming out puts the
@@ -288,6 +312,11 @@ def replaceOperand (e : Expr) (i : Nat) (new : Expr) : Option Expr :=
         if i < es.length then rebuildOp op (es.set i new) else none
       else if i == 0 then some (bin op new r)
       else if i == 1 then some (bin op l new)
+      else none
+  | cond c t e' =>
+      if i == 0 then some (cond new t e')
+      else if i == 1 then some (cond c new e')
+      else if i == 2 then some (cond c t new)
       else none
   | _ => none
 
@@ -357,6 +386,11 @@ def operandPos (e : Expr) (i : Nat) : Pos :=
   match e with
   | neg _ => .negative
   | bin op _ _ => if op.assoc then op.posOf 0 else op.posOf i
+  -- `if c then t else e fi` is monotonic in each branch and neither monotonic nor
+  -- antimonotonic in the condition, which switches between them: so the branches
+  -- are positive and the condition is neutral, and zooming in to a condition
+  -- admits only `=`.
+  | cond _ _ _ => if i == 0 then .neutral else .positive
   | _ => .neutral
 
 /-- The type of `e`, when its main operator settles it. A bare identifier
@@ -365,6 +399,9 @@ def tyOf? : Expr → Option Ty
   | num _ => some .number
   | top | bot | neg _ => some .boolean
   | bin op _ _ => some op.resultTy
+  -- The type of an `if … fi` is its branches', which they may or may not settle;
+  -- the condition says nothing about it.
+  | cond _ t e => match tyOf? t with | some ty => some ty | none => tyOf? e
   | var _ | mvar _ => none
 
 /-- The type of the `i`-th main operand of `e`, falling back to `parent` (the
@@ -380,6 +417,7 @@ def operandTy (e : Expr) (i : Nat) (parent : Ty) : Ty :=
           match (es[i]?.bind tyOf?) with
           | some t => t
           | none => (es.findSome? tyOf?).getD parent
+  | cond _ _ _ => if i == 0 then .boolean else (tyOf? e).getD parent
   | _ => parent
 
 /-- Evaluate a boolean expression under an assignment of the law variables and
@@ -391,6 +429,7 @@ def evalBool (σ : List (String × Bool)) : Expr → Option Bool
   | var n | mvar n => σ.lookup n
   | num _ => none
   | neg a => (evalBool σ a).map not
+  | cond c x y => do if ← evalBool σ c then evalBool σ x else evalBool σ y
   | bin op l r => do
       let a ← evalBool σ l
       let b ← evalBool σ r
@@ -403,16 +442,22 @@ def evalBool (σ : List (String × Bool)) : Expr → Option Bool
       | .ne => some (a != b)
       | _ => none
 
+mutual
+
 /-- Evaluate a number expression under an assignment of integers to its law
 variables and identifiers; `none` when it is not a number expression. This is
 for *checking a law list*, not for calculating: nothing in the suggestion engine
-does arithmetic. -/
+does arithmetic.
+
+A number-valued `if … fi` needs the *boolean* evaluator for its condition, which
+is why the two are mutually recursive. -/
 def evalInt (σ : List (String × Int)) : Expr → Option Int
   | num n => some (n : Int)
   | var n | mvar n => σ.lookup n
   | bin .add l r => do return (← evalInt σ l) + (← evalInt σ r)
   | bin .sub l r => do return (← evalInt σ l) - (← evalInt σ r)
   | bin .mul l r => do return (← evalInt σ l) * (← evalInt σ r)
+  | cond c x y => do if ← evalProp σ c then evalInt σ x else evalInt σ y
   | _ => none
 
 /-- Evaluate a binary expression whose atoms may be comparisons of numbers, under
@@ -442,7 +487,10 @@ def evalProp (σ : List (String × Int)) : Expr → Option Bool
           | some a, some b => some (a != b)
           | _, _ => do return (← evalProp σ l) != (← evalProp σ r)
       | _ => none
+  | cond c x y => do if ← evalProp σ c then evalProp σ x else evalProp σ y
   | _ => none
+
+end
 
 end Expr
 end Netty

@@ -188,6 +188,18 @@ function formula(l: LineView): HTMLElement {
     box.append(el('span', { class: 'op' }, l.op), piece(l.parts[0] ?? '', 0));
     return box;
   }
+  // `if … then … else … fi` writes its own four words around its three pieces:
+  // the condition and the two branches, each a zoom target of its own.
+  if (l.kind === 'cond') {
+    const word = (w: string, before?: number): HTMLElement =>
+      el('span', before === undefined ? { class: 'op' }
+        : { class: 'op', 'data-op-before': String(before) }, w);
+    box.append(word('if '), piece(l.parts[0] ?? '', 0));
+    box.append(word(' then ', 1), piece(l.parts[1] ?? '', 1));
+    box.append(word(' else ', 2), piece(l.parts[2] ?? '', 2));
+    box.append(word(' fi'));
+    return box;
+  }
   l.parts.forEach((p, i) => {
     if (i > 0) box.append(el('span', { class: 'op', 'data-op-before': String(i) }, ` ${l.op} `));
     box.append(piece(p, i));

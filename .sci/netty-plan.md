@@ -92,9 +92,10 @@ anywhere-focus, the display collapses, matching modulo symmetry and an identity 
 association segments as sites, zooming into one, clicking one in the window, ranking the suggestion
 list, the gap-on-splice justification, highlighting the site a suggestion would rewrite, and going
 back into a closed level, conditional laws at both levels, and the small dialog box that supplies a law
-variable by hand. What is left is the named chunks of the grammar below, and the one thing the kernel
-still says out loud that it cannot do: check a number law by anything better than small integers. Phase
-2e (LoopBridge / concurrency) stays parked.
+variable by hand. Language growth has started: `if … then … else … fi` is in (item 21). What is left is
+the rest of the named chunks of the grammar below, and the one thing the kernel still says out loud that
+it cannot do: check a number law by anything better than small integers. Phase 2e (LoopBridge /
+concurrency) stays parked.
 
 ### Kernel residuals to pick up alongside or after the UI
 
@@ -123,9 +124,9 @@ still says out loud that it cannot do: check a number law by anything better tha
 - The display collapses are done (2026-09-23, item 8): two zoom-ins matched by two zoom-outs merge
   into one zoom step, and a subproof that is a single law application folds into its parent line with
   the law name moved up. They are a pass over the document, not a change to it.
-- No `if … then … else … fi`, quantifiers, bunches, strings, lists, functions, scope (`〈v: d → b〉`),
-  function application, hiding, deleting a region, or law query — each is a named section of the
-  document and a named chunk of the grammar below.
+- `if … then … else … fi` is in the grammar (2026-09-24, item 21). Still out: quantifiers, bunches,
+  strings, lists, functions, scope (`〈v: d → b〉`), function application, hiding, deleting a region, and
+  law query — each is a named section of the document and a named chunk of the grammar below.
 - A law of the form `Q ⇒ P` whose consequent is a relation is read with `P` in the margin and `Q` as a
   premise, at both types (2026-09-24, items 18 and 19): `x ≤ x + y ⇐ 0 ≤ y` is a step a number line can
   take and `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` one a boolean line can. The premise is settled by the laws in
@@ -664,6 +665,55 @@ still says out loud that it cannot do: check a number law by anything better tha
    the window talks to, and the `/api` path was smoke tested against the running server.
    Not done here: a better check for number laws, ML ranking, distributivity, arithmetic or
    normalisation, and the named grammar chunks.
+
+21. [x] **`if … then … else … fi`**, 2026-09-24 on main. The first of the grammar's named forms after
+   the boolean and number fragment, and the first chunk of language growth rather than of the window.
+   `Expr.cond` is one node, not sugar: the law that says what the form *means* — `case analysis`,
+   `if a then b else c fi ≡ a ∧ b ∨ ¬a ∧ c` — is a line of the law file like any other, so the kernel
+   never quietly rewrites an `if` into `∧` and `∨` behind a user's back.
+   It brackets itself with `fi`, so it needs no parentheses and takes a whole expression in each of its
+   three places: `if b then x else y fi ∧ z` is the conditional and-ed with `z`. The four words are
+   reserved in expression position, as `T` and `F` already were. Render and parse are inverse on it.
+   Its three main operands are the condition and the two branches, which makes them three places to
+   zoom in to and three places a law may be applied to — the site machinery needed nothing added, since
+   it all goes through `operands` / `replaceOperand` / `operandPos` / `operandTy`. The branches are in
+   **positive** position and the condition in **neutral**: changing the condition switches between the
+   branches rather than weakening or strengthening the whole, so zooming in to a condition admits only
+   `=`. Zooming in to a branch **gains the condition, or its negation, as context** — the argument is
+   the one for `⇒`, since strengthening the then-branch under `c` strengthens `c ∧ b`, which is the only
+   way the whole is reached when `c` holds — and that is what makes a proof inside a branch possible.
+   The boolean law list gained the five Case laws of §11.3.1 (`case base` twice, `case idempotent`,
+   `case analysis`, `case reversal`), and `boolean_isTautology` checks all 76 laws as before. Matching a
+   pattern that mentions an `if` is condition-against-condition and branch-against-branch: nothing is
+   rearranged, nothing is distributed, nothing is normalised.
+   Four functions had catch-all cases that would have skipped the new node **silently**, and the law
+   check caught them: `Expr.mvars`, `Expr.vars` and `Expr.generalize` — without which a law file's
+   identifiers *inside* an `if` would not have been quantified at all, so `case idempotent` and
+   `case reversal` failed `isTautology` and said so — and `Law.instantiate`, which would have left an
+   `if`'s law variables unsubstituted. `Expr.evalInt` and `Expr.evalProp` are now mutually recursive,
+   because a number-valued `if` needs the boolean evaluator for its condition; that keeps
+   `Law.holdsOnInts` whole rather than quietly returning `none` on the new form.
+   In `netty-web/`, `LineView.kind` gained `"cond"` and `formula` draws the form's own four words around
+   its three pieces, each a zoom target as before. Nothing else in the window changed and no request
+   changed: the form travels as text in the line a script already sends.
+   Witnessed in Lean, all by `decide`, all `propext` only: `cond_parses`, `cond_renders`,
+   `cond_brackets_itself`, `cond_ty`, `cond_positions`, `condBase_proves` (a law of the list rewrites
+   one), `condBranch_gains_the_condition`, `condBranch_proves` and `condBranch_complete` (a proof
+   *inside* a branch, using the context it gains), and `absNonneg_holdsOnInts` (the number evaluator
+   through an `if`). `netty --selftest` gained `ifTest`, which reads all of that off the request service
+   the window talks to, including the three clickable pieces.
+   The cost, again worth writing down: `lake build netty` is about 7½ minutes, because the five new laws
+   add thirty greyed rows to every boolean line (`--selftest` reports 247 → 277 on `x ∧ y ∧ y ∧ z`, with
+   the *applicable* list unchanged at 207 and the greyed ones going 40 → 70), and three more full-list
+   replays needed `maxHeartbeats` raised. The new witnesses do not add to that: `condSession` is the five
+   Case laws and nothing else. Before the next grammar chunk, the thing to do is shrink the witnesses
+   that replay a whole proof under the *whole* law list — `segmentZoom` and its neighbours — to the laws
+   they actually use, as `ponensSession`, `dialogSession` and now `condSession` do.
+   Two traps worth remembering, both hit here: `String.startsWith` is opaque to the kernel, so a law
+   list filtered with it cannot be `decide`d (`==` on names can); and the parser is a `partial def`, so
+   no parse can be a `decide` witness at all — which is why the parse checks are in `--selftest`.
+   Not done here: the other grammar chunks, a better check for number laws, ML ranking, distributivity,
+   arithmetic or normalisation.
 
 ## Then grow language ↔ Netty grammar
 

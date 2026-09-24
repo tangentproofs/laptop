@@ -940,6 +940,88 @@ def dialogTest : IO Bool := do
       IO.eprintln s!"dialog: {gs.length} monotonicity readings write ‘b ∧ z’ on a bare line"
   return ok
 
+/-- Check the document's `if … then … else … fi` through the request service the
+window talks to: that it travels as text, that the window is offered its three
+pieces as three places to click, and that a law of the list rewrites one.
+
+The form brackets itself, so `start = if T then x else y fi` is one line of the
+script language and needs no new request. Its three main operands are the
+condition and the two branches, so the answer must offer three parts and three
+zoom targets, and `case base` must take the line to `x`. -/
+def ifTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean } }
+  let run := fun (s : Session) (arg : String) => Api.respond s { op := "cmd", arg := arg }
+  -- Read and written as one. This is checked here rather than in Lean because the
+  -- parser is a `partial def`, which the kernel cannot reduce; script parsing has
+  -- always been checked at run time for the same reason.
+  match Parser.expr "if b then x else y fi", Parser.expr "if b then x else y fi ∧ z" with
+  | .ok one, .ok two =>
+      let want := Expr.cond (Expr.var "b") (Expr.var "x") (Expr.var "y")
+      if one == want && one.render == "if b then x else y fi"
+          && two == Expr.bin .and want (Expr.var "z") then
+        IO.println "if: it parses, renders as it was written, and ‘fi’ closes it"
+      else
+        ok := false
+        IO.eprintln s!"if: parsed ‘{one.render}’ and ‘{two.render}’"
+  | a, b =>
+      ok := false
+      IO.eprintln s!"if: it does not parse: \
+        {match a with | .error e => e | .ok _ => ""}\
+        {match b with | .error e => e | .ok _ => ""}"
+  let (s, r) := run fresh "start = if T then x else y fi"
+  if !r.ok then
+    ok := false
+    IO.eprintln s!"if: ‘start = if T then x else y fi’: {r.error}"
+  match r.state.lines with
+  | [l] =>
+      if l.expr == "if ⊤ then x else y fi" && l.kind == "cond"
+          && l.parts == ["⊤", "x", "y"] && l.zooms.length == 3 then
+        IO.println "if: it reads back as it was written, in three clickable pieces"
+      else
+        ok := false
+        IO.eprintln s!"if: the line is ‘{l.expr}’, kind ‘{l.kind}’, with \
+          {l.parts.length} parts and {l.zooms.length} zoom targets"
+  | ls =>
+      ok := false
+      IO.eprintln s!"if: the started proof draws {ls.length} lines, not one"
+  let (_, based) := run s "apply case base : = x"
+  if !based.ok then
+    ok := false
+    IO.eprintln s!"if: ‘apply case base : = x’: {based.error}"
+  else if based.state.proved then
+    IO.println "if: and a law of the list rewrites it away"
+  else
+    ok := false
+    IO.eprintln s!"if: after ‘case base’ the proof is not finished: {based.state.outcome}"
+  -- Zooming in to a branch gains the condition, which is what makes a proof
+  -- inside one possible.
+  let mut u := fresh
+  for arg in ["start ⇐ if b then b else T fi", "zoom 1"] do
+    let (u', r') := run u arg
+    u := u'
+    if !r'.ok then
+      ok := false
+      IO.eprintln s!"if: ‘{arg}’: {r'.error}"
+  if (Api.stateView u).context == ["b"] then
+    IO.println "if: zooming in to a branch gains the condition"
+  else
+    ok := false
+    IO.eprintln s!"if: inside the branch the context is \
+      {String.intercalate ", " (Api.stateView u).context}"
+  for arg in ["apply context : = ⊤", "out", "apply case idempotent : = ⊤"] do
+    let (u', r') := run u arg
+    u := u'
+    if !r'.ok then
+      ok := false
+      IO.eprintln s!"if: ‘{arg}’: {r'.error}"
+  if (Api.stateView u).proved then
+    IO.println "if: and the proof inside it finishes"
+  else
+    ok := false
+    IO.eprintln s!"if: the proof inside the branch did not finish: {(Api.stateView u).outcome}"
+  return ok
+
 /-- Check that a gap is carried out of the subproof that holds it, through the
 request service the window talks to.
 
@@ -1115,6 +1197,7 @@ def selftest : IO Bool := do
   if !(← gapTest) then ok := false
   if !(← conditionalTest) then ok := false
   if !(← dialogTest) then ok := false
+  if !(← ifTest) then ok := false
   if !(← siteTest) then ok := false
   if !(← apiTest) then ok := false
   return ok

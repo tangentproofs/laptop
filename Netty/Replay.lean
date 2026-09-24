@@ -577,6 +577,93 @@ theorem dialogGappy_leaves_the_premise_as_a_gap :
 
 theorem dialogGappy_proves_nothing : provedIn dialogSession dialogGappy = none := by decide
 
+/-! ### `if … then … else … fi`
+
+The document's conditional expression, and the first of the grammar's named forms
+after the boolean and number fragment. It is a form of its own — `Expr.cond`, one
+node — and not sugar for anything: the law that says what it *means*,
+`case analysis`, is a line of the law file like any other, not something the
+kernel does silently.
+
+It brackets itself with `fi`, so it needs no parentheses and takes a whole
+expression in each of its three places. Its main operands are the condition and
+the two branches: three places to zoom in to and three places a law may be
+applied to. The branches are in *positive* position and the condition in
+*neutral*, because changing the condition switches between the branches rather
+than weakening or strengthening the whole — so zooming in to a condition admits
+only `=`. Zooming in to a branch gains the condition, or its negation, as
+context, exactly as zooming in to the consequent of `a ⇒ b` gains `a`. -/
+
+/-- It renders as it is written. That the parser reads it back — and that `fi`
+closes it, so `if b then x else y fi ∧ z` is the conditional and-ed with `z` and
+not a conditional whose else-branch is `y ∧ z` — is checked by `netty --selftest`
+rather than here: the parser is a `partial def`, which the kernel cannot reduce,
+which is why script parsing has always been checked at run time. -/
+theorem cond_renders :
+    (Expr.cond (var "b") (var "x") (var "y")).render = "if b then x else y fi" := by decide
+
+/-- Its type is its branches': a number in one of them makes the whole a number,
+and two identifiers settle nothing. The condition says nothing about it. -/
+theorem cond_ty :
+    ((Expr.cond (var "b") (num 1) (var "y")).tyOf?, (Expr.cond (var "b") (var "x") (var "y")).tyOf?)
+      = (some .number, none) := by decide
+
+/-- The condition is neutral and the branches are positive. -/
+theorem cond_positions :
+    ((List.range 3).map fun i => (Expr.cond (var "b") (var "x") (var "y")).operandPos i)
+      = [.neutral, .positive, .positive] := by decide
+
+/-- The five Case laws, and nothing else: what is witnessed below is the form and
+the laws about it, and a short list says so and keeps the replays cheap. -/
+def condSession : Doc :=
+  { laws := Laws.boolean.filter fun l =>
+      l.name == "case base" || l.name == "case idempotent" || l.name == "case analysis"
+        || l.name == "case reversal" }
+
+/-- A law of the list rewrites one: `if ⊤ then x else y fi = x` by `case base`. -/
+def condBase : List Cmd :=
+  [ .start .boolean .same (Expr.cond .top (var "x") (var "y")),
+    .applyNamed "case base" (some (.eq, var "x")) ]
+
+theorem condBase_proves :
+    provedIn condSession condBase
+      = some (bin .eq (Expr.cond .top (var "x") (var "y")) (var "x")) := by decide
+
+/-- And a proof that works *inside* one: `if b then b else ⊤ fi`, by zooming in to
+the then-branch — where `b` becomes context — using it there, and folding the two
+equal branches with `case idempotent`. -/
+def condBranch : List Cmd :=
+  [ .start .boolean .up (Expr.cond (var "b") (var "b") .top),
+    .zoomIn (.operand 1),
+    .applyNamed "context" (some (.eq, .top)),
+    .zoomOut,
+    .applyNamed "case idempotent" (some (.eq, .top)) ]
+
+/-- Zooming in to the then-branch gains the condition, and leaves the direction
+alone: the branch is in positive position. -/
+theorem condBranch_gains_the_condition :
+    ((condSession.steps (condBranch.take 2)).toOption.map fun d =>
+      (d.contextLaws.map Law.stmt, d.frame?.map Frame.dir))
+      = some ([var "b"], some .up) := by decide
+
+theorem condBranch_proves :
+    provedIn condSession condBranch = some (Expr.cond (var "b") (var "b") .top) := by decide
+
+theorem condBranch_complete :
+    ((condSession.steps condBranch).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
+/-- The eval hooks go through the form, so it leaves no hole in the law checks.
+`boolean_isTautology` covers the five `case` laws the boolean list gained, which
+is the boolean evaluator; this is the number one, where a number-valued `if` needs
+the *boolean* evaluator for its condition and the two are mutually recursive. -/
+def absNonneg : Law :=
+  { name := "absolute value", vars := ["x"],
+    stmt := bin .le (num 0)
+      (Expr.cond (bin .le (num 0) (mvar "x")) (mvar "x") (bin .sub (num 0) (mvar "x"))) }
+
+theorem absNonneg_holdsOnInts : Law.holdsOnInts [-2, -1, 0, 1, 2] absNonneg = true := by decide
+
 /-! ### A gap, and closing it -/
 
 /-- Type `a` in directly under `¬¬a`, which leaves a warning sign; then move
@@ -1231,6 +1318,7 @@ theorem segmentZoom_complete :
     ((session.steps segmentZoom).toOption.map fun d => (d.gaps, d.stack.length))
       = some ([], 1) := by decide
 
+set_option maxHeartbeats 1000000 in
 /-- And the line the zoom out splices is, connective and formula, the line
 `segmentFold` writes in one step: the long way round and the short way round
 write the same thing, because both put the part back through `Part.replace`. -/
@@ -1240,6 +1328,7 @@ theorem segmentZoom_splices_what_the_site_writes :
       = ((session.steps segmentFold).toOption.bind fun d =>
         d.lines.toList.getLast?.map fun l => (l.conn, l.expr)) := by decide
 
+set_option maxHeartbeats 1000000 in
 /-- The document keeps all four lines, and the display draws two: the subproof is
 a single law application, so it folds into the line it was zoomed in from with
 `idempotent` moved up — line for line what `segmentFold` draws. The collapses
@@ -1249,6 +1338,7 @@ theorem segmentZoom_collapses :
       = some (4, [{ index := 0, depth := 0, note := "idempotent" },
                   { index := 3, depth := 0, note := "" }]) := by decide
 
+set_option maxHeartbeats 1000000 in
 theorem segmentZoom_shows_what_segmentFold_shows :
     shown segmentZoom = shown segmentFold := by decide
 

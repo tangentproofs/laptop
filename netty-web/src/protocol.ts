@@ -45,7 +45,7 @@ export interface LineView {
   /** The whole line, rendered. */
   expr: string;
   /** Whether `op` is written before the one operand, between them, or not. */
-  kind: 'neg' | 'bin' | 'atom';
+  kind: 'neg' | 'bin' | 'cond' | 'atom';
   /** The main operator's symbol, or `''`. */
   op: string;
   /** The main operands, rendered as they stand in `expr`. */

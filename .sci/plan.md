@@ -425,7 +425,8 @@
       below); the document's display collapses
       (nested zooms merged, a one-law subproof folded into its parent line) were not done (lifted
       2026-09-23, below); `if … then …
-      else … fi`, quantifiers, bunches, strings, lists, functions and programs are not in the grammar;
+      else … fi` (lifted 2026-09-24, below), quantifiers, bunches, strings, lists, functions and
+      programs are not in the grammar;
       Lake does not track `boolean.laws` as a build dependency, which `--selftest` catches.
 - [x] Netty three-pane web UI (2026-09-23; on main) — `Netty/Api.lean` and `netty-web/`.
       `Netty/Api.lean`: the session as one JSON request and one JSON answer — `state`, `cmd` (one line
@@ -951,3 +952,33 @@
       `dialogTest` driving them through the request service; `/api` smoke tested.
       Left parked: a better check for number laws, ML ranking, distributivity, arithmetic and
       normalisation, grammar growth, and phase 2e.
+- [x] Netty: `if … then … else … fi` (2026-09-24; on main) — item 21 of `.sci/netty-plan.md`, and the
+      first chunk of *language* growth rather than of the window. `Expr.cond` is one node and not sugar:
+      the law that says what the form means (`case analysis`) is a line of the law file, so the kernel
+      never rewrites an `if` into `∧`/`∨` behind a user's back. It brackets itself with `fi`, so it needs
+      no parentheses and takes a whole expression in each place; the four words are reserved in
+      expression position as `T` and `F` were; render and parse are inverse on it.
+      Its three main operands are the condition and the two branches, so the site machinery needed
+      nothing added. The branches are **positive** and the condition **neutral** (changing it switches
+      branches rather than weakening the whole), so zooming in to a condition admits only `=`; and
+      zooming in to a branch **gains the condition, or its negation, as context**, by the argument that
+      gives `⇒` its context. The boolean list gained the five Case laws of §11.3.1, and
+      `boolean_isTautology` checks all 76.
+      Four catch-all cases would have skipped the new node silently, and the law check caught them:
+      `Expr.mvars`, `Expr.vars`, `Expr.generalize` (without which a law file's identifiers *inside* an
+      `if` were never quantified — `case idempotent` and `case reversal` failed as tautologies and said
+      so) and `Law.instantiate`. `Expr.evalInt` / `evalProp` are now mutually recursive so a
+      number-valued `if` evaluates, keeping `holdsOnInts` whole.
+      Ten witnesses by `decide`, `propext` only, including a proof *inside* a branch using the context it
+      gains; `netty --selftest` gained `ifTest` through the request service; `netty-web/` draws the form's
+      four words around its three clickable pieces (`kind = "cond"`), no new request.
+      Cost: `lake build netty` about 7½ minutes — the five new laws add 30 greyed rows per boolean line
+      (`--selftest`: 247 → 277 on `x ∧ y ∧ y ∧ z`, applicable unchanged at 207) and three more full-list
+      replays needed `maxHeartbeats` raised; the new witnesses use a five-law `condSession` and add
+      nothing. Before the next grammar chunk, shrink the `segmentZoom` witnesses to the laws they use, as
+      `ponensSession` / `dialogSession` / `condSession` do. Two traps hit here and worth remembering:
+      `String.startsWith` is opaque to the kernel (so `==` on law names, not `startsWith`), and the
+      parser is a `partial def`, so a parse can never be a `decide` witness — the parse checks live in
+      `--selftest`.
+      Left parked: the other grammar chunks, a better check for number laws, ML ranking, distributivity,
+      arithmetic and normalisation, and phase 2e.

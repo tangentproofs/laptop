@@ -227,6 +227,12 @@ def matchFuel : Nat → Expr → Expr → Subst → List Subst
   | _ + 1, top, top, σ => [σ]
   | _ + 1, bot, bot, σ => [σ]
   | f + 1, neg a, neg b, σ => matchFuel f a b σ
+  -- `if … fi` matches an `if … fi`, condition against condition and branch
+  -- against branch. Nothing is rearranged and nothing is distributed: a law that
+  -- mentions the form reads a line that writes it, and that is all.
+  | f + 1, cond c x y, cond c' x' y', σ =>
+      (matchFuel f c c' σ).flatMap fun σ₁ =>
+        (matchFuel f x x' σ₁).flatMap fun σ₂ => matchFuel f y y' σ₂
   | f + 1, bin o l r, e, σ =>
       if o.assoc || o.identity.isSome then
         let es := flattenOp o e
@@ -267,6 +273,7 @@ def instantiate (σ : Subst) : Expr → Expr
   | mvar n => match σ.lookup n with | some e => e | none => mvar n
   | neg a => neg (instantiate σ a)
   | bin o l r => bin o (instantiate σ l) (instantiate σ r)
+  | cond c x y => cond (instantiate σ c) (instantiate σ x) (instantiate σ y)
   | e => e
 
 end Expr

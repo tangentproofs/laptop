@@ -49,6 +49,7 @@ private def expr : Expr → Lean.Term
   | .bot => Lean.mkCIdent ``Expr.bot
   | .neg a => Lean.Syntax.mkCApp ``Expr.neg #[expr a]
   | .bin o l r => Lean.Syntax.mkCApp ``Expr.bin #[binOp o, expr l, expr r]
+  | .cond c x y => Lean.Syntax.mkCApp ``Expr.cond #[expr c, expr x, expr y]
 
 /-- Quote a law as a term. -/
 def lawTerm (l : Law) : Lean.Term :=

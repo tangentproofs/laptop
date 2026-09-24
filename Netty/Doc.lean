@@ -342,6 +342,15 @@ def contextOfRange (e : Expr) (start len : Nat) : List Expr :=
           | some l, some r => if start == 0 then splitAnd r else splitAnd (negate l)
           | _, _ => []
       | _ => []
+  -- Zooming in to a branch of `if c then t else e fi` may assume the condition,
+  -- or its negation: the other branch is not reached there. That is the document's
+  -- table for the form, and the argument is the one for `⇒` — strengthening the
+  -- then-branch under `c` strengthens `c ∧ t`, which is the only way the whole is
+  -- reached when `c` holds. The condition itself gains nothing.
+  | cond c _ _ =>
+      if start == 1 && len == 1 then splitAnd c
+      else if start == 2 && len == 1 then splitAnd (negate c)
+      else []
   | _ => []
 
 /-- The facts a zoom in to the `i`-th main operand of `e` adds to the context:

@@ -15,8 +15,9 @@
 # them. Remember that aPToP's '¬' binds more weakly than '=', so 'a = ¬b' does
 # not parse; write 'a ≡ ¬b' or 'a = (¬b)'.
 #
-# The laws about 'if … then … else … fi' are not here: the kernel's grammar
-# does not have 'if' yet.
+# 'if a then b else c fi' is the document's conditional expression. It brackets
+# itself, so it needs no parentheses and takes a whole expression in each of its
+# three places. The words 'if', 'then', 'else' and 'fi' are reserved.
 
 mirror: a ⇐ b ≡ b ⇒ a
 double negation: ¬¬a ≡ a
@@ -108,3 +109,11 @@ conflation: (a ⇒ b) ∧ (c ⇒ d) ⇒ (a ∨ c ⇒ b ∨ d)
 
 equality: (a = b) ≡ (a ∧ b) ∨ (¬a ∧ ¬b)
 difference: (a ⧧ b) ≡ (a ∧ ¬b) ∨ (¬a ∧ b)
+
+# 'if … then … else … fi' (aPToP §11.3.1, the Case laws). The form is not sugar
+# for anything, and Case Analysis is the law that says what it means.
+case base: if T then a else b fi ≡ a
+case base: if F then a else b fi ≡ b
+case idempotent: if a then b else b fi ≡ b
+case analysis: if a then b else c fi ≡ a ∧ b ∨ ¬a ∧ c
+case reversal: if a then b else c fi ≡ if ¬a then c else b fi

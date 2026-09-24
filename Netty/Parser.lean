@@ -20,7 +20,8 @@ neg    := '¬' neg | rel
 rel    := arith (('=' | '⧧' | '<' | '>' | '≤' | '≥') arith)*
 arith  := term (('+' | '-') term)*
 term   := atom ('×' atom)*
-atom   := identifier | '⊤' | '⊥' | '(' expr ')'
+atom   := identifier | number | '⊤' | '⊥' | '(' expr ')'
+        | 'if' expr 'then' expr 'else' expr 'fi'
 ```
 
 Two features of it are the book's and look odd at first.
@@ -48,6 +49,12 @@ can be typed on any keyboard:
 | `⇐`   | `<=`  | | `⊥`   | `F`   | | `⧧`   | `!=`  |
 
 `T` and `F` are therefore reserved and cannot be used as identifiers.
+
+`if … then … else … fi` is the document's conditional expression. It closes
+itself, so it needs no parentheses and takes whole expressions in all three
+places: `if b then x else y fi ∧ z` is the conditional and-ed with `z`. The four
+words are reserved in expression position for the same reason `T` and `F` are: an
+identifier spelled `if`, `then`, `else` or `fi` is no longer readable.
 -/
 
 namespace Netty
@@ -172,6 +179,13 @@ private def opsAt : Nat → List BinOp
 /-- The result of parsing a prefix of a token list. -/
 private abbrev PRes := Except String (Expr × List Tok)
 
+/-- Consume one of the words that bracket a conditional expression. -/
+private def expectWord (w : String) : List Tok → Except String (List Tok)
+  | .ident v :: rest =>
+      if v == w then .ok rest else .error s!"expected ‘{w}’ but found ‘{v}’"
+  | t :: _ => .error s!"expected ‘{w}’ but found ‘{t}’"
+  | [] => .error s!"expected ‘{w}’"
+
 mutual
 
 /-- Parse at precedence level `lvl`, returning the unconsumed tokens. -/
@@ -183,6 +197,16 @@ private partial def pLevel (lvl : Nat) (ts : List Tok) : PRes :=
       | _ => pLevel 5 ts
   | 8 =>
       match ts with
+      -- `if … fi` brackets itself, so each of its three places takes a whole
+      -- expression and none of them needs parentheses.
+      | .ident "if" :: rest => do
+          let (c, r) ← pLevel 0 rest
+          let r ← expectWord "then" r
+          let (x, r) ← pLevel 0 r
+          let r ← expectWord "else" r
+          let (y, r) ← pLevel 0 r
+          let r ← expectWord "fi" r
+          .ok (Expr.cond c x y, r)
       | .ident n :: rest => .ok (Expr.var n, rest)
       | .num n :: rest => .ok (Expr.num n, rest)
       | .top :: rest => .ok (Expr.top, rest)
