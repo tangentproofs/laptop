@@ -20,8 +20,9 @@ exactly `a ⇒ (b ⇒ a)`. Nothing here is a test in the usual sense: `Doc.step`
 
 More replays are checked the same way: one that zooms in to a subexpression and
 uses the context that zooming in supplies, one that reaches an outer line by a
-click instead of by zooming out, one that leaves a gap by direct entry and then
-closes it, one that applies a law to a *part* of a line instead of to the whole
+click instead of by zooming out, one that goes back *into* a subproof it had
+zoomed out of — and one that is refused because work was written after that
+subproof closed — one that leaves a gap by direct entry and then closes it, one that applies a law to a *part* of a line instead of to the whole
 of it, one that applies a law to a contiguous *segment* of an association that
 neither the whole line nor a single operand can reach, one that zooms *into* such
 a segment and splices it back, and two that exercise the
@@ -148,12 +149,17 @@ theorem anywhere_closes_the_stack :
       (d.focus, d.stack.length, d.contextLaws.length, d.lines.size))
       = some (0, 1, 0, 5) := by decide
 
-/-- The closed subproof's lines are not focusable — a click cannot re-open a
-level that has been zoomed out of — but both lines of the outermost level
-are. -/
-theorem anywhere_leaves_the_subproof_closed :
+/-- Every line is focusable: the two of the outermost level because they are
+open, and the three of the closed subproof because the zoom out that closed it
+is the last line of this level and can be taken back. -/
+theorem anywhere_leaves_every_line_open_to_a_click :
     ((session.steps (anywhere.take 5)).toOption.map fun d =>
-      (List.range d.lines.size).filter (d.canFocus ·)) = some [0, 4] := by decide
+      (List.range d.lines.size).filter (d.canFocus ·)) = some [0, 1, 2, 3, 4] := by decide
+
+/-- Three of them re-open the subproof; the two of the open level do not. -/
+theorem anywhere_says_which_clicks_reopen :
+    ((session.steps (anywhere.take 5)).toOption.map fun d =>
+      (List.range d.lines.size).filter (d.reopensOn ·)) = some [1, 2, 3] := by decide
 
 /-- Carrying on from there proves what `discharge` proves … -/
 theorem anywhere_proves : proved anywhere = some dischargeGoal := by decide
@@ -186,10 +192,38 @@ theorem nested_puts_the_subproofs_back :
       = some (bin .imp (bin .imp (var "a") (var "b"))
                 (bin .imp (var "a") (bin .and (var "b") (var "a")))) := by decide
 
-/-- A closed subproof stays closed even when a *new* level is open at its own
-depth: zoom in, step, zoom out, zoom in again, and the first subproof's lines
-are still not focusable, though both lines of the outer level and the line of the
-new level are. -/
+/-! ### Going back into a closed subproof
+
+A click may land on a line of a subproof that has already been zoomed out of.
+The kernel takes that zoom out back — `Doc.reopenStep`, its exact inverse — so
+the level is innermost again with its context in force, and the focus is on the
+line that was clicked. What it refuses is a subproof closed *before* later work
+was written: undoing the zoom out would undo the work. -/
+
+/-- Clicking a line of the closed subproof puts the focus there, one level deep,
+with the line the zoom out wrote taken back — four lines where there were five —
+and the context the zoom in supplied in force again. -/
+theorem click_reopens_the_subproof :
+    ((session.steps (anywhere.take 5 ++ [.setFocus 2])).toOption.map fun d =>
+      (d.focus, d.depth, d.lines.size, d.contextLaws.length))
+      = some (2, 1, 4, 1) := by decide
+
+/-- And it writes back the very state the zoom out was taken from: lines, stack,
+focus and all. Re-opening is the inverse of zooming out, not an approximation
+of it. -/
+theorem reopen_undoes_the_zoom_out :
+    (session.steps (discharge.take 4 ++ [.zoomOut, .setFocus 3])).toOption
+      = (session.steps (discharge.take 4)).toOption := by decide
+
+/-- A subproof closed *before* later work stays closed: `discharge` takes a step
+at the outer level after zooming out, and the three lines of the subproof are
+refused where the three of the open level are not. -/
+theorem work_after_keeps_the_subproof_closed :
+    ((session.steps discharge).toOption.map fun d =>
+      (List.range d.lines.size).filter (d.canFocus ·)) = some [0, 4, 5] := by decide
+
+/-- A new level open at the same depth is no obstacle: zoom in, step, zoom out,
+zoom in again, and every line is still reachable. -/
 def reopen : List Cmd :=
   [ .start .boolean .up dischargeGoal,
     .zoomIn (.operand 1),
@@ -197,10 +231,26 @@ def reopen : List Cmd :=
     .zoomOut,
     .zoomIn (.operand 1) ]
 
-theorem reopen_keeps_the_first_subproof_closed :
+theorem reopen_reaches_the_first_subproof :
     ((session.steps reopen).toOption.map fun d =>
       (d.depth, (List.range d.lines.size).filter (d.canFocus ·)))
-      = some (1, [0, 3, 4]) := by decide
+      = some (1, [0, 1, 2, 3, 4]) := by decide
+
+/-- Clicking into it closes the new level first — a level of one line, so closing
+it is the undo the document says it is — and then takes the zoom out back: three
+lines left, the first subproof innermost again, the focus where the click
+landed. -/
+theorem reopen_closes_the_new_level_first :
+    ((session.steps (reopen ++ [.setFocus 1])).toOption.map fun d =>
+      (d.focus, d.depth, d.lines.size)) = some (1, 1, 3) := by decide
+
+/-- Two levels deep, two clicks go all the way back in: `nested` closes both
+levels with one click on line 0, and clicking the innermost line re-opens both,
+one `Doc.reopenStep` each. -/
+theorem nested_reopens_both_levels :
+    ((session.steps (nested ++ [.setFocus 3])).toOption.map fun d =>
+      (d.focus, d.depth, d.lines.size, d.contextLaws.length))
+      = some (3, 2, 4, 2) := by decide
 
 /-! ### A gap, and closing it -/
 
@@ -729,6 +779,21 @@ theorem gapInside_gaps_the_line_before_the_splice :
 /-- And the proof does not claim anything: the outer level has a gap in it, so
 `Doc.outcome` refuses even though the subproof has been closed. -/
 theorem gapInside_proves_nothing : proved gapInside = none := by decide
+
+/-- Re-opening takes the carried gap back with the line that carried it out: a
+click on the subproof's bottom line leaves the gap the direct entry made inside
+the level, and nothing on the line above it. -/
+theorem reopen_takes_the_carried_gap_back :
+    ((session.steps (gapInside ++ [.setFocus 2])).toOption.map fun d =>
+      (d.depth, d.lines.size, d.gaps)) = some (1, 3, [1]) := by decide
+
+/-- And zooming out again carries it out again, writing the very document the
+first zoom out wrote: the splice and the warning sign on the line before it come
+back as they were. Going back in and out of a subproof that holds a gap changes
+nothing. -/
+theorem reopen_then_zoom_out_is_the_same_document :
+    (session.steps (gapInside ++ [.setFocus 2, .zoomOut])).toOption
+      = (session.steps gapInside).toOption := by decide
 
 /-- A justified subproof splices as it always did. `fold`'s subproof is a single
 law application: no gap is carried out, line 0 keeps the law's name — lifted by

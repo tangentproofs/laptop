@@ -100,16 +100,30 @@ reproduces the line already below the focus replaces the warning sign with the
 law's name.
 
 The document lets a click land *anywhere*, and so does `Cmd.setFocus`: the line
-may be at an outer level, and the zoom stack is then recomputed so that the
-line's level is the innermost open one again. The recompute is a run of
-zoom-outs (`Doc.closeToDepth`) — the state the user could have reached by
-closing those levels themselves — so each abandoned subproof still puts its
-bottom line back into the line it was zoomed in from, and the direction, type
-and context that come with the focus are the ones that level always had. The
-one place a click cannot go is into a subproof that has already been zoomed out
-of: that level is closed, and re-opening one is not something the kernel does.
-`Doc.canFocus` is the predicate, and it is what the API reports as
-`focusable`.
+may be at an outer level, or inside a subproof that has already been zoomed out
+of, and the zoom stack is recomputed so that the line's level is the innermost
+open one again. `Doc.refocus` is the whole move, and it is made of two inverse
+steps and nothing else:
+
+* `Doc.closeToDepth` closes levels, as a run of zoom-outs the user could have
+  made themselves, so each abandoned subproof still puts its bottom line back
+  into the line it was zoomed in from; and
+* `Doc.reopenStep` re-opens the last closed one, as the exact inverse of a
+  zoom-out: the line that zoom-out wrote goes away again and the frame is
+  rebuilt from what the level's first line carries — its type, its direction and
+  the part of the line above it was opened on — so the direction, type and
+  context that come with the focus are the ones that level always had.
+
+Because both are steps the user could have taken, the state a click reaches is
+one they could have reached by zooming, and a later zoom-out splices from it
+exactly as it would have then, gap and all.
+
+What a click cannot reach is a line whose subproof was closed *before* later
+work was written: taking that subproof back out from under the work would undo
+it, so the kernel refuses. `Doc.canFocus` is that refusal — it is defined as
+`Doc.refocus` succeeding, so the two cannot disagree — and it is what the API
+reports as `focusable`, with `Doc.reopensOn` saying which of the two moves a
+click would make.
 
 ## Gaps
 
@@ -154,11 +168,14 @@ The two collapses are:
 
 Both are honest because both only remove lines that a rewriting of the step
 would not have written in the first place, and both leave every line that
-carries a law name or a warning sign. Neither ever hides the focus, a line
-with a gap, or a line of a level that is still open: a collapse fires only
-where the matching zoom-out has already been written, and `Doc.canFocus`
-refuses a closed level anyway. The pass is a fixpoint, so a threefold zoom
-merges twice and then folds.
+carries a law name or a warning sign. Neither ever hides the focus or a line
+with a gap (`Doc.mayHide`), and a collapse fires only where the matching
+zoom-out has already been written, so no line of an open level is ever hidden.
+A collapsed subproof is therefore not there to be clicked on, and re-opening
+reaches the subproofs a display draws — which is every subproof of more than
+one step. The other direction takes care of itself: re-opening leaves the focus
+inside the level, and a level holding the focus is never collapsed. The pass is
+a fixpoint, so a threefold zoom merges twice and then folds.
 -/
 
 namespace Netty
@@ -417,6 +434,10 @@ structure Line where
   ty : Option Ty := none
   /-- On the first line of a level, that level's direction. -/
   dir : Option Dir := none
+  /-- On the first line of a level, the part of the line above that the zoom in
+  opened it on — so that a closed subproof can be re-entered after its frame has
+  been popped, the frame being rebuilt from the part (`Doc.reopenStep`). -/
+  part : Option Part := none
   deriving Repr, DecidableEq, Inhabited
 
 /-- A level of the zoom stack that is still open. -/
@@ -862,17 +883,13 @@ def zoomOut (d : Doc) : Except String Doc :=
   | [_] => .error "the outermost proof cannot be zoomed out of"
   | [] => .error "the proof has not been started"
 
-/-- Whether the focus may be moved to just after line `i`.
-
-Any line of any *open* level will do — the document lets a click land anywhere,
-and focusing a line below the innermost level closes the levels between it and
-that line (`Doc.closeToDepth`). What cannot be focused is a line of a subproof
-that has already been zoomed out of: its level is closed, and re-opening one is
-not something the kernel does. Those are the lines deeper than the innermost
-open level, and the lines that lie before the first line of the open level at
-their own depth — the ones belonging to an earlier, closed subproof at that
-depth. -/
-def canFocus (d : Doc) (i : Nat) : Bool :=
+/-- Whether line `i` belongs to a level that is *open*: its depth is one the
+stack still has, and it lies at or after that level's first line. The lines this
+refuses belong to a subproof that has been zoomed out of — deeper than the
+innermost open level, or before the first line of the open level at their own
+depth, which is to say in an earlier, closed subproof at that depth. Those are
+the lines `Doc.reopenStep` may be able to bring back. -/
+def inOpenLevel (d : Doc) (i : Nat) : Bool :=
   !d.stack.isEmpty &&
     (match d.lines[i]? with
      | none => false
@@ -905,6 +922,126 @@ where
         else do
           let d := { d with focus := d.lines.size - 1 }
           go fuel (← d.zoomOut)
+
+/-- Undo the last zoom-out: re-open the subproof whose bottom line the last line
+of the document splices back, and leave the focus on that bottom line.
+
+This is the exact inverse of `Doc.zoomOut`, which is what makes the state it
+reaches one the user could have reached by zooming and never left. The line the
+zoom out wrote goes away again; the frame is rebuilt from what the level's first
+line carries — its type, its direction and the part of the line above that the
+zoom in opened it on — with the position and the context recomputed from that
+part, exactly as `Cmd.zoomIn` computed them, off a line the zoom out did not
+change. So the frame is the one that level always had, down to its context laws.
+
+The gap that the zoom out may have written on the line it zoomed in from is
+taken off again. That is exactly the flag the zoom out wrote: the last line of a
+level never carries a gap — a gap marks the step from a line to the *next* one,
+and there is none — so the line was clean when the zoom in left it, and nothing
+between then and the zoom out could have marked it.
+
+Re-opening is refused when the last line of this level is not the zoom out's:
+work has been written since, and taking the subproof back out from under it
+would undo that work. -/
+def reopenStep (d : Doc) : Except String Doc := do
+  if d.stack.isEmpty then throw "the proof has not been started"
+  if d.lines.size < 3 then throw "there is no closed subproof to re-open here"
+  let last := d.lines.size - 1
+  let ll := d.lines[last]!
+  if ll.depth != d.depth then
+    throw "there is no closed subproof to re-open at this level"
+  if ll.why != "zoom out" then
+    throw "the last line of this level was not written by zooming out; the \
+      subproof before it cannot be re-opened without undoing that work"
+  let bottom := last - 1
+  if (d.lines[bottom]!).depth != d.depth + 1 then
+    throw "there is no closed subproof to re-open here"
+  let zl ← orElseError "there is no closed subproof to re-open here"
+    ((List.range bottom).reverse.find? fun j => (d.lines[j]!).depth ≤ d.depth)
+  if (d.lines[zl]!).depth != d.depth then
+    throw "the closed subproof does not sit inside a line of this level"
+  let start := zl + 1
+  let fl := d.lines[start]!
+  if fl.depth != d.depth + 1 || fl.why != "zoom in" then
+    throw "there is no closed subproof to re-open here"
+  let subTy ← orElseError "the closed subproof records no type" fl.ty
+  let subDir ← orElseError "the closed subproof records no direction" fl.dir
+  let part ← orElseError "the closed subproof records no part to re-open it on" fl.part
+  let zle := (d.lines[zl]!).expr
+  let pos := part.posOf zle
+  return { d with
+    lines := d.lines.pop.set! zl { d.lines[zl]! with gap := false }
+    stack := { ty := subTy, dir := subDir, start := start, zoomLine := some zl,
+               part := part, pos := pos,
+               ctx := (part.contextOf zle).map Law.context } :: d.stack
+    focus := bottom }
+
+/-- Move the focus to just after line `n`, wherever in the proof that line is.
+
+The document lets a click land anywhere, and so does this. Three things may have
+to happen first, in this order:
+
+* levels that start after the line are closed, as a run of zoom-outs
+  (`Doc.closeToDepth` does the same for a line below the innermost level);
+* levels the line is inside that have been zoomed out of are re-opened, one
+  `Doc.reopenStep` each, innermost last — so a click goes back into a subproof
+  the user had left, with that level innermost again and its context in force;
+* any levels still open below the line's own are closed.
+
+Each phase is bounded: closing spends a level, re-opening spends the line the
+zoom out wrote. What is refused is a line whose subproof was closed *before*
+later work was written — re-opening it would mean taking that work back — and
+the refusal is what `Doc.canFocus` reports, so the window can grey exactly the
+lines a click cannot reach. -/
+def refocus (d : Doc) (n : Nat) : Except String Doc := do
+  if d.stack.isEmpty then throw "the proof has not been started"
+  let l ← orElseError s!"there is no line {n}" d.lines[n]?
+  let d ← closePhase d.stack.length d
+  let d ← reopenPhase d.lines.size d
+  if !d.inOpenLevel n then
+    throw s!"line {n} belongs to a subproof that was closed before later work \
+      was written; the focus cannot go back into it without undoing that work"
+  let d ← d.closeToDepth l.depth
+  return { d with focus := n }
+where
+  /-- Close the levels that begin after the line we are going to. -/
+  closePhase : Nat → Doc → Except String Doc
+    | 0, d => .ok d
+    | fuel + 1, d =>
+        match d.frame? with
+        | none => .ok d
+        | some f =>
+            if f.start ≤ n then .ok d
+            else do
+              let d := { d with focus := d.lines.size - 1 }
+              closePhase fuel (← d.zoomOut)
+  /-- Re-open the closed levels the line is inside, outermost first. -/
+  reopenPhase : Nat → Doc → Except String Doc
+    | 0, d => .ok d
+    | fuel + 1, d =>
+        match d.lines[n]? with
+        | none => .ok d
+        | some l =>
+            if l.depth ≤ d.depth then .ok d
+            else
+              match d.frame? with
+              | none => .ok d
+              | some f =>
+                  if f.start > n then
+                    throw s!"line {n} belongs to a subproof that was closed \
+                      before later work was written; the focus cannot go back \
+                      into it without undoing that work"
+                  else do reopenPhase fuel (← d.reopenStep)
+
+/-- Whether the focus may be moved to just after line `i`: whether
+`Doc.refocus` would take it there. The predicate is the move succeeding, so the
+window greys a line exactly when clicking it would be refused. -/
+def canFocus (d : Doc) (i : Nat) : Bool := (d.refocus i).toOption.isSome
+
+/-- Whether moving the focus to line `i` would re-open a subproof that has been
+zoomed out of, rather than stay in or close down to an open level. This is what
+lets a client say which of the two a click would do. -/
+def reopensOn (d : Doc) (i : Nat) : Bool := !d.inOpenLevel i && d.canFocus i
 
 /-- Run one command. Every change a user can make to a proof is one of these,
 and this is the only way a `Doc` changes. -/
@@ -956,23 +1093,13 @@ def step (d : Doc) : Cmd → Except String Doc
       return { d with
         lines := d.lines.push
           { depth := d.depth + 1, expr := sub, why := "zoom in",
-            ty := some subTy, dir := some subDir }
+            ty := some subTy, dir := some subDir, part := some part }
         stack := { ty := subTy, dir := subDir, start := idx,
                    zoomLine := some d.focus, part := part, pos := pos,
                    ctx := (part.contextOf fl.expr).map Law.context } :: d.stack
         focus := idx }
   | .zoomOut => d.zoomOut
-  | .setFocus n => do
-      if d.stack.isEmpty then throw "the proof has not been started"
-      let l ← orElseError s!"there is no line {n}" d.lines[n]?
-      if !d.canFocus n then
-        throw s!"line {n} belongs to a subproof that has been zoomed out of; \
-          the focus cannot move back into one"
-      -- Closing the levels below the line leaves untouched the frame of the
-      -- level the line is in — `Doc.zoomOut` rebuilds no frame but the one it
-      -- pops — so `canFocus`, asked before, still holds after.
-      let d ← d.closeToDepth l.depth
-      return { d with focus := n }
+  | .setFocus n => d.refocus n
 
 /-- Run a whole script. -/
 def steps (d : Doc) (cs : List Cmd) : Except String Doc :=

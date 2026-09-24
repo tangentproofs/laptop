@@ -90,9 +90,9 @@ Concurrency (`||`), channels, ivar, full book syntax are **language growth**, no
 Everything the window made visible is done (2026-09-23/24): applying a law to a part of a line,
 anywhere-focus, the display collapses, matching modulo symmetry and an identity element, contiguous
 association segments as sites, zooming into one, clicking one in the window, ranking the suggestion
-list, the gap-on-splice justification, and highlighting the site a suggestion would rewrite. What is
-left is kernel work the window does not force: re-opening a closed level, conditional laws at the
-number level, and the named chunks of the grammar below. Phase 2e (LoopBridge / concurrency) stays
+list, the gap-on-splice justification, highlighting the site a suggestion would rewrite, and going
+back into a closed level. What is left is kernel work the window does not force: conditional laws at
+the number level, and the named chunks of the grammar below. Phase 2e (LoopBridge / concurrency) stays
 parked.
 
 ### Kernel residuals to pick up alongside or after the UI
@@ -112,9 +112,10 @@ parked.
 - The suggestion list is *ranked* by a written-down heuristic (`Doc.rank`, items 13 and 14), not
   learned: applicable before unconstrained, fewer unconstrained variables, the shorter line the step
   writes, then the more specific place, then the law file's own order. ML ranking stays out of MVP.
-- The focus lands on any line of any *open* level (2026-09-23), the levels below it closing as a run of
-  zoom-outs would. A line of a subproof that has already been zoomed out of is still refused —
-  re-opening a closed level is not something the kernel does — and the web UI greys its number.
+- The focus lands on any line of the proof (2026-09-23, item 7; 2026-09-24, item 17): levels that start
+  after it close as a run of zoom-outs would, and a subproof that was zoomed out of re-opens as the
+  exact inverse of that zoom-out. What is refused, and greyed in the window, is a subproof closed
+  *before* later work was written: going back in would take that work with it.
 - A gap is carried out of the subproof that holds it (2026-09-24, item 15): zooming out of a level
   that still has a gap marks a gap on the line it was zoomed in from, so the outer step to the spliced
   line draws the document's warning sign. A subproof with no gaps splices as it always did.
@@ -145,12 +146,15 @@ parked.
    outer lines with no client logic added — only the gutter's tooltip, which now says whether a click
    would close a subproof.
    Witnessed in Lean, all by `decide`, all `propext` only: `anywhere_closes_the_stack`,
-   `anywhere_leaves_the_subproof_closed`, `anywhere_proves` and `anywhere_is_discharge` — the
-   `discharge` proof with `focus 0` in place of `out` writes *the very same document* — plus
-   `nested_closes_both_levels` / `nested_puts_the_subproofs_back` (one click closes two levels) and
-   `reopen_keeps_the_first_subproof_closed`. `netty --selftest` gained `focusTest`, which drives the
-   request service the way the web client does: zoom in, check the outer line is reported `focusable`,
-   `focus 0`, and check the subproof closed and its lines are refused.
+   `anywhere_proves` and `anywhere_is_discharge` — the `discharge` proof with `focus 0` in place of
+   `out` writes *the very same document* — plus `nested_closes_both_levels` /
+   `nested_puts_the_subproofs_back` (one click closes two levels). `netty --selftest` gained
+   `focusTest`, which drives the request service the way the web client does: zoom in, check the outer
+   line is reported `focusable`, `focus 0`, and check the subproof closed.
+   Superseded in part by item 17, which re-opens a closed level: the two witnesses that recorded the
+   refusal as final (`anywhere_leaves_the_subproof_closed` and
+   `reopen_keeps_the_first_subproof_closed`) are gone, and their successors say the opposite. What is
+   still refused there is narrower — a subproof closed before later work — and still greyed.
 
 8. [x] **Display collapses**, 2026-09-23 on main. A proof written by zooming keeps lines a reader does
    not need, and the document collapses two such patterns. `Doc.shownLines` is that collapse, as a
@@ -455,6 +459,53 @@ parked.
    and it cannot name a part the line does not have.
    Not done here: re-opening closed levels, conditional laws at the number level, ML ranking,
    distributivity, arithmetic or normalisation.
+
+17. [x] **Going back into a closed level**, 2026-09-24 on main. Until now a click could land on any line
+   of an *open* level and nowhere else: a subproof that had been zoomed out of was closed for good, the
+   window greyed its number, and two witnesses recorded that as intentional. The Netty document lets
+   you go back in and keep working, so now so does the kernel.
+   The move is made of two steps and nothing else, which is what makes the state it reaches one the user
+   could have reached by zooming and never left. `Doc.closeToDepth` closes levels, as before.
+   `Doc.reopenStep` is new and is the **exact inverse of `Doc.zoomOut`**: the line that zoom-out wrote
+   goes away again, and the frame is rebuilt from what the level's first line carries — its type, its
+   direction and (new field `Line.part`) the part of the line above that the zoom in opened it on — with
+   the position and the context recomputed from that part off a line the zoom-out did not change. So the
+   frame is the one that level always had, down to its context laws, and `reopen_undoes_the_zoom_out`
+   witnesses the round trip as an equality of whole documents, stack and focus included.
+   The gap the zoom-out may have carried out is taken back with it. That is exactly the flag the
+   zoom-out wrote: the last line of a level never carries a gap — a gap marks the step to the *next*
+   line and there is none — so the line was clean when the zoom in left it. Going in and out of a
+   subproof that holds a gap therefore changes nothing at all
+   (`reopen_then_zoom_out_is_the_same_document`).
+   `Doc.refocus` is the whole of `focus N`: close the levels that start after the line, re-open the
+   closed levels it is inside (one `reopenStep` each, outermost first), then close anything still open
+   below it. Each phase is bounded — closing spends a level, re-opening spends a line. `Doc.canFocus`
+   is now *defined* as `refocus` succeeding, so the predicate the window greys by and the move a click
+   makes cannot disagree; the old structural test survives as `Doc.inOpenLevel`, which is what
+   `refocus` uses inside and what `Doc.reopensOn` subtracts to say which of the two moves a click would
+   make.
+   What is refused is narrow and honest: a subproof closed *before* later work was written. Taking its
+   zoom-out back would take that work with it, so the kernel says so and the window greys it with a
+   tooltip that says why. A collapsed subproof is not drawn at all, so there is nothing to click on it
+   — re-opening reaches the subproofs a display draws, which is every subproof of more than one step;
+   and the other direction takes care of itself, a re-opened level holding the focus never being
+   collapsed.
+   In `netty-web/`, `LineView` gained `reopens` and the gutter tooltip now says which of the three
+   things a click would do (stay, close subproofs, or go back into one) and, when it is greyed, why.
+   No layout and no new request.
+   Witnessed in Lean, all by `decide`, all `propext` (two also `Quot.sound`, for the document
+   equalities): `anywhere_leaves_every_line_open_to_a_click` and `anywhere_says_which_clicks_reopen`
+   (every line of that proof is reachable, and exactly the three of the closed subproof re-open it),
+   `click_reopens_the_subproof` (focus, depth, one line fewer, and the zoom in's context in force
+   again), `reopen_undoes_the_zoom_out`, `work_after_keeps_the_subproof_closed` (the refusal),
+   `reopen_reaches_the_first_subproof` and `reopen_closes_the_new_level_first` (a new level at the same
+   depth is closed first, as the undo the document says it is), `nested_reopens_both_levels` (two
+   levels back in, two contexts), `reopen_takes_the_carried_gap_back` and
+   `reopen_then_zoom_out_is_the_same_document`. `netty --selftest`'s `focusTest` now goes back into the
+   subproof it closed, checks all three of its lines are drawn again, and checks that the same click is
+   refused once a line has been written after the zoom-out.
+   Not done here: conditional laws at the number level, ML ranking, distributivity, arithmetic or
+   normalisation.
 
 ## Then grow language ↔ Netty grammar
 

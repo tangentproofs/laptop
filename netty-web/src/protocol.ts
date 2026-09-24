@@ -66,6 +66,9 @@ export interface LineView {
   /** Whether the focus may be moved here. A line of an outer level may be: the
    * kernel closes the levels below it, as a run of zoom-outs would. */
   focusable: boolean;
+  /** Whether moving the focus here would re-open a subproof that has been
+   * zoomed out of, rather than stay in an open level or close down to one. */
+  reopens: boolean;
   /** Whether this line can be zoomed in to: whether `zooms` offers anything. */
   zoomable: boolean;
 }

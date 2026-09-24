@@ -256,10 +256,12 @@ function lineRow(l: LineView, depth: number): HTMLElement {
   const gutter = el('button', {
     class: 'gutter' + (l.focusable ? ' movable' : ''),
     title: !l.focusable
-      ? 'this line is in a subproof that has been zoomed out of; the focus cannot go back into one'
-      : l.depth < depth
-        ? 'move the focus here, closing the subproofs below this line'
-        : 'move the focus here',
+      ? 'this subproof was closed before the lines below it were written; going back into it would take those lines with it'
+      : l.reopens
+        ? 'move the focus here, going back into this subproof'
+        : l.depth < depth
+          ? 'move the focus here, closing the subproofs below this line'
+          : 'move the focus here',
   }, String(l.index));
   if (l.focusable) gutter.addEventListener('click', () => void cmd(`focus ${l.index}`));
   row.append(gutter);

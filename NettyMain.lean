@@ -315,7 +315,10 @@ def matchTest : IO Bool := do
 interface talks to — which is the path the web client's clickable line numbers
 take. Zoom in, take a step, and the outer line must be reported `focusable`;
 asking for it must succeed and leave the session at the outermost level, with
-the subproof's own lines still there but no longer focusable. -/
+the subproof's own lines still there. Then go back *into* that subproof by
+asking for one of its lines, which takes the zoom out back; and check that the
+same click is refused once a line has been written after the subproof closed,
+because taking the zoom out back would take that line with it. -/
 def focusTest : IO Bool := do
   let mut ok := true
   let fresh : Session := { doc := { laws := Laws.boolean } }
@@ -359,13 +362,45 @@ def focusTest : IO Bool := do
       IO.eprintln s!"focus: after ‘focus 0’ the focus is {after.focus} at depth \
         {after.depth}, with {after.lines.length} lines drawn and \
         {focusables.length} focusable"
-    -- A line of the subproof that has just been closed cannot be focused again.
+    -- A line of the subproof that has just been closed re-opens it: the zoom
+    -- out goes away again, the level is innermost once more, and the focus is
+    -- on the line that was asked for. All three lines are drawn now, because a
+    -- level holding the focus is never collapsed.
     let (_, back) := run s' "focus 1"
-    if back.ok then
+    if !back.ok then
       ok := false
-      IO.eprintln "focus: a line of a closed subproof was focused"
+      IO.eprintln s!"focus: ‘focus 1’ back into the closed subproof: {back.error}"
+    else if back.state.focus == 1 && back.state.depth == 1
+        && back.state.lines.length == 3 then
+      IO.println "focus: a line of the closed subproof re-opens it"
     else
-      IO.println "focus: a line of the closed subproof is refused"
+      ok := false
+      IO.eprintln s!"focus: after ‘focus 1’ the focus is {back.state.focus} at \
+        depth {back.state.depth}, with {back.state.lines.length} lines drawn"
+    -- But not once work has been written after the subproof closed: from the
+    -- state where it is closed, put a line in after the line the zoom out
+    -- wrote, and the same click must be refused — undoing the zoom out would
+    -- undo that line.
+    let (t1, _) := run s' "focus 3"
+    let (t2, r2) := run t1 "direct = ⊤"
+    if !r2.ok then
+      ok := false
+      IO.eprintln s!"focus: writing a line after the closed subproof: {r2.error}"
+    else
+      let (_, refused) := run t2 "focus 1"
+      if refused.ok then
+        ok := false
+        IO.eprintln "focus: a subproof closed before later work was re-opened"
+      else
+        IO.println "focus: with work written after it, the subproof is refused"
+      match (Api.stateView t2).lines.find? (fun l => l.index == 3) with
+      | some l =>
+          if l.focusable then
+            IO.println "focus: the line the zoom out wrote is focusable either way"
+          else
+            ok := false
+            IO.eprintln "focus: the line the zoom out wrote is not focusable"
+      | none => pure ()
   return ok
 
 /-- Check the order the suggestions come in, on a line long enough for the order

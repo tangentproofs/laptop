@@ -104,8 +104,13 @@ structure LineView where
   /-- Whether the focus sits just after this line. -/
   focused : Bool
   /-- Whether the focus may be moved here. A line of an outer level may be: the
-  kernel closes the levels below it, as a run of zoom-outs would. -/
+  kernel closes the levels below it, as a run of zoom-outs would. So may a line
+  of a subproof that has been zoomed out of, which the kernel re-opens — unless
+  work has been written since it was closed, which re-opening would undo. -/
   focusable : Bool
+  /-- Whether moving the focus here would re-open a subproof that has been
+  zoomed out of, rather than stay in an open level or close down to one. -/
+  reopens : Bool
   /-- Whether this line can be zoomed in to: whether `zooms` offers anything. -/
   zoomable : Bool
   deriving Repr, DecidableEq, Inhabited, ToJson, FromJson
@@ -252,6 +257,7 @@ def lineView (d : Doc) (s : Shown) : LineView :=
     note := s.note
     focused := focused
     focusable := d.canFocus i
+    reopens := d.reopensOn i
     zoomable := !zs.isEmpty }
 
 /-- The whole state of a session. -/

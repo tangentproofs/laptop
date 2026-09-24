@@ -864,3 +864,25 @@
       the running server.
       Left parked: re-opening closed levels, conditional number-level laws, ML ranking, distributivity,
       arithmetic and normalisation, and phase 2e.
+- [x] Netty: going back into a closed level (2026-09-24; on main) — `Netty/Doc.lean`, item 17 of
+      `.sci/netty-plan.md`. A click could land on any line of an *open* level and nowhere else; a
+      subproof that had been zoomed out of was closed for good. Now `Doc.reopenStep` is the exact
+      inverse of `Doc.zoomOut` — the line the zoom-out wrote goes away again and the frame is rebuilt
+      from what the level's first line carries, the new `Line.part` among it, with position and context
+      recomputed off a line the zoom-out did not change — so the state a click reaches is one the user
+      could have reached by zooming. `Doc.refocus` is the whole of `focus N` (close the levels that
+      start after the line, re-open the closed ones it is inside, close anything still open below it),
+      and **`Doc.canFocus` is now defined as `refocus` succeeding**, so the predicate the window greys
+      by cannot disagree with the move a click makes; the old structural test survives as
+      `Doc.inOpenLevel`, and `Doc.reopensOn` says which of the two moves a click would make.
+      The gap a zoom-out carried out is taken back with it — that is exactly the flag it wrote, since
+      the last line of a level never carries a gap — so going in and out of a gappy subproof changes
+      nothing (`reopen_then_zoom_out_is_the_same_document`), and `reopen_undoes_the_zoom_out` witnesses
+      the round trip as an equality of whole documents.
+      Refused, honestly and narrowly: a subproof closed *before* later work, since taking its zoom-out
+      back would take that work with it (`work_after_keeps_the_subproof_closed`). Ten witnesses by
+      `decide`, `propext` (two also `Quot.sound`); `netty --selftest`'s `focusTest` now goes back in
+      through the request service and checks the refusal too; `netty-web/` gained `reopens` on
+      `LineView` and a tooltip that says which of the three things a click would do, or why it cannot.
+      Left parked: conditional number-level laws, ML ranking, distributivity, arithmetic and
+      normalisation, and phase 2e.
