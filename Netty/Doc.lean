@@ -117,6 +117,18 @@ of: that level is closed, and re-opening one is not something the kernel does.
 law licenses. Direct entry creates one. `Doc.outcome` refuses to say what a
 proof with a gap proves.
 
+A gap is carried *out* of the subproof it was left in. Zooming out splices a
+level's bottom line back into the line it was zoomed in from, and if that level
+still holds a gap then the step from the line we zoomed in from to the spliced
+line is not licensed either — the subproof is the justification, and it has a
+hole in it. So `Doc.zoomOut` marks a gap on the line it zoomed in from
+(`Doc.openGaps` says whether there is one to carry), and the outer level draws
+the warning sign on the line just before the splice, which is where the
+document puts it. A subproof with no gaps splices as it always did: a single
+law application still folds with its name lifted, and a longer justified
+subproof still leaves the outer step unannotated, its justification being the
+lines inside.
+
 ## The display collapses
 
 A proof that was written by zooming keeps more lines than it needs to be read
@@ -623,6 +635,16 @@ def rootLines (d : Doc) : List Line :=
 def gaps (d : Doc) : List Nat :=
   (List.range d.lines.size).filter fun j => (d.lines[j]!).gap
 
+/-- The gaps left inside the innermost open level: the lines a gap follows at
+or after that level's first line. Every line from there on belongs to this
+level or to a subproof of it, and a subproof that was zoomed out of has already
+left its own gap on a line of this level, so this is every gap the level's
+calculation still has in it. -/
+def openGaps (d : Doc) : List Nat :=
+  match d.frame? with
+  | some f => d.gaps.filter (· ≥ f.start)
+  | none => []
+
 /-- Replace a line. -/
 def withLine (d : Doc) (i : Nat) (l : Line) : Doc :=
   { d with lines := d.lines.set! i l }
@@ -801,7 +823,14 @@ document, which is what the `ty` and `dir` a level's first line carries are for.
 The connective the new line gets follows the document's three rules: `=` when
 the part's position is neutral or the subproof proved an equality, and the
 parent level's own direction otherwise. Zooming out of a level with a single
-line is an undo, as the document says: the line goes away again. -/
+line is an undo, as the document says: the line goes away again.
+
+A subproof that still holds a gap is itself a gap at the level below — its
+bottom line does not follow from its first one — so the line we zoomed in from
+is marked with a gap of its own, and the outer level draws the warning sign on
+the line just before the splice. A level with no gaps splices exactly as
+before. (The undo case needs no such mark: a level of one line has had no step
+taken in it, and only a step can leave a gap.) -/
 def zoomOut (d : Doc) : Except String Doc :=
   match d.stack with
   | f :: parent :: rest => do
@@ -821,8 +850,11 @@ def zoomOut (d : Doc) : Except String Doc :=
       let e ← orElseError "the subproof cannot be put back into its line"
         (f.part.replace zoomExpr bottom)
       let idx := d.lines.size
+      let lines :=
+        if d.openGaps.isEmpty then d.lines
+        else d.lines.set! zl { d.lines[zl]! with gap := true }
       return { d with
-        lines := d.lines.push
+        lines := lines.push
           { depth := d.depth - 1, conn := some (newRel.op parent.ty), expr := e,
             why := "zoom out" }
         stack := parent :: rest

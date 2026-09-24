@@ -687,10 +687,77 @@ def gapInside : List Cmd :=
     .direct .eq (var "y"),
     .zoomOut ]
 
+/-- All four lines are drawn, and *two* warning signs are drawn: the one inside
+the subproof, on the line the direct entry was made after, and the one the zoom
+out carried out to the line it zoomed in from. Nothing folds — the subproof's
+step is not a law's. -/
 theorem gapInside_is_not_collapsed :
     ((session.steps gapInside).toOption.map fun d =>
       (d.shownLines.length, d.shownLines.map Shown.note))
-      = some (4, ["", "!", "", ""]) := by decide
+      = some (4, ["!", "!", "", ""]) := by decide
+
+/-! ### A gap carried out of the subproof that holds it
+
+Zooming out justifies the outer step by the subproof, so a subproof that still
+has a gap in it leaves the outer step unjustified too. `Doc.zoomOut` marks the
+line it zoomed in from, and the outer level draws the warning sign on the line
+just before the splice, which is where the document puts it. -/
+
+/-- The line zoomed in from (line 0) carries a gap of its own, beside the one
+line 1 carries inside the subproof. Before this, line 0 carried none and the
+outer step showed neither a law name nor a warning sign. -/
+theorem gapInside_gaps_the_line_before_the_splice :
+    ((session.steps gapInside).toOption.map fun d => (d.gaps, d.note 0))
+      = some ([0, 1], "!") := by decide
+
+/-- And the proof does not claim anything: the outer level has a gap in it, so
+`Doc.outcome` refuses even though the subproof has been closed. -/
+theorem gapInside_proves_nothing : proved gapInside = none := by decide
+
+/-- A justified subproof splices as it always did. `fold`'s subproof is a single
+law application: no gap is carried out, line 0 keeps the law's name — lifted by
+the fold — and the proof stands. -/
+theorem fold_splices_without_a_gap :
+    ((session.steps fold).toOption.map fun d => (d.gaps, d.note 0))
+      = some ([], "") := by decide
+
+/-- Neither does a *longer* justified subproof: `merge`'s inner level is two law
+steps, and the outer line before the splice is left unannotated, its
+justification being the lines inside. -/
+theorem merge_splices_without_a_gap :
+    ((session.steps merge).toOption.map fun d => (d.gaps, d.note 0))
+      = some ([], "") := by decide
+
+/-- Two levels down, the gap is carried out twice: the direct entry gaps line 2
+inside the innermost level, the first zoom out gaps line 1, and the second gaps
+line 0. A gap does not get lost by being deep. -/
+def gapCarries : List Cmd :=
+  [ .start .boolean .same
+      (bin .and (var "x") (bin .or (var "y") (bin .and (var "z") (var "z")))),
+    .zoomIn (.operand 1),
+    .zoomIn (.operand 1),
+    .direct .eq (var "z"),
+    .zoomOut,
+    .zoomOut ]
+
+theorem gapCarries_carries_it_all_the_way_out :
+    ((session.steps gapCarries).toOption.map fun d => (d.gaps, d.note 0))
+      = some ([0, 1, 2], "!") := by decide
+
+/-- The merge would have drawn those six lines as four, and it does not: a
+collapse never hides a line a warning sign hangs on, and now there is one at
+each level. -/
+theorem gapCarries_is_not_collapsed :
+    ((session.steps gapCarries).toOption.map fun d =>
+      (d.shownLines.length, d.shownLines.map Shown.note))
+      = some (6, ["!", "!", "!", "", "", ""]) := by decide
+
+/-- A click that abandons a gappy subproof carries the gap out too, because
+`Doc.closeToDepth` closes the levels by running `Doc.zoomOut`: `focus 0` in
+place of the two zoom-outs writes the very same document. -/
+theorem gapCarries_is_the_same_by_clicking :
+    (session.steps (gapCarries.take 4 ++ [.setFocus 0])).toOption.map (fun d => d.lines.toList)
+      = (session.steps gapCarries).toOption.map (fun d => d.lines.toList) := by decide
 
 /-! ### A segment as a level: zooming in to a run of operands
 

@@ -582,6 +582,61 @@ def collapseTest : IO Bool := do
   | none => ok := false
   return ok
 
+/-- Check that a gap is carried out of the subproof that holds it, through the
+request service the window talks to.
+
+A zoom out justifies the outer step by the subproof, so a subproof that still
+has a gap in it leaves the outer step unjustified; the document draws the
+warning sign on the line just before a gap, and after the splice that line is
+the one the zoom was made from. The same session with the subproof's step taken
+from a law instead of typed in must be unchanged from before: no gap outside,
+and the one-step subproof folded into its parent line with the law's name lifted
+onto it.
+
+Driven through `cmd` requests rather than a demonstration script, because a
+proof that keeps a gap never proves anything and `--demo=` runs only proofs that
+do. -/
+def gapTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean } }
+  let after := fun (last : String) => Id.run do
+    let mut s := fresh
+    let mut err := ""
+    for arg in ["start = x ∧ (y ∨ y)", "zoom 1", last, "out"] do
+      let (s', r) := Api.respond s { op := "cmd", arg := arg }
+      s := s'
+      if !r.ok && err.isEmpty then err := s!"‘{arg}’: {r.error}"
+    return (err, Api.stateView s)
+  let (err, gappy) := after "direct = y"
+  if !err.isEmpty then
+    ok := false
+    IO.eprintln s!"gap: {err}"
+  else
+    let notes := gappy.lines.map fun l => (l.index, l.gap, l.note)
+    if notes == [(0, true, "!"), (1, true, "!"), (2, false, ""), (3, false, "")] then
+      IO.println "gap: a gappy subproof leaves a warning on the line before the splice"
+    else
+      ok := false
+      IO.eprintln s!"gap: after the splice the lines are {repr notes}"
+    if !gappy.proved then
+      IO.println "gap: and the proof still claims nothing"
+    else
+      ok := false
+      IO.eprintln "gap: a proof with a gap carried out of a subproof claims something"
+  let (err', clean) := after "apply idempotent : = y"
+  if !err'.isEmpty then
+    ok := false
+    IO.eprintln s!"gap: {err'}"
+  else
+    let notes := clean.lines.map fun l => (l.index, l.gap, l.note)
+    if notes == [(0, false, "idempotent"), (3, false, "")] && clean.proved then
+      IO.println "gap: a justified subproof splices with no gap, and still folds"
+    else
+      ok := false
+      IO.eprintln s!"gap: a justified subproof draws {repr notes}, \
+        proved = {clean.proved}"
+  return ok
+
 /-- Check the request service a user interface talks to: every demonstration
 replays through it, a session survives being saved and loaded back through it,
 and a request the service does not know is refused rather than passed over. -/
@@ -627,8 +682,9 @@ list `Netty.Replay` checks in Lean and still proves what it claims, that every
 suggestion the law list offers is a sound step, that the suggestions come in the
 order `Doc.rank` describes, that the focus can land on an outer line through the
 request service, that a click can zoom in to every part of a line through it — the
-runs of operands as well as the single ones — and that the display collapses reach
-it too. -/
+runs of operands as well as the single ones — that a gap left inside a subproof
+is carried out to the line the zoom was made from, and that the display collapses
+reach it too. -/
 def selftest : IO Bool := do
   let mut ok := true
   let bad := Laws.boolean.filter fun l => !l.isTautology
@@ -684,6 +740,7 @@ def selftest : IO Bool := do
   if !(← focusTest) then ok := false
   if !(← zoomTest) then ok := false
   if !(← collapseTest) then ok := false
+  if !(← gapTest) then ok := false
   if !(← apiTest) then ok := false
   return ok
 
