@@ -11,7 +11,8 @@ The proof pane follows the document's layout. The direction of a level stands
 in a box on the level's first line, later lines carry their connective, and the
 name of the law that produced a line is written at the end of the line
 *before* it — so a name reads as "and now, by this law, …". A warning sign `!`
-takes the place of the name where there is a logical gap. Subproofs are
+takes the place of the name where there is a logical gap; the suggestions pane
+says of a step that would leave one what it would leave to prove. Subproofs are
 indented instead of being drawn with the document's corner brackets, and the
 focus is marked in the gutter.
 
@@ -67,7 +68,11 @@ def renderContext (d : Doc) : String :=
   | [] => "(no context)"
   | ls => String.intercalate "\n" (ls.map fun l => "  " ++ l.stmt.render)
 
-/-- The suggestions pane: what each applicable law would write next. -/
+/-- The suggestions pane: what each applicable law would write next, with what
+the match left unconstrained and — for a conditional law whose premise the laws
+in force did not settle — what taking the step would leave to prove. A row that
+names a premise is a row that leaves the document's warning sign, and says so
+before it is taken. -/
 def renderSuggestions (d : Doc) : String :=
   match d.suggestions with
   | [] => "(no suggestions)"
@@ -79,7 +84,11 @@ def renderSuggestions (d : Doc) : String :=
         let holes :=
           if s.holes.isEmpty then ""
           else "   (" ++ String.intercalate ", " s.holes ++ " unconstrained)"
-        padLeft 4 (toString i) ++ "  " ++ body ++ "   " ++ s.law ++ holes
+        let premise :=
+          match s.premise with
+          | some q => "   (leaves a gap: " ++ q.render ++ ")"
+          | none => ""
+        padLeft 4 (toString i) ++ "  " ++ body ++ "   " ++ s.law ++ holes ++ premise
 
 /-- What the proof proves, or why it does not prove anything yet. -/
 def renderOutcome (d : Doc) : String :=

@@ -69,6 +69,9 @@ export interface LineView {
   /** Whether moving the focus here would re-open a subproof that has been
    * zoomed out of, rather than stay in an open level or close down to one. */
   reopens: boolean;
+  /** When the gap after this line was left by a conditional law whose premise
+   * was not settled, that premise: what is left to prove. Empty otherwise. */
+  premise: string;
   /** Whether this line can be zoomed in to: whether `zooms` offers anything. */
   zoomable: boolean;
 }
@@ -86,6 +89,10 @@ export interface SuggestionView {
   /** Law variables the match left unconstrained; a suggestion with any of
    * these cannot be applied. */
   holes: string[];
+  /** For a conditional law whose premise the laws in force do not settle, that
+   * premise: taking the step writes the line and leaves a gap, and this is what
+   * would close it. Empty when the step needs nothing. */
+  premise: string;
   /** The place on the line before the focus this step would rewrite: the whole
    * line, one of its main operands, or a contiguous run of them — named as the
    * zoom targets are named, because it is the same part of the same line. */

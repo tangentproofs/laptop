@@ -161,6 +161,9 @@ def runScript (r : Run) (cs : List (Nat × ScriptCmd)) : IO Run :=
 /-- Where the shipped boolean law file lives, relative to the repository. -/
 def lawFilePath : String := "Netty/laws/boolean.laws"
 
+/-- Where the number law list lives, for the same staleness check. -/
+def numberLawFilePath : String := "Netty/laws/number.laws"
+
 /-- Lines to offer the whole law list, to check that every suggestion it makes
 is a sound step. Most are associations longer than the two operands most laws
 are written with, which is what matching modulo associativity reads apart and
@@ -695,6 +698,89 @@ def siteTest : IO Bool := do
       IO.eprintln s!"site: the started proof draws {ls.length} lines, not one"
   return ok
 
+/-- Check the conditional reading of a law at the number level, through the
+request service the window talks to.
+
+A law such as `x ≤ x + y ⇐ 0 ≤ y` has `⇐` for its main operator, so on its own it
+is a step a *boolean* line can take. Its conditional reading puts the consequent's
+`≤` in a number margin and leaves `0 ≤ y` over as a premise. Two things must
+follow. Inside `0 ≤ m ⇒ n ≤ n + m`, where zooming in has put `0 ≤ m` in the
+context, the reading that needs `0 ≤ m` must carry no premise and the one that
+needs `0 ≤ n` must carry its own, in the same pane, off the same line. And on a
+number proof with nothing in force to settle it, taking the step must write the
+line, leave the document's warning sign, say on the line what would close it, and
+claim nothing. -/
+def conditionalTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean ++ Laws.number } }
+  let run := fun (s : Session) (arg : String) => Api.respond s { op := "cmd", arg := arg }
+  -- Two zooms in: to the consequent, where `0 ≤ m` becomes context, and then to
+  -- `n + m`, which is a number level.
+  let mut s := fresh
+  for arg in ["start ⇐ 0 ≤ m ⇒ n ≤ n + m", "zoom 1", "zoom 1"] do
+    let (s', r) := run s arg
+    s := s'
+    if !r.ok then
+      ok := false
+      IO.eprintln s!"conditional: ‘{arg}’: {r.error}"
+  let inner := Api.stateView s
+  let ups := inner.suggestions.filter fun g => g.law == "upper bound" && g.holes.isEmpty
+  match ups.filter (fun g => g.premise == ""), ups.filter (fun g => g.premise != "") with
+  | [clean], [gappy] =>
+      if clean.result == "n" && gappy.result == "m" && gappy.premise == "0 ≤ n" then
+        IO.println "conditional: one law, one line, one reading discharged and one gapped"
+      else
+        ok := false
+        IO.eprintln s!"conditional: the two readings are ‘{clean.result}’ and \
+          ‘{gappy.result}’ needing ‘{gappy.premise}’"
+  | cs, gs =>
+      ok := false
+      IO.eprintln s!"conditional: {cs.length} readings need nothing and {gs.length} \
+        need something, not one of each"
+  let (s2, r2) := run s "apply upper bound : ≥ n"
+  if !r2.ok then
+    ok := false
+    IO.eprintln s!"conditional: taking the discharged step: {r2.error}"
+  else if r2.state.lines.all (fun l => !l.gap) then
+    IO.println "conditional: taking the discharged one leaves no gap"
+  else
+    ok := false
+    IO.eprintln "conditional: the discharged step left a gap"
+  let _ := s2
+  -- The same law, on the same line, with nothing in force to settle its premise.
+  let mut t := fresh
+  for arg in ["start number ≥ n + m", "apply upper bound : ≥ n"] do
+    let (t', r) := run t arg
+    t := t'
+    if !r.ok then
+      ok := false
+      IO.eprintln s!"conditional: ‘{arg}’: {r.error}"
+  let after := Api.stateView t
+  match after.lines.find? (fun l => l.index == 0) with
+  | some l =>
+      if l.gap && l.premise == "0 ≤ m" && l.note == "!" && !after.proved then
+        IO.println "conditional: with nothing to settle it, the step leaves the \
+          premise as a gap and claims nothing"
+      else
+        ok := false
+        IO.eprintln s!"conditional: line 0 has gap {l.gap}, premise ‘{l.premise}’, \
+          note ‘{l.note}’, and the proof is {if after.proved then "proved" else "unproved"}"
+  | none =>
+      ok := false
+      IO.eprintln "conditional: the answer has no line 0"
+  -- The line the step wrote is the one the law licenses, and it carries its name.
+  match after.lines.find? (fun l => l.index == 1) with
+  | some l =>
+      if l.expr == "n" && l.why == "upper bound" then
+        IO.println "conditional: and the step is recorded, not refused"
+      else
+        ok := false
+        IO.eprintln s!"conditional: line 1 is ‘{l.expr}’ by ‘{l.why}’"
+  | none =>
+      ok := false
+      IO.eprintln "conditional: the answer has no line 1"
+  return ok
+
 /-- Check that a gap is carried out of the subproof that holds it, through the
 request service the window talks to.
 
@@ -832,6 +918,19 @@ def selftest : IO Bool := do
         IO.eprintln s!"laws: {lawFilePath}: {e}"
   else
     IO.println s!"laws: {lawFilePath} not found here; skipping the staleness check"
+  if ← System.FilePath.pathExists numberLawFilePath then
+    match Parser.lawFile (← IO.FS.readFile numberLawFilePath) with
+    | .ok ls =>
+        if ls == Laws.number then
+          IO.println s!"laws: {numberLawFilePath} is the list compiled in, and \
+            {Laws.number.length} number laws hold on small integers"
+        else
+          ok := false
+          IO.eprintln s!"laws: {numberLawFilePath} and the list compiled in differ; \
+            rebuild Netty.Laws"
+    | .error e =>
+        ok := false
+        IO.eprintln s!"laws: {numberLawFilePath}: {e}"
   for (name, text, expected) in Replay.demos do
     match Parser.script text with
     | .error e =>
@@ -855,6 +954,7 @@ def selftest : IO Bool := do
   if !(← zoomTest) then ok := false
   if !(← collapseTest) then ok := false
   if !(← gapTest) then ok := false
+  if !(← conditionalTest) then ok := false
   if !(← siteTest) then ok := false
   if !(← apiTest) then ok := false
   return ok

@@ -241,3 +241,7 @@ button.operand.site, button.operand.segment.site {
 .suggestion:hover:not(:disabled) { background: var(--hot-soft); border-color: var(--hot); }
 .suggestion .margin { min-width: 1.4rem; }
 .suggestion.blocked { opacity: 0.55; }
+/* A conditional law whose premise is not settled: the step is offered, and it
+   leaves the document's warning sign. The row is marked as the gapped lines of
+   the proof pane are. */
+.suggestion.gappy .note { color: var(--bad); }

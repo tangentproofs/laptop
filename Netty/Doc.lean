@@ -37,6 +37,23 @@ Because every line of a still-open level lies after every line of the levels
 below it, appending or inserting at the current level never disturbs an index
 recorded in a frame.
 
+## Conditional laws
+
+A law whose consequent is a *number* relation — `x ≤ x + y ⇐ 0 ≤ y` — cannot be
+applied to a number line as it stands: its own main operator is `⇐`, which no
+number margin admits. Its conditional reading (`Law.conditional`) puts the
+consequent in the margin and leaves the antecedent over as a premise, and
+`Doc.suggestions` asks the laws in force whether they settle it (`Law.settles`,
+which is the same match the pane would make on a line holding the premise, so a
+`context` law that zooming in supplied settles a domain condition such as
+`0 ≤ y`). A settled premise is no premise: the step is an ordinary step. An
+unsettled one is offered *with* the premise, and taking it leaves the document's
+warning sign on the line the step was taken from, with the premise recorded there
+(`Line.premise`) as what would close it. That is the document's type-checker and
+gap: what the kernel can discharge it discharges, and what it cannot it says out
+loud rather than passing over. `Doc.rank` puts a step that needs nothing before a
+step that leaves a gap.
+
 ## Suggestions, and laws applied to a part
 
 A suggestion comes from matching a law's variant against the line before the
@@ -128,8 +145,11 @@ click would make.
 ## Gaps
 
 `Line.gap` marks a logical gap between that line and the next: a step that no
-law licenses. Direct entry creates one. `Doc.outcome` refuses to say what a
-proof with a gap proves.
+law licenses. Direct entry creates one, and so does a conditional law whose
+premise nothing in force settles — that one records the premise beside the gap
+(`Line.premise`), since a gap with a known reason is worth more than a bare
+warning sign. `Doc.outcome` refuses to say what a proof with a gap proves,
+whichever kind it is.
 
 A gap is carried *out* of the subproof it was left in. Zooming out splices a
 level's bottom line back into the line it was zoomed in from, and if that level
@@ -438,6 +458,10 @@ structure Line where
   opened it on — so that a closed subproof can be re-entered after its frame has
   been popped, the frame being rebuilt from the part (`Doc.reopenStep`). -/
   part : Option Part := none
+  /-- When the step from this line to the next was licensed by a *conditional*
+  law whose premise the laws in force did not settle, that premise: what is left
+  to prove. It is what the gap on this line is a gap *for*. -/
+  premise : Option Expr := none
   deriving Repr, DecidableEq, Inhabited
 
 /-- A level of the zoom stack that is still open. -/
@@ -486,6 +510,12 @@ structure Suggestion where
   result : Expr
   /-- Law variables the match left unconstrained. -/
   holes : List String
+  /-- For a conditional reading of a law (`Law.conditional`), the premise that
+  the laws in force did not settle: taking this step leaves a gap, and this is
+  what would close it. `none` when the step needs nothing — either the reading
+  was unconditional, or its premise is settled and the step is an ordinary
+  one. -/
+  premise : Option Expr := none
   /-- The place of the line the step rewrites: the whole line, one main operand,
   or a contiguous segment of the association. Two places can write one and the
   same line, and then the step is offered once, credited to the first of them
@@ -770,9 +800,10 @@ def rank (ss : List Suggestion) : List Suggestion :=
   -- is implied by the one that counts the free variables; it is kept so that the
   -- composition reads as the rule above is written.
   stableBy (fun s => if s.holes.isEmpty then 0 else 1)
-    (stableBy (fun s => s.holes.length)
-      (stableBy (fun s => s.result.size)
-        (stableBy (fun s => s.part.rank) ss)))
+    (stableBy (fun s => if s.premise.isNone then 0 else 1)
+      (stableBy (fun s => s.holes.length)
+        (stableBy (fun s => s.result.size)
+          (stableBy (fun s => s.part.rank) ss))))
 
 /-- The suggestions for the line after the focus: for every place of the line
 before the focus (`Doc.sites`) and every variant of every law in force whose
@@ -803,8 +834,19 @@ def suggestions (d : Doc) : List Suggestion :=
               match rewriteAt f line.expr site v.op (v.rhs.instantiate σ) with
               | some (o, r) =>
                   if r == line.expr then none
-                  else some { law := v.law, op := o, result := r, holes := r.mvars,
-                              part := site.part }
+                  else
+                    -- A conditional reading carries its premise, instantiated by
+                    -- the same match. A premise the laws in force settle is no
+                    -- premise at all; one that still mentions a law variable is
+                    -- not even statable, so its variables are holes as the
+                    -- result's are.
+                    let q := v.premise.map (·.instantiate σ)
+                    let left := match q with
+                      | some q => if Law.settles d.allLaws q then none else some q
+                      | none => none
+                    some { law := v.law, op := o, result := r,
+                           holes := (r.mvars ++ (left.elim [] Expr.mvars)).eraseDups,
+                           premise := left, part := site.part }
               | none => none
       -- Two places can write one line: rewriting `x ∧ y` inside `x ∧ y ∧ z` and
       -- rewriting the whole line can come to the same thing. That is one step,
@@ -821,19 +863,27 @@ def applySuggestion (d : Doc) (s : Suggestion) : Except String Doc := do
   if !s.holes.isEmpty then
     throw s!"the suggestion leaves {String.intercalate ", " s.holes} unconstrained"
   let fl ← orElseError "the proof has not been started" d.focusLine?
+  -- A conditional reading whose premise the laws in force did not settle leaves
+  -- the document's warning sign, on the line the step is taken from, and records
+  -- the premise there: the same gap direct entry leaves, with its reason written
+  -- down. A step that needs nothing clears the sign as it always did.
+  let here : Line := { fl with gap := s.premise.isSome, premise := s.premise }
   match d.nextAtLevel d.focus with
   | some j =>
       let nl := d.lines[j]!
       if nl.conn == some s.op && nl.expr == s.result then
-        return (d.withLine j { nl with why := s.law }).withLine d.focus { fl with gap := false }
+        return (d.withLine j { nl with why := s.law }).withLine d.focus here
       else
+        -- The new line goes between, so any gap this line already carried — and
+        -- what it was for — belongs to the step from the new line on.
         let line : Line :=
-          { depth := d.depth, conn := some s.op, expr := s.result, why := s.law, gap := fl.gap }
-        return (d.withLine d.focus { fl with gap := false }).insertAfterFocus line
+          { depth := d.depth, conn := some s.op, expr := s.result, why := s.law,
+            gap := fl.gap, premise := fl.premise }
+        return (d.withLine d.focus here).insertAfterFocus line
   | none =>
       let line : Line :=
         { depth := d.depth, conn := some s.op, expr := s.result, why := s.law, gap := false }
-      return (d.withLine d.focus { fl with gap := false }).insertAfterFocus line
+      return (d.withLine d.focus here).insertAfterFocus line
 
 /-- Zoom out of the innermost level: append, to the level below, the line we
 zoomed in from with the chosen part replaced by the bottom line of the subproof
@@ -1075,8 +1125,11 @@ def step (d : Doc) : Cmd → Except String Doc
       let hasNext := (d.nextAtLevel d.focus).isSome
       let line : Line :=
         { depth := d.depth, conn := some op, expr := e, why := "direct entry",
-          gap := hasNext && fl.gap }
-      return (d.withLine d.focus { fl with gap := true }).insertAfterFocus line
+          gap := hasNext && fl.gap, premise := if hasNext then fl.premise else none }
+      -- The gap this line now carries is the direct entry's own, which no premise
+      -- would close; whatever it carried before moves down with the line it was
+      -- a gap before.
+      return (d.withLine d.focus { fl with gap := true, premise := none }).insertAfterFocus line
   | .zoomIn part => do
       let f ← orElseError "the proof has not been started" d.frame?
       if d.focus + 1 != d.lines.size then

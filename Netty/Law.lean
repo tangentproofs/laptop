@@ -31,6 +31,15 @@ and a law whose main operator cannot appear in the margin has only the two
 line before the focus is matched against `lhs`, and `rhs` under the resulting
 substitution is what the suggestion offers.
 
+A law of the form `Q ⇒ P` or `P ⇐ Q` has one more reading, the *conditional* one
+(`Law.conditional`), where it is `P` and not the implication that stands in the
+margin, with `Q` left over as a premise. `x ≤ x + y ⇐ 0 ≤ y` is a step a boolean
+line can take as it is written — its main operator is `⇐` — and only this reading
+makes it a step a *number* line can take, `≤` being a number direction. The
+premise is not a new kind of obligation: `Doc.suggestions` asks whether the laws
+in force settle it (`Law.settles`), and if they do not, taking the step leaves the
+same gap direct entry leaves, with the premise recorded as what would close it.
+
 ## Matching
 
 Matching is one-way: law variables (`Expr.mvar`) are the only things that bind,
@@ -122,6 +131,9 @@ structure Variant where
   op : BinOp
   /-- What the next line will be. -/
   rhs : Expr
+  /-- What must hold for the step to be licensed, for a *conditional* reading of
+  a law (`Law.conditional`); `none` for the readings that need nothing. -/
+  premise : Option Expr := none
   deriving Repr, DecidableEq, Inhabited
 
 /-- A binding of law variables to expressions. -/
@@ -273,6 +285,52 @@ def forms (l : Law) : List Expr :=
       else [l.stmt]
   | _ => [l.stmt]
 
+/-- The *conditional* readings of a law.
+
+A law of the form `Q ⇒ P` or `P ⇐ Q` whose consequent `P` is itself a relation
+that can stand in a left margin gives a step in *that* margin, with `Q` left over
+as a premise. So `x ≤ x + y ⇐ 0 ≤ y` lets a number line `x + y` be written `x`
+with `≥` in the margin, and a number line `x` be written `x + y` with `≤`,
+provided `0 ≤ y`. Its unconditional readings put its own main operator — `⇐`, a
+*boolean* connective — in the margin, so without this reading the law is not a
+step a number calculation can take at all.
+
+Both directions of the consequent are offered, as `Law.forms` offers both
+directions of a law: `a op b` is `b op.flip a`, and a premise that licenses the
+one licenses the other.
+
+The reading is generated only where the consequent's connective is one of the
+*number* directions, `≤ < ≥ >`. That is where a law is otherwise unusable: a
+boolean conditional law is already a step a boolean line can take, its own main
+operator `⇒` standing in a boolean margin, so reading it conditionally as well
+would offer every such law a second time with a premise attached and bury the
+steps that need nothing. `=` belongs to both types and is left out for the same
+reason. Reading a boolean conditional law conditionally — which would let
+`(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` rewrite `a ∧ c` to `b ∧ c` under the premise
+`a ⇒ b` — is a later round's work, and the ranking key it needs is already
+here.
+
+The premise is not a new kind of obligation. `Doc.suggestions` instantiates it
+along with the rest of the reading and asks whether the laws in force settle it
+(`Law.settles`); if they do, the step is an ordinary step, and if they do not, it
+is a step with a gap — the document's warning sign, the same one direct entry
+leaves. Nothing is claimed that has not been justified. -/
+def conditional (l : Law) : List Variant :=
+  let name := if l.name.isEmpty then "unnamed law" else l.name
+  -- The number directions: the margin connectives that belong to the number type
+  -- and cannot stand in a boolean margin.
+  let numberDir : BinOp → Bool := fun o =>
+    match o with | .le | .lt | .ge | .gt => true | _ => false
+  match l.stmt with
+  | .bin .imp q (.bin o a b) | .bin .rimp (.bin o a b) q =>
+      if numberDir o then
+        { law := name, lhs := a, op := o, rhs := b, premise := some q } ::
+          (match o.flip with
+           | some f => [{ law := name, lhs := b, op := f, rhs := a, premise := some q }]
+           | none => [])
+      else []
+  | _ => []
+
 /-- The variants of a law: its forms that are already directions, plus each
 form with `= ⊤` appended and with `⊤ =` prepended. -/
 def variants (l : Law) : List Variant :=
@@ -281,11 +339,32 @@ def variants (l : Law) : List Variant :=
   let name := if l.name.isEmpty then "unnamed law" else l.name
   let direct := l.forms.filterMap fun s =>
     match s with
-    | .bin o a b => if o.isMargin then some ⟨name, a, o, b⟩ else none
+    | .bin o a b =>
+        if o.isMargin then some ({ law := name, lhs := a, op := o, rhs := b } : Variant)
+        else none
     | _ => none
   let tops := l.forms.flatMap fun s =>
-    [(⟨name, s, .eq, .top⟩ : Variant), ⟨name, .top, .eq, s⟩]
-  direct ++ tops
+    [({ law := name, lhs := s, op := .eq, rhs := .top } : Variant),
+     { law := name, lhs := .top, op := .eq, rhs := s }]
+  -- The conditional readings come last, so that when a law can write one and the
+  -- same line both with a premise and without, `Doc.suggestions` keeps the one
+  -- that needs nothing.
+  direct ++ tops ++ l.conditional
+
+/-- Whether the laws in force settle `q` outright: whether one of them has an
+unconditional reading that reads `q` and writes `⊤`.
+
+That is the same match the suggestion pane would make on a line holding `q`, so a
+premise is discharged exactly when the tool would have offered to write `⊤` for
+it in one step — by a law of the list, or by a `context` law that zooming in put
+in force, which is where a domain condition such as `0 ≤ y` comes from. One step,
+and by an unconditional reading, so the question cannot recur. An unbound law
+variable in the reading is no obstacle: the law holds for every instantiation, so
+if `q` is an instance of a side that the law equates with `⊤`, `q` is `⊤`. -/
+def settles (laws : List Law) (q : Expr) : Bool :=
+  laws.any fun l => l.variants.any fun v =>
+    v.premise.isNone && v.rhs == .top && (v.op == .eq || v.op == .rimp)
+      && !(Expr.matchAll v.lhs q []).isEmpty
 
 /-- Every assignment of `true`/`false` to the given names. -/
 def assignments : List String → List (List (String × Bool))
@@ -298,6 +377,24 @@ def isTautology (l : Law) : Bool :=
   let names := l.stmt.mvars ++ l.stmt.vars
   names.length ≤ 8 &&
     (assignments names).all fun σ => l.stmt.evalBool σ == some true
+
+/-- Every assignment of the given integers to the given names. -/
+def intAssignments (vals : List Int) : List String → List (List (String × Int))
+  | [] => [[]]
+  | n :: ns => (intAssignments vals ns).flatMap fun σ => vals.map fun v => (n, v) :: σ
+
+/-- Whether the law holds under every assignment of `vals` to its variables and
+identifiers, read as integers.
+
+This is a *test*, not a decision procedure: a law that is false in general can
+hold on a small range of integers, where `Law.isTautology` really settles a
+boolean law. It is what the kernel can check about a number law without doing
+arithmetic, which is out of scope here, and it is offered as evidence and not as
+a proof. Laws with more than four names are not checked. -/
+def holdsOnInts (vals : List Int) (l : Law) : Bool :=
+  let names := l.stmt.mvars ++ l.stmt.vars
+  names.length ≤ 4 &&
+    (intAssignments vals names).all fun σ => l.stmt.evalProp σ == some true
 
 /-- The ground law that a zoom-in adds to the context. -/
 def context (e : Expr) : Law := { name := "context", vars := [], stmt := e }

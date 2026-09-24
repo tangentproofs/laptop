@@ -252,6 +252,112 @@ theorem nested_reopens_both_levels :
       (d.focus, d.depth, d.lines.size, d.contextLaws.length))
       = some (3, 2, 4, 2) := by decide
 
+/-! ### Conditional laws at the number level
+
+A law such as `x ≤ x + y ⇐ 0 ≤ y` has `⇐` for its main operator, so its
+unconditional readings are steps a *boolean* line can take. What makes it a step a
+number line can take is its *conditional* reading (`Law.conditional`): the
+consequent `x ≤ x + y` is a relation that stands in a number margin, with `0 ≤ y`
+left over as a premise. A premise the laws in force settle is no premise at all;
+one they do not settle leaves the document's warning sign, the same gap direct
+entry leaves, with the premise recorded on the line as what would close it. -/
+
+/-- The boolean laws together with the small number list. -/
+def conditionalSession : Doc := { laws := Laws.boolean ++ Laws.number }
+
+/-- The context discharges a premise: a `context` law is exactly the premise. -/
+theorem context_settles_the_premise :
+    Law.settles [Law.context (bin .le (num 0) (var "m"))] (bin .le (num 0) (var "m"))
+      = true := by decide
+
+/-- So does a law of the list, when the premise is an instance of one side it
+equates with `⊤`: `0 ≤ 0` is settled by `x ≤ x`. -/
+theorem a_law_settles_a_ground_premise :
+    Law.settles Laws.number (bin .le (num 0) (num 0)) = true := by decide
+
+/-- And `0 ≤ m` is settled by neither: nothing in the list says it, so a step
+that needs it is a step with a gap. -/
+theorem nothing_settles_zero_le_m :
+    Law.settles Laws.number (bin .le (num 0) (var "m")) = false := by decide
+
+/-- `0 ≤ m ⇒ n ≤ n + m`. -/
+def boundGoal : Expr :=
+  bin .imp (bin .le (num 0) (var "m")) (bin .le (var "n") (bin .add (var "n") (var "m")))
+
+/-- Zoom in to the consequent, where `0 ≤ m` becomes context; zoom in again to
+`n + m`, which is a *number* level; and there the conditional law fires, its
+premise discharged by that context. Then out, and the two boolean steps that
+finish it. -/
+def bound : List Cmd :=
+  [ .start .boolean .up boundGoal,
+    .zoomIn (.operand 1),
+    .zoomIn (.operand 1),
+    .applyNamed "upper bound" (some (.ge, var "n")),
+    .zoomOut,
+    .applyNamed "reflexive" (some (.eq, .top)),
+    .zoomOut,
+    .applyNamed "base" (some (.eq, .top)) ]
+
+/-- It proves `0 ≤ m ⇒ n ≤ n + m`, with no gap and fully zoomed out: the premise
+was discharged, so nothing is left over. -/
+theorem bound_proves : provedIn conditionalSession bound = some boundGoal := by decide
+
+theorem bound_complete :
+    ((conditionalSession.steps bound).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
+/-- At that number level the law is offered twice, `+` being symmetric, and the
+two differ in exactly the way the document says they should: writing `n` needs
+`0 ≤ m`, which the context settles, so it carries no premise; writing `m` needs
+`0 ≤ n`, which nothing settles, so it says so before it is taken. -/
+theorem bound_offers_discharged_and_gapped :
+    ((conditionalSession.steps (bound.take 3)).toOption.map fun d =>
+      (d.suggestions.filter (·.law == "upper bound")).map fun s => (s.op, s.result, s.premise))
+      = some [(.ge, var "n", none), (.ge, var "m", some (bin .le (num 0) (var "n")))] := by decide
+
+/-- The conditional reading puts a *number* direction in the margin, so the
+boolean line cannot take it as a step of its own — but the line's main operands
+are number parts, and a law applies to a part. So on `n ≤ n + m` the same law is
+read three applicable ways: unconditionally on the whole line, which is the step
+its own `⇐` licenses; conditionally on the operand `n + m`, rewriting the line in
+place to `n ≤ n` with the premise `0 ≤ m` discharged by the context — which is
+the very step the two zoom-ins of `bound` take the long way round; and
+conditionally on that operand the other way round, writing `n ≤ m`, which needs
+`0 ≤ n` and says so. -/
+theorem bound_reads_the_boolean_line_three_ways :
+    ((conditionalSession.steps (bound.take 2)).toOption.map fun d =>
+      (d.suggestions.filter fun s => s.law == "upper bound" && s.holes.isEmpty).map
+        fun s => (s.part, s.result, s.premise))
+      = some
+        [(Part.whole, bin .le (num 0) (var "m"), none),
+         (Part.operand 1, bin .le (var "n") (var "n"), none),
+         (Part.operand 1, bin .le (var "n") (var "m"), some (bin .le (num 0) (var "n")))] := by
+  decide
+
+/-- The same law on the same line with nothing in force to settle its premise:
+a number proof started at `n + m`. -/
+def gapped : List Cmd :=
+  [ .start .number .up (bin .add (var "n") (var "m")),
+    .applyNamed "upper bound" (some (.ge, var "n")) ]
+
+/-- Taking it writes the line and leaves the warning sign on the line the step was
+taken from, with the premise recorded there as what would close it. -/
+theorem gapped_leaves_the_premise_as_a_gap :
+    ((conditionalSession.steps gapped).toOption.map fun d =>
+      (d.gaps, d.note 0, d.lines[0]?.bind Line.premise))
+      = some ([0], "!", some (bin .le (num 0) (var "m"))) := by decide
+
+/-- And the proof claims nothing, exactly as a gap left by direct entry makes it
+claim nothing: the premise is a hole in the calculation, not a footnote to it. -/
+theorem gapped_proves_nothing : provedIn conditionalSession gapped = none := by decide
+
+/-- The line it wrote is the one the law licenses, and it carries the law's name:
+the step is not refused, it is recorded as conditional. -/
+theorem gapped_writes_the_law_s_line :
+    ((conditionalSession.steps gapped).toOption.bind fun d =>
+      d.lines[1]?.map fun l => (l.conn, l.expr, l.why))
+      = some (some .ge, var "n", "upper bound") := by decide
+
 /-! ### A gap, and closing it -/
 
 /-- Type `a` in directly under `¬¬a`, which leaves a warning sign; then move

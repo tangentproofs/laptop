@@ -886,3 +886,26 @@
       `LineView` and a tooltip that says which of the three things a click would do, or why it cannot.
       Left parked: conditional number-level laws, ML ranking, distributivity, arithmetic and
       normalisation, and phase 2e.
+- [x] Netty: conditional laws at the number level (2026-09-24; on main) — item 18 of
+      `.sci/netty-plan.md`. `x ≤ x + y ⇐ 0 ≤ y` was unusable where it is most wanted: a law's readings
+      put its *own* main operator in the margin, and that one is `⇐`, so only a boolean line was ever
+      offered it. `Law.conditional` reads such a law with its consequent in the margin and the
+      antecedent left over as a premise, for the number directions `≤ < ≥ >` — the deliberate limit is
+      that a boolean conditional law already stands in a boolean margin, so reading it that way too
+      would offer every such law twice; the reason is written down and lifting it is a later round.
+      The premise is no new kind of obligation: `Doc.suggestions` instantiates it and asks
+      `Law.settles` — the same match the pane would make on a line holding it, so a `context` law from
+      a zoom in settles a domain condition. Settled, the step is ordinary; unsettled, it is offered
+      *with* the premise and taking it leaves the gap direct entry leaves, with the premise recorded on
+      the line (`Line.premise`). `Doc.rank` gained one key: a step that needs nothing before a step
+      that leaves a gap. New example law list `Netty/laws/number.laws` + `Laws.number`, checked by
+      `Law.holdsOnInts` on `-2 … 2` (`number_holdsOnInts`) — weaker than `boolean_isTautology`, and
+      said so: a test a law false in general can pass. `Expr.evalInt` / `evalProp` exist for that check
+      alone; no suggestion does arithmetic.
+      Eleven witnesses by `decide`, `propext` only, including the proof of `0 ≤ m ⇒ n ≤ n + m` through
+      a number level with its premise discharged by the context, and the same law on the same line
+      offered discharged one way and gapped the other. `netty --selftest` gained `conditionalTest` and
+      a staleness check for the new law file; the panes and `netty-web/` say of a step that would leave
+      a gap what it would leave to prove.
+      Left parked: the boolean conditional reading, a better check for number laws, ML ranking,
+      distributivity, arithmetic and normalisation, and phase 2e.

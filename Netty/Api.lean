@@ -111,6 +111,10 @@ structure LineView where
   /-- Whether moving the focus here would re-open a subproof that has been
   zoomed out of, rather than stay in an open level or close down to one. -/
   reopens : Bool
+  /-- When the gap after this line was left by a conditional law whose premise
+  the laws in force did not settle, that premise, written out: what is left to
+  prove. Empty otherwise. -/
+  premise : String
   /-- Whether this line can be zoomed in to: whether `zooms` offers anything. -/
   zoomable : Bool
   deriving Repr, DecidableEq, Inhabited, ToJson, FromJson
@@ -128,6 +132,11 @@ structure SuggestionView where
   /-- Law variables the match left unconstrained; a suggestion with any of
   these cannot be applied. -/
   holes : List String
+  /-- For a conditional law whose premise the laws in force do not settle, that
+  premise, written out: taking this step writes the line and leaves the
+  document's warning sign, and this is what would close it. Empty when the step
+  needs nothing. -/
+  premise : String
   /-- The place on the line before the focus that this step rewrites: the whole
   line, one of its main operands, or a contiguous run of them. It is named as
   the zoom targets are named, so a window can draw the site of a suggestion and
@@ -258,6 +267,7 @@ def lineView (d : Doc) (s : Shown) : LineView :=
     focused := focused
     focusable := d.canFocus i
     reopens := d.reopensOn i
+    premise := l.premise.elim "" Expr.render
     zoomable := !zs.isEmpty }
 
 /-- The whole state of a session. -/
@@ -279,7 +289,8 @@ def stateView (s : Session) : StateView :=
       (List.range d.suggestions.length).map fun i =>
         let g := d.suggestions[i]!
         { index := i, law := g.law, op := g.op.symbol, result := g.result.render,
-          holes := g.holes, site := partView line g.part }
+          holes := g.holes, premise := (g.premise.elim "" Expr.render),
+          site := partView line g.part }
     outcome := d.renderOutcome
     proved := d.outcome.toOption.isSome
     canUndo := !s.history.isEmpty

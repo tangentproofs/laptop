@@ -1,0 +1,26 @@
+# Netty number laws — a small example list, not the whole of aPToP §11.3.2.
+#
+# It exists so that the kernel's conditional readings of a law have something to
+# work with at the number level, and so that a user has a number law file to copy
+# as `boolean.laws` is one to copy for booleans. The names are this file's own,
+# not the book's.
+#
+# Nothing associative, symmetric, or about the identity element 0 is written
+# here: matching already reads a line modulo those three, so such a law would
+# only offer to rewrite a line as itself.
+#
+# '≡ ⟹ ⟸' are the book's large '= ⇒ ⇐', at the lowest precedence, which is what
+# a law file needs because it has no margin to put a direction in.
+
+reflexive: x ≤ x
+antisymmetry: x ≤ y ∧ y ≤ x ≡ x = y
+transitive: x ≤ y ∧ y ≤ z ⟹ x ≤ z
+
+# The two conditional laws. Their own main operator is '⇐', a boolean
+# connective, so their unconditional readings are steps a boolean line can take.
+# What makes them steps a *number* line can take is the conditional reading:
+# 'x + y' may be written 'x' with '≥' in the margin when '0 ≤ y' holds.
+upper bound: x ≤ x + y ⟸ 0 ≤ y
+lower bound: x + y ≤ x ⟸ y ≤ 0
+
+monotonic: x + y ≤ x + z ≡ y ≤ z

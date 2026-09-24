@@ -91,9 +91,10 @@ Everything the window made visible is done (2026-09-23/24): applying a law to a 
 anywhere-focus, the display collapses, matching modulo symmetry and an identity element, contiguous
 association segments as sites, zooming into one, clicking one in the window, ranking the suggestion
 list, the gap-on-splice justification, highlighting the site a suggestion would rewrite, and going
-back into a closed level. What is left is kernel work the window does not force: conditional laws at
-the number level, and the named chunks of the grammar below. Phase 2e (LoopBridge / concurrency) stays
-parked.
+back into a closed level, and conditional laws at the number level. What is left is the named chunks
+of the grammar below, and the two things the kernel says out loud that it cannot do: read a boolean
+conditional law conditionally, and check a number law by anything better than small integers. Phase 2e
+(LoopBridge / concurrency) stays parked.
 
 ### Kernel residuals to pick up alongside or after the UI
 
@@ -125,8 +126,16 @@ parked.
 - No `if … then … else … fi`, quantifiers, bunches, strings, lists, functions, scope (`〈v: d → b〉`),
   function application, hiding, deleting a region, or law query — each is a named section of the
   document and a named chunk of the grammar below.
-- A conditional law (`x ≤ x + y ⇐ 0 ≤ y`) cannot yet be used at the number level: that is the
-  document's type-checker-and-gap machinery.
+- A conditional law is read conditionally where its consequent is a *number* relation (2026-09-24,
+  item 18): `x ≤ x + y ⇐ 0 ≤ y` is a step a number line can take, with `0 ≤ y` as a premise that the
+  laws in force either settle — the `context` a zoom in supplies is how a domain condition gets in
+  force — or do not, in which case the step leaves the document's warning sign with the premise
+  recorded beside it. A *boolean* conditional law is not read that way: its own `⇒` already stands in
+  a boolean margin, so the reading would offer every such law a second time with a premise attached.
+  That is a deliberate limit, not an oversight, and lifting it is a later round.
+- `Netty/laws/number.laws` is a small example list, not §11.3.2, and it is not *decided* the way the
+  boolean list is: `Law.holdsOnInts` checks each law on the integers `-2 … 2`, which a law false in
+  general can pass. Number laws are trusted as transcribed; arithmetic stays out of scope.
 - Lake does not track `Netty/laws/boolean.laws` as a build dependency; `netty --selftest` catches a
   stale build, but editing the law file needs the `.olean` deleted (or `Netty/Laws.lean` touched).
 
@@ -506,6 +515,55 @@ parked.
    refused once a line has been written after the zoom-out.
    Not done here: conditional laws at the number level, ML ranking, distributivity, arithmetic or
    normalisation.
+
+18. [x] **Conditional laws at the number level**, 2026-09-24 on main. A law such as
+   `x ≤ x + y ⇐ 0 ≤ y` was unusable where it is most wanted. Its own main operator is `⇐`, and a law's
+   readings put its own operator in the margin, so the tool offered it only to a boolean line; a number
+   line, whose margin wants `≤`, was never offered it at all.
+   `Law.conditional` is the reading that fixes that: for a law of the form `Q ⇒ P` or `P ⇐ Q` whose
+   consequent `P` is a relation that stands in a *number* margin, the consequent goes in the margin and
+   `Q` is left over as a premise — both ways round, as `Law.forms` offers both directions of a law. The
+   reading is generated only for the number directions `≤ < ≥ >`, and the reason is written down: a
+   boolean conditional law already stands in a boolean margin as it is, so reading it conditionally as
+   well would offer every such law a second time with a premise attached and bury the steps that need
+   nothing. Doing it for booleans too — so that `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` could rewrite `a ∧ c` under
+   the premise `a ⇒ b` — is a later round; the ranking key it needs is already here.
+   The premise is not a new kind of obligation, which is the whole of the design. `Doc.suggestions`
+   instantiates it with the same match and asks `Law.settles` whether the laws in force settle it —
+   which is the same match the pane would make on a line holding the premise, one step and by an
+   unconditional reading, so the question cannot recur. A settled premise is no premise and the step is
+   an ordinary step; an unsettled one is carried on the suggestion, and taking it leaves the gap direct
+   entry leaves, with the premise recorded beside it on the line (`Line.premise`) as what would close
+   it. `Doc.outcome` refuses to say what such a proof proves, exactly as for any other gap. `Doc.rank`
+   gained one key, under applicability and over everything else: a step that needs nothing before a
+   step that leaves a gap. The premise's own free variables count as holes, because a premise one
+   cannot even state is not an obligation one can take on.
+   Where a domain condition comes from is the document's answer: the context. Zooming in to the
+   consequent of `0 ≤ m ⇒ n ≤ n + m` puts `0 ≤ m` in force, and from there the reading that needs it
+   carries no premise while the one that needs `0 ≤ n` says so — one law, one line, one pane, the two
+   side by side.
+   `Netty/laws/number.laws` is a new example law list — six laws, not §11.3.2 — with `Laws.number`
+   reading it at compile time as `Laws.boolean` is read. It is checked by `Law.holdsOnInts` on the
+   integers `-2 … 2` (`number_holdsOnInts`, by `decide`), and the limit is stated rather than glossed:
+   that is a test a law false in general can pass, where `boolean_isTautology` decides a boolean law.
+   `Expr.evalInt` / `Expr.evalProp` exist for that check and for nothing else — no suggestion does
+   arithmetic.
+   In the panes: `renderSuggestions` writes "leaves a gap: 0 ≤ m" against a row that would leave one,
+   `SuggestionView.premise` and `LineView.premise` carry it to the window, and `netty-web/` marks such
+   a row and says in the gutter's tooltip what a gap is for. A step that leaves a gap is never offered
+   as though it did not.
+   Witnessed in Lean, all by `decide`, all `propext` only: `context_settles_the_premise`,
+   `a_law_settles_a_ground_premise` and `nothing_settles_zero_le_m` (the three ways the question can
+   go); `bound_proves` and `bound_complete` — the proof of `0 ≤ m ⇒ n ≤ n + m` through a number level,
+   no gaps, fully zoomed out; `bound_offers_discharged_and_gapped` (the two readings on the same number
+   line, one carrying a premise and one not); `bound_reads_the_boolean_line_three_ways` (the
+   unconditional reading on the whole boolean line, and the conditional one on its number *operand*,
+   rewriting the line in place — the short way round of the two zoom-ins); and
+   `gapped_leaves_the_premise_as_a_gap`, `gapped_proves_nothing`, `gapped_writes_the_law_s_line` for
+   the undischarged case. `netty --selftest` gained `conditionalTest`, which reads all of that off the
+   request service the client talks to, and a staleness check for the new law file beside the old one.
+   Not done here: the boolean conditional reading, a better check for number laws, ML ranking,
+   distributivity, arithmetic or normalisation.
 
 ## Then grow language ↔ Netty grammar
 

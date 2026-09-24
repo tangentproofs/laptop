@@ -403,5 +403,46 @@ def evalBool (σ : List (String × Bool)) : Expr → Option Bool
       | .ne => some (a != b)
       | _ => none
 
+/-- Evaluate a number expression under an assignment of integers to its law
+variables and identifiers; `none` when it is not a number expression. This is
+for *checking a law list*, not for calculating: nothing in the suggestion engine
+does arithmetic. -/
+def evalInt (σ : List (String × Int)) : Expr → Option Int
+  | num n => some (n : Int)
+  | var n | mvar n => σ.lookup n
+  | bin .add l r => do return (← evalInt σ l) + (← evalInt σ r)
+  | bin .sub l r => do return (← evalInt σ l) - (← evalInt σ r)
+  | bin .mul l r => do return (← evalInt σ l) * (← evalInt σ r)
+  | _ => none
+
+/-- Evaluate a binary expression whose atoms may be comparisons of numbers, under
+an assignment of integers. A `=` or `⧧` whose sides are numbers is read as the
+comparison and otherwise as the connective, which is what the two spellings of
+those operators mean in the book. -/
+def evalProp (σ : List (String × Int)) : Expr → Option Bool
+  | top => some true
+  | bot => some false
+  | neg a => (evalProp σ a).map not
+  | bin o l r =>
+      match o with
+      | .lt => do return decide ((← evalInt σ l) < (← evalInt σ r))
+      | .gt => do return decide ((← evalInt σ r) < (← evalInt σ l))
+      | .le => do return decide ((← evalInt σ l) ≤ (← evalInt σ r))
+      | .ge => do return decide ((← evalInt σ r) ≤ (← evalInt σ l))
+      | .and => do return (← evalProp σ l) && (← evalProp σ r)
+      | .or => do return (← evalProp σ l) || (← evalProp σ r)
+      | .imp => do return !(← evalProp σ l) || (← evalProp σ r)
+      | .rimp => do return !(← evalProp σ r) || (← evalProp σ l)
+      | .eq =>
+          match evalInt σ l, evalInt σ r with
+          | some a, some b => some (a == b)
+          | _, _ => do return (← evalProp σ l) == (← evalProp σ r)
+      | .ne =>
+          match evalInt σ l, evalInt σ r with
+          | some a, some b => some (a != b)
+          | _, _ => do return (← evalProp σ l) != (← evalProp σ r)
+      | _ => none
+  | _ => none
+
 end Expr
 end Netty

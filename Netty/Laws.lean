@@ -75,6 +75,12 @@ namespace Laws
 /-- The boolean law list: the "Binary" laws of aPToP §11.3.1. -/
 def boolean : List Law := lawFile% "laws/boolean.laws"
 
+/-- A small number law list, `Netty/laws/number.laws`. It is not the whole of
+§11.3.2 and does not pretend to be: it exists so that the conditional readings of
+a law (`Law.conditional`) have something to work with at the number level, and so
+that a user has a number law file to copy. -/
+def number : List Law := lawFile% "laws/number.laws"
+
 end Laws
 
 set_option maxRecDepth 4000 in
@@ -86,4 +92,18 @@ This is the kernel's justification for offering a law as a suggestion. It does
 not yet say that *applying* a law is sound — that a step licensed by matching
 preserves the relation the margin claims — which is the next theorem to have. -/
 theorem boolean_isTautology : Laws.boolean.all Law.isTautology = true := by decide
+
+set_option maxRecDepth 100000 in
+/-- Every number law the kernel ships with holds under every assignment of
+`-2 … 2` to its variables, checked by evaluation in the kernel.
+
+This is weaker than `boolean_isTautology` and the difference matters: a boolean
+law has finitely many assignments, so checking them all *decides* the law, while
+a number law has infinitely many and a false law can hold on a small range. It is
+evidence, not a proof, and it is the most the kernel can say without arithmetic,
+which is out of scope here. The number laws are therefore trusted as
+transcribed, and this checks that none of them is wrong in a way that shows up on
+small integers. -/
+theorem number_holdsOnInts :
+    Laws.number.all (Law.holdsOnInts [-2, -1, 0, 1, 2]) = true := by decide
 end Netty

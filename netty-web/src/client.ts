@@ -265,6 +265,11 @@ function lineRow(l: LineView, depth: number): HTMLElement {
   }, String(l.index));
   if (l.focusable) gutter.addEventListener('click', () => void cmd(`focus ${l.index}`));
   row.append(gutter);
+  if (l.gap) {
+    row.setAttribute('title', l.premise !== ''
+      ? `a gap: the step below needs ${l.premise}`
+      : 'a gap: the step below is not licensed by a law');
+  }
   row.append(el('span', { class: 'caret' }, l.focused ? '›' : ''));
   row.append(l.dir !== ''
     ? el('span', { class: 'margin direction', title: 'the direction of this level' }, `[${l.dir}]`)
@@ -323,17 +328,26 @@ function contextPane(s: StateView | null): HTMLElement {
 /** One suggestion: what a law would write next. */
 function suggestionRow(g: SuggestionView): HTMLElement {
   const blocked = g.holes.length > 0;
+  // A conditional law whose premise nothing in force settles is still a step,
+  // but it leaves the document's warning sign. The row says what it would leave
+  // to prove, before it is taken.
+  const gappy = g.premise !== '';
   const row = el('button', {
-    class: 'suggestion' + (blocked ? ' blocked' : ''),
+    class: 'suggestion' + (blocked ? ' blocked' : '') + (gappy ? ' gappy' : ''),
     title: blocked
       ? `${g.holes.join(', ')} unconstrained: this law needs more than the line to settle it`
-      : `apply #${g.index} — ${g.law}`,
+      : gappy
+        ? `apply #${g.index} — ${g.law}, leaving ${g.premise} to prove`
+        : `apply #${g.index} — ${g.law}`,
   });
   if (blocked) row.setAttribute('disabled', 'disabled');
   row.append(el('span', { class: 'gutter' }, String(g.index)));
   row.append(el('span', { class: 'margin' }, g.op));
   row.append(el('span', { class: 'formula' }, g.result));
-  row.append(el('span', { class: 'note' }, blocked ? `${g.law} (${g.holes.join(', ')}?)` : g.law));
+  row.append(el('span', { class: 'note' },
+    blocked ? `${g.law} (${g.holes.join(', ')}?)`
+      : gappy ? `${g.law} ! ${g.premise}`
+        : g.law));
   if (!blocked) row.addEventListener('click', () => void cmd(`apply #${g.index}`));
   // Pointing at a suggestion — or reaching it with the keyboard — lights up the
   // part of the line it would rewrite. A disabled row gets the listeners too:
