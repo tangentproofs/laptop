@@ -582,6 +582,84 @@ def collapseTest : IO Bool := do
   | none => ok := false
   return ok
 
+/-- Check that every suggestion says *where* it would rewrite, through the
+request service the window talks to.
+
+`Suggestion.part` has carried the site since the ranking, and `SuggestionView`
+now hands it on as a `PartView` — the very shape the zoom targets come in — so a
+window can draw the place a step would rewrite as the same part of the same line
+a click would zoom into. On `x ∧ y ∧ y ∧ z` the fold that only a run can make
+must be credited to the run `1:2` and read `y ∧ y`, a law that pads the whole
+line must be credited to the whole line, and *every* site must be either the
+whole line or one of the parts the same answer offers as a zoom target: a
+highlight can then always be drawn, and it cannot name a part the line does not
+have.
+-/
+def siteTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean } }
+  let (_, r) := Api.respond fresh { op := "cmd", arg := "start = x ∧ y ∧ y ∧ z" }
+  if !r.ok then
+    IO.eprintln s!"site: starting the line: {r.error}"
+    return false
+  let st := r.state
+  match st.lines with
+  | [l] =>
+      -- The fold of the run `y ∧ y`, which neither the whole line nor any single
+      -- operand can make: its site is the run, named as the zoom button is.
+      match st.suggestions.find? fun g =>
+          g.law == "idempotent" && g.result == "x ∧ y ∧ z" with
+      | some g =>
+          if (g.site.name, g.site.text, g.site.start, g.site.len) == ("1:2", "y ∧ y", 1, 2) then
+            IO.println "site: the fold of a run is credited to that run"
+          else
+            ok := false
+            IO.eprintln s!"site: the fold of y ∧ y is credited to \
+              ‘{g.site.name}’ (‘{g.site.text}’, {g.site.start}+{g.site.len})"
+      | none =>
+          ok := false
+          IO.eprintln "site: the fold of the run y ∧ y is not offered at all"
+      -- A law that reads the whole line is credited to the whole line, which is
+      -- no run of operands at all and says so with `len = 0`.
+      match st.suggestions.find? fun g =>
+          g.law == "double negation" && g.result == "¬¬(x ∧ y ∧ y ∧ z)" with
+      | some g =>
+          if g.site.len == 0 && g.site.text == "x ∧ y ∧ y ∧ z" then
+            IO.println "site: a step on the whole line is credited to the whole line"
+          else
+            ok := false
+            IO.eprintln s!"site: padding the whole line is credited to \
+              ‘{g.site.name}’ (‘{g.site.text}’, {g.site.start}+{g.site.len})"
+      | none =>
+          ok := false
+          IO.eprintln "site: the padding of the whole line is not offered at all"
+      -- And every site is a part of *this* line: the whole line, or one of the
+      -- parts the same answer offers as a zoom target, under that part's name.
+      let names := l.zooms.map (·.name)
+      let stray := st.suggestions.filter fun g =>
+        g.site.len != 0 && !(names.contains g.site.name)
+      if stray.isEmpty then
+        IO.println s!"site: all {st.suggestions.length} sites are parts the same \
+          line offers to a click"
+      else
+        ok := false
+        IO.eprintln s!"site: {stray.length} suggestions name a part the line does \
+          not offer, the first ‘{(stray.head!).site.name}’"
+      -- The site is the part it names, letter for letter: what a window would
+      -- highlight is what a click on that part would open.
+      let wrong := st.suggestions.filter fun g =>
+        g.site.len != 0 && !(l.zooms.any fun z => z.name == g.site.name && z.text == g.site.text)
+      if wrong.isEmpty then
+        IO.println "site: and each reads as the part of the line it names"
+      else
+        ok := false
+        IO.eprintln s!"site: {wrong.length} sites read differently from the part \
+          they name"
+  | ls =>
+      ok := false
+      IO.eprintln s!"site: the started proof draws {ls.length} lines, not one"
+  return ok
+
 /-- Check that a gap is carried out of the subproof that holds it, through the
 request service the window talks to.
 
@@ -683,8 +761,9 @@ suggestion the law list offers is a sound step, that the suggestions come in the
 order `Doc.rank` describes, that the focus can land on an outer line through the
 request service, that a click can zoom in to every part of a line through it — the
 runs of operands as well as the single ones — that a gap left inside a subproof
-is carried out to the line the zoom was made from, and that the display collapses
-reach it too. -/
+is carried out to the line the zoom was made from, that every suggestion says
+which part of the line it would rewrite, and that the display collapses reach it
+too. -/
 def selftest : IO Bool := do
   let mut ok := true
   let bad := Laws.boolean.filter fun l => !l.isTautology
@@ -741,6 +820,7 @@ def selftest : IO Bool := do
   if !(← zoomTest) then ok := false
   if !(← collapseTest) then ok := false
   if !(← gapTest) then ok := false
+  if !(← siteTest) then ok := false
   if !(← apiTest) then ok := false
   return ok
 

@@ -44,23 +44,29 @@ namespace Api
 
 open Lean (Json ToJson FromJson toJson fromJson?)
 
-/-- A part of a line that a click may zoom in to.
+/-- A part of a line, as a window names and draws it: a zoom target on the line
+before the focus (`LineView.zooms`), or the place a suggestion would rewrite
+(`SuggestionView.site`).
 
-`name` is what the script language calls the part (`Netty.Part.render`), so a
-window offers a click by handing back the very argument `zoom` takes: a single
-main operand by its number, a contiguous segment of an association by
-`start:length`. The client does not compose that string, which is what keeps a
-click, a suggestion's site and a script zoom from ever meaning different things
-by the same part. -/
+`name` is what the kernel calls the part (`Netty.Part.render`), so a window
+offers a zoom by handing back the very argument `zoom` takes: a single main
+operand by its number, a contiguous segment of an association by `start:length`.
+The client does not compose that string, which is what keeps a click, a
+suggestion's site and a script zoom from ever meaning different things by the
+same part. The whole line is a part too — it is where most suggestions apply —
+and `span` counts no operands for it, so `len = 0` is how a client tells it from
+a run; it never appears among the zoom targets, being the level one is already
+on. -/
 structure PartView where
-  /-- What `zoom` calls it: `"1"`, or `"1:2"` for a segment. -/
+  /-- What `zoom` calls it: `"1"`, or `"1:2"` for a segment; `"the whole line"`
+  for the whole line, which is not a zoom target. -/
   name : String
   /-- The part, rendered as it stands in the line. -/
   text : String
-  /-- Which main operand the run starts at. -/
+  /-- Which main operand the run starts at; `0` for the whole line. -/
   start : Nat
-  /-- How many main operands it takes; `1` for a single operand, two or more
-  for a segment of an association. -/
+  /-- How many main operands it takes: `1` for a single operand, two or more
+  for a segment of an association, and `0` for the whole line. -/
   len : Nat
   deriving Repr, DecidableEq, Inhabited, ToJson, FromJson
 
@@ -117,6 +123,12 @@ structure SuggestionView where
   /-- Law variables the match left unconstrained; a suggestion with any of
   these cannot be applied. -/
   holes : List String
+  /-- The place on the line before the focus that this step rewrites: the whole
+  line, one of its main operands, or a contiguous run of them. It is named as
+  the zoom targets are named, so a window can draw the site of a suggestion and
+  the target of a click as the same part of the same line, which is what they
+  are (`Doc.sites`). -/
+  site : PartView
   deriving Repr, DecidableEq, Inhabited, ToJson, FromJson
 
 /-- The whole state of a session: enough to draw the three panes, and nothing
@@ -197,6 +209,13 @@ def tyName : Ty → String
   | .boolean => "boolean"
   | .number => "number"
 
+/-- A part of `line`, named and rendered as a window draws it. One function, so
+a zoom target and a suggestion's site cannot disagree about what a part is
+called or how it reads. -/
+def partView (line : Expr) (p : Part) : PartView :=
+  let (start, len) := p.span
+  { name := p.render, text := p.textIn line, start := start, len := len }
+
 /-- One line of the proof, as a client draws it: a line the display collapses
 leave standing (`Doc.shownLines`), at the depth and with the name they leave it
 with. Its `index` is still its index in the document, which is what `focus N`
@@ -212,9 +231,7 @@ def lineView (d : Doc) (s : Shown) : LineView :=
     if focused && i + 1 == d.lines.size then
       (Doc.parts l.expr).filterMap fun p =>
         if !p.zoomable then none
-        else (p.exprOf l.expr).map fun _ =>
-          let (start, len) := p.span
-          { name := p.render, text := p.textIn l.expr, start := start, len := len }
+        else (p.exprOf l.expr).map fun _ => partView l.expr p
     else []
   { index := i
     depth := s.depth
@@ -251,10 +268,12 @@ def stateView (s : Session) : StateView :=
       | none => []
     lines := d.shownLines.map (lineView d)
     context := d.contextLaws.map (·.stmt.render)
-    suggestions := (List.range d.suggestions.length).map fun i =>
-      let g := d.suggestions[i]!
-      { index := i, law := g.law, op := g.op.symbol, result := g.result.render,
-        holes := g.holes }
+    suggestions :=
+      let line := (d.focusLine?.map Line.expr).getD .top
+      (List.range d.suggestions.length).map fun i =>
+        let g := d.suggestions[i]!
+        { index := i, law := g.law, op := g.op.symbol, result := g.result.render,
+          holes := g.holes, site := partView line g.part }
     outcome := d.renderOutcome
     proved := d.outcome.toOption.isSome
     canUndo := !s.history.isEmpty

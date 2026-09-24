@@ -21,7 +21,9 @@ a run of them), the next line typed in is `direct = …` — so anything the win
 can do, a script can do, and every change still goes through `Netty.Doc.step`.
 The client does not compose a part's name: the answer carries it
 (`LineView.zooms`), so a click cannot mean a different part from the one a
-suggestion's site or a script zoom means.
+suggestion's site or a script zoom means. A suggestion carries the part it
+rewrites in that same shape (`SuggestionView.site`), which is what lets pointing
+at one light up that very part of the line.
 
 ## Running it
 
@@ -60,6 +62,13 @@ checks both halves. The server listens on the loopback interface only.
 * **A click on a suggestion** writes that line. Greyed suggestions are the
   ones whose match left a law variable unconstrained; the kernel will not
   apply those, and says which variable it is.
+* **Pointing at a suggestion** lights up the part of the line before the focus
+  that it would rewrite: the whole formula, one main operand, or a run of them
+  with the operators between — and, for a run, its dashed button below the line
+  as well. The site comes from the kernel (`SuggestionView.site`) under the same
+  name a zoom target carries, so what lights up is exactly the part a click there
+  would open. Reaching a suggestion with the keyboard lights it the same way, and
+  leaving it clears it.
 * **A click on a subexpression** of the last line zooms in to it, which opens
   a subproof with its own direction and its own context. **zoom out** (`o`)
   closes it and puts the result back in the line it came from.
@@ -103,10 +112,9 @@ neither is checked in.
 The kernel's own residuals are listed in `.sci/netty-plan.md` and are visible
 here: a law applies to the whole line, to each of its main operands and to each
 contiguous run of them, but not to deeper subterms — those are reached by zooming
-in. The pane does not yet show *which* part a suggestion would rewrite, though the
-kernel knows. There is no ML ranking of the suggestions, no VS Code webview, and
-no editing of law files from the window — laws are files, and `NETTY_CMD` is how
-to add one.
+in. A closed subproof cannot be re-opened. There is no ML ranking of the
+suggestions, no VS Code webview, and no editing of law files from the window —
+laws are files, and `NETTY_CMD` is how to add one.
 
 Matching is modulo associativity, symmetry and the identity element, so the
 suggestion list is long: a law reads a line every way those three allow, and each

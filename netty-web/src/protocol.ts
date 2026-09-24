@@ -8,22 +8,25 @@
  * standard input; one answer is one line of JSON on its standard output.
  */
 
-/** A part of a line that a click may zoom in to.
+/** A part of a line: a zoom target on the line before the focus
+ * (`LineView.zooms`), or the place a suggestion would rewrite
+ * (`SuggestionView.site`).
  *
  * `name` is what the script language calls the part, so a click sends
  * `zoom ${name}` and nothing here composes that string: the kernel names its own
  * parts, which is what keeps a click, a suggestion's site and a script zoom from
  * meaning different things by the same part. A single main operand is named by
  * its number and has `len === 1`; a contiguous segment of an association is
- * named `start:length` and has `len > 1`. */
+ * named `start:length` and has `len > 1`; the whole line has `len === 0` and is
+ * never a zoom target, being the level one is already on. */
 export interface PartView {
   /** What `zoom` calls it: `'1'`, or `'1:2'` for a segment. */
   name: string;
   /** The part, rendered as it stands in the line. */
   text: string;
-  /** Which main operand the run starts at. */
+  /** Which main operand the run starts at; `0` for the whole line. */
   start: number;
-  /** How many main operands it takes. */
+  /** How many main operands it takes; `0` for the whole line. */
   len: number;
 }
 
@@ -80,6 +83,10 @@ export interface SuggestionView {
   /** Law variables the match left unconstrained; a suggestion with any of
    * these cannot be applied. */
   holes: string[];
+  /** The place on the line before the focus this step would rewrite: the whole
+   * line, one of its main operands, or a contiguous run of them — named as the
+   * zoom targets are named, because it is the same part of the same line. */
+  site: PartView;
 }
 
 /** The whole state of a session: everything the three panes draw. */

@@ -13,6 +13,8 @@
   --hot-soft: #e5eff8;
   --bad: #9b2226;
   --good: #22683f;
+  --site: #b06d1a;
+  --site-soft: #fbeed2;
   --mono: ui-monospace, "DejaVu Sans Mono", "Fira Mono", Menlo, monospace;
   color-scheme: light dark;
 }
@@ -29,6 +31,8 @@
     --hot-soft: #22303c;
     --bad: #e8817f;
     --good: #85c8a1;
+    --site: #e0a95c;
+    --site-soft: #3a3020;
   }
 }
 
@@ -177,6 +181,21 @@ button.operand.segment:hover {
   border-style: solid;
   border-color: var(--hot);
   background: var(--hot-soft);
+  color: var(--ink);
+}
+
+/* the part of the line before the focus that the suggestion being pointed at
+   would rewrite — the whole formula, one operand, or a run of them with the
+   operators between; the run's own button under the line lights up with it */
+.site {
+  background: var(--site-soft);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 var(--site);
+  color: var(--ink);
+}
+button.operand.site, button.operand.segment.site {
+  border-color: var(--site);
+  border-style: solid;
   color: var(--ink);
 }
 

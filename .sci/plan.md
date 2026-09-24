@@ -833,3 +833,34 @@
       Left parked: highlighting in the proof pane which part a suggestion would rewrite, ML ranking,
       re-opening closed levels, conditional laws at the number level, distributivity, arithmetic and
       normalisation, and phase 2e.
+
+- [x] Netty: highlighting the site a suggestion would rewrite (2026-09-24; on main) —
+      `Api.partView` and `SuggestionView.site` in `Netty/Api.lean`, `showSite` in
+      `netty-web/src/client.ts`. `Suggestion.part` had carried the place a step rewrites since the
+      ranking, and the window drew none of it: the answer's `SuggestionView` had `law`, `op`, `result`
+      and `holes` and nothing about *where*, so the document's minimization story — a law applied to a
+      part of a line — was invisible in the very pane that offers it.
+      The site travels in the same shape and under the same name as a zoom target. `Api.partView` is one
+      function — `name := Part.render`, `text := Part.textIn`, `start`/`len := Part.span` — and both
+      `LineView.zooms` and `SuggestionView.site` are built by it, so a suggestion's site and a click's
+      zoom target cannot disagree about what a part is called or how it reads. The whole line is a part
+      too, and a client tells it from a run by `len = 0`; it never appears among the zoom targets,
+      `Part.zoomable` refusing it as `Cmd.zoomIn` does.
+      In `netty-web/`, `formula` marks each operand `data-operand=i` and each operator between two of
+      them `data-op-before=i`, and `showSite` writes a `site` class over the run the pointer's
+      suggestion names — the whole formula for a whole-line step, one operand for a step on one, a run of
+      operands with the operators between for a step on a run, and that run's dashed button below the
+      line with it. It writes classes rather than redrawing, because a redraw under the pointer takes
+      the row being pointed at out of the document; `pointerenter`/`pointerleave` and `focus`/`blur`
+      drive it, so the keyboard lights the same part the pointer does. No new layout, no new request.
+      Witnessed in Lean by `decide`, `propext` only: `segmentFold_is_credited_to_the_run` — on
+      `x ∧ y ∧ y ∧ z` the fold that only a run can make is credited to `.segment 1 2`, and the padding
+      by `double negation` to `.whole`. `netty --selftest` gained `siteTest`, which reads it off the
+      request service the client talks to: that fold's site is `1:2` reading `y ∧ y`, the padding's site
+      is the whole line with `len = 0`, and all 227 sites on that line are parts the same answer offers
+      as zoom targets, each reading letter for letter as the part it names — so a highlight can always
+      be drawn, and it cannot name a part the line does not have. The client type checks and builds
+      (`npm run check`, `npm run build`), and the page and its `/api` answers were smoke tested against
+      the running server.
+      Left parked: re-opening closed levels, conditional number-level laws, ML ranking, distributivity,
+      arithmetic and normalisation, and phase 2e.

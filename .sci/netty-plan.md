@@ -87,12 +87,13 @@ Concurrency (`||`), channels, ivar, full book syntax are **language growth**, no
 
 ### NEXT, now that the three panes exist
 
-The kernel residual below is what the window makes visible next: highlighting in the proof pane which
-part of the line a suggestion would rewrite — `Suggestion.part` carries it since item 13, and the
-window does not draw it. (Applying a law to a part of a line, anywhere-focus, the display collapses,
-matching modulo symmetry and an identity element, contiguous association segments as sites, zooming
-into one, clicking one in the window, ranking the suggestion list, and the gap-on-splice justification
-are all done, 2026-09-23/24.) Phase 2e (LoopBridge / concurrency) stays parked.
+Everything the window made visible is done (2026-09-23/24): applying a law to a part of a line,
+anywhere-focus, the display collapses, matching modulo symmetry and an identity element, contiguous
+association segments as sites, zooming into one, clicking one in the window, ranking the suggestion
+list, the gap-on-splice justification, and highlighting the site a suggestion would rewrite. What is
+left is kernel work the window does not force: re-opening a closed level, conditional laws at the
+number level, and the named chunks of the grammar below. Phase 2e (LoopBridge / concurrency) stays
+parked.
 
 ### Kernel residuals to pick up alongside or after the UI
 
@@ -105,6 +106,9 @@ are all done, 2026-09-23/24.) Phase 2e (LoopBridge / concurrency) stays parked.
   level you can work inside (`Cmd.zoomIn` takes a `Part`, item 11): `zoom 1:2` opens a subproof on a
   segment and `out` splices it back, and the window offers every one of them to a click by the kernel's
   own name for it (item 12).
+- A suggestion says *where* it would rewrite, and the window draws it (item 16): `Suggestion.part`
+  reaches the client as `SuggestionView.site`, in the same shape and under the same name as a zoom
+  target, so pointing at a suggestion lights up that part of the line before the focus.
 - The suggestion list is *ranked* by a written-down heuristic (`Doc.rank`, items 13 and 14), not
   learned: applicable before unconstrained, fewer unconstrained variables, the shorter line the step
   writes, then the more specific place, then the law file's own order. ML ranking stays out of MVP.
@@ -421,6 +425,36 @@ are all done, 2026-09-23/24.) Phase 2e (LoopBridge / concurrency) stays parked.
    Not done here: highlighting in the proof pane which part a suggestion would rewrite, re-opening
    closed levels, conditional laws at the number level, ML ranking, distributivity, arithmetic or
    normalisation.
+
+16. [x] **Highlighting the site a suggestion would rewrite**, 2026-09-24 on main. `Suggestion.part` has
+   carried the place a step rewrites since the ranking (item 13), and the window drew none of it: the
+   answer's `SuggestionView` had `law`, `op`, `result` and `holes` and nothing about *where*, so the
+   document's minimization story — a law applied to a part of a line — was invisible in the pane that
+   offers it. Now `SuggestionView.site : PartView` carries it, and pointing at a suggestion lights that
+   part up in the proof pane.
+   The site travels in the *same shape and under the same name* as a zoom target. `Api.partView` is one
+   function — `name := Part.render`, `text := Part.textIn`, `start`/`len := Part.span` — and both
+   `LineView.zooms` and `SuggestionView.site` are built by it, so a suggestion's site and a click's zoom
+   target cannot disagree about what a part is called or how it reads. The whole line is a part too, and
+   a client tells it from a run by `len = 0` (`Part.span` counts no operands for it); it never appears
+   among the zoom targets, `Part.zoomable` refusing it as `Cmd.zoomIn` does.
+   In `netty-web/`, `formula` now marks each operand `data-operand=i` and each operator written between
+   two of them `data-op-before=i`, and `showSite` writes a `site` class over the run the pointer's
+   suggestion names — the whole formula for a whole-line step, one operand for a step on one, a run of
+   operands with the operators between for a step on a run, and that run's dashed button below the line
+   with it. It writes classes rather than redrawing, because a redraw under the pointer takes the row
+   being pointed at out of the document. `pointerenter`/`pointerleave` and `focus`/`blur` drive it, so
+   the keyboard lights the same part the pointer does. No new layout and no new request: the three panes
+   are what they were.
+   Witnessed in Lean, by `decide`, `propext` only: `segmentFold_is_credited_to_the_run` — on
+   `x ∧ y ∧ y ∧ z` the fold that only a run can make is credited to `.segment 1 2` and the padding by
+   `double negation` to `.whole`. `netty --selftest` gained `siteTest`, which reads it off the request
+   service the client talks to: that fold's site is `1:2` reading `y ∧ y`, the padding's site is the
+   whole line with `len = 0`, and all 227 sites on that line are parts the same answer offers as zoom
+   targets, each reading letter for letter as the part it names — so a highlight can always be drawn,
+   and it cannot name a part the line does not have.
+   Not done here: re-opening closed levels, conditional laws at the number level, ML ranking,
+   distributivity, arithmetic or normalisation.
 
 ## Then grow language ↔ Netty grammar
 

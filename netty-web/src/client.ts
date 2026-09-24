@@ -10,6 +10,9 @@
  * segment of an association. Nothing about a proof is decided here, and nothing
  * here composes a part's name: `LineView.zooms` carries it, so a click cannot
  * mean a different part from the one a suggestion's site or a script zoom means.
+ * That is also what the site highlight rests on: a suggestion carries the part
+ * it would rewrite (`SuggestionView.site`), named the same way, so pointing at a
+ * suggestion lights up that very part of the line before the focus.
  *
  * `state.lines` is the proof after the kernel's display collapses, so a line
  * the collapses hide simply does not arrive and a line they lift arrives with
@@ -151,6 +154,7 @@ function zoomButton(z: PartView, extra = ''): HTMLElement {
   const b = el('button', {
     class: `operand zoom${extra === '' ? '' : ' ' + extra}`,
     title: `zoom in to ${z.text} — zoom ${z.name}`,
+    'data-part': z.name,
   }, z.text);
   b.addEventListener('click', () => void cmd(`zoom ${z.name}`));
   return b;
@@ -171,20 +175,55 @@ function formula(l: LineView): HTMLElement {
   // cannot be zoomed in to has none, and its operands are drawn as plain text.
   const single = new Map<number, PartView>();
   for (const z of l.zooms) if (z.len === 1) single.set(z.start, z);
-  const piece = (text: string, i: number): Node => {
+  // Each operand, and each operator written between two of them, says which
+  // operand it is, so that `showSite` can light up a run of them without
+  // knowing how the line was drawn.
+  const piece = (text: string, i: number): HTMLElement => {
     const z = single.get(i);
-    if (z === undefined) return el('span', { class: 'operand' }, text);
-    return zoomButton(z);
+    const node = z === undefined ? el('span', { class: 'operand' }, text) : zoomButton(z);
+    node.setAttribute('data-operand', String(i));
+    return node;
   };
   if (l.kind === 'neg') {
     box.append(el('span', { class: 'op' }, l.op), piece(l.parts[0] ?? '', 0));
     return box;
   }
   l.parts.forEach((p, i) => {
-    if (i > 0) box.append(el('span', { class: 'op' }, ` ${l.op} `));
+    if (i > 0) box.append(el('span', { class: 'op', 'data-op-before': String(i) }, ` ${l.op} `));
     box.append(piece(p, i));
   });
   return box;
+}
+
+/** Light up the part of the line before the focus that a suggestion would
+ * rewrite, and nothing else; `null` clears it.
+ *
+ * The site is one of the kernel's parts, in the same shape and under the same
+ * name as the zoom targets, so what is lit is exactly what a click on that part
+ * would open: the whole formula for a whole-line step, one operand for a step on
+ * one, and a run of operands with the operators between them for a step on a
+ * run — whose dashed button under the line lights up with it.
+ *
+ * This writes classes rather than redrawing, because a redraw under the pointer
+ * would take the row being pointed at out of the document. */
+function showSite(site: PartView | null): void {
+  for (const n of document.querySelectorAll('.site')) n.classList.remove('site');
+  if (site === null) return;
+  const row = document.querySelector('.line.focused');
+  const box = row?.querySelector('.formula');
+  if (box == null) return;
+  if (site.len === 0) {
+    box.classList.add('site');
+    return;
+  }
+  for (let i = site.start; i < site.start + site.len; i++) {
+    box.querySelector(`[data-operand="${i}"]`)?.classList.add('site');
+    if (i > site.start) box.querySelector(`[data-op-before="${i}"]`)?.classList.add('site');
+  }
+  if (site.len > 1) {
+    row?.nextElementSibling?.querySelector(`.segment[data-part="${site.name}"]`)
+      ?.classList.add('site');
+  }
 }
 
 /** The zoom targets that are runs of *two or more* main operands: the
@@ -294,6 +333,15 @@ function suggestionRow(g: SuggestionView): HTMLElement {
   row.append(el('span', { class: 'formula' }, g.result));
   row.append(el('span', { class: 'note' }, blocked ? `${g.law} (${g.holes.join(', ')}?)` : g.law));
   if (!blocked) row.addEventListener('click', () => void cmd(`apply #${g.index}`));
+  // Pointing at a suggestion — or reaching it with the keyboard — lights up the
+  // part of the line it would rewrite. A disabled row gets the listeners too:
+  // the browser sends it no pointer events, but its neighbours' leaving clears
+  // the highlight anyway, and a greyed step still has a site worth seeing when
+  // the pointer is over the pane.
+  row.addEventListener('pointerenter', () => showSite(g.site));
+  row.addEventListener('pointerleave', () => showSite(null));
+  row.addEventListener('focus', () => showSite(g.site));
+  row.addEventListener('blur', () => showSite(null));
   return row;
 }
 
@@ -377,7 +425,7 @@ function draw(): void {
       toolbar(s)),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
-          'click a suggestion to take it, a subexpression or a run of them to zoom in, a line number to move the focus')
+          'click a suggestion to take it — pointing at one lights up the part it rewrites; click a subexpression or a run of them to zoom in, a line number to move the focus')
       : el('div', { class: 'note-bar' + (noteIsError ? ' error' : '') }, note),
     el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)),
   );

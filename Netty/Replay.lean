@@ -463,6 +463,22 @@ theorem segmentFold_is_the_only_fold :
         s.law == "idempotent" && s.result == bin .and (bin .and (var "x") (var "y")) (var "z")).length)
       = some 1 := by decide
 
+/-- And the suggestion is *credited to the run it rewrites*: `Suggestion.part`
+carries the site, which is what ranks a step by how specific its place is and
+what lets a window draw which part of the line a step would rewrite. The fold is
+credited to `y ∧ y`, the run of two operands from the first; a law that reads the
+whole line is credited to the whole line. -/
+theorem segmentFold_is_credited_to_the_run :
+    ((session.steps [.start .boolean .same segmentLine]).toOption.map fun d =>
+      ((d.suggestions.filter fun s =>
+          s.law == "idempotent"
+            && s.result == bin .and (bin .and (var "x") (var "y")) (var "z")).map
+        Suggestion.part,
+       (d.suggestions.filter fun s =>
+          s.law == "double negation" && s.result == neg (neg segmentLine)).map
+        Suggestion.part))
+      = some ([.segment 1 2], [.whole]) := by decide
+
 /-- `×` is associative, so it has segments, and its operands are neutral — the
 document's position table leaves `×` out, since a factor is monotonic only when
 the other is nonnegative. So a segment of it is a neutral site whatever the
