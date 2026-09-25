@@ -188,20 +188,34 @@ function formula(l: LineView): HTMLElement {
     box.append(el('span', { class: 'op' }, l.op), piece(l.parts[0] ?? '', 0));
     return box;
   }
+  // A word or mark a form writes for itself. Where it stands before one of the
+  // pieces it says so, as the operator between two operands does, so that
+  // `showSite` can light up a piece by the mark that introduces it.
+  const word = (w: string, before?: number): HTMLElement =>
+    el('span', before === undefined ? { class: 'op' }
+      : { class: 'op', 'data-op-before': String(before) }, w);
   // `if … then … else … fi` writes its own four words around its three pieces:
   // the condition and the two branches, each a zoom target of its own.
   if (l.kind === 'cond') {
-    const word = (w: string, before?: number): HTMLElement =>
-      el('span', before === undefined ? { class: 'op' }
-        : { class: 'op', 'data-op-before': String(before) }, w);
     box.append(word('if '), piece(l.parts[0] ?? '', 0));
     box.append(word(' then ', 1), piece(l.parts[1] ?? '', 1));
     box.append(word(' else ', 2), piece(l.parts[2] ?? '', 2));
     box.append(word(' fi'));
     return box;
   }
+  // `∀ids: d· b` writes its own `:` and `·` around its two pieces, the domain and
+  // the body. `op` carries the quantifier and the names it binds — those are not
+  // expressions and are not zoom targets; the domain and the body are.
+  if (l.kind === 'quant') {
+    box.append(word(`${l.op}: `), piece(l.parts[0] ?? '', 0));
+    box.append(word('· ', 1), piece(l.parts[1] ?? '', 1));
+    return box;
+  }
+  // `:` is written tight on its left, as `Expr.renderAt` writes it; every other
+  // operator has a space on both sides.
+  const between = l.op === ':' ? `${l.op} ` : ` ${l.op} `;
   l.parts.forEach((p, i) => {
-    if (i > 0) box.append(el('span', { class: 'op', 'data-op-before': String(i) }, ` ${l.op} `));
+    if (i > 0) box.append(word(between, i));
     box.append(piece(p, i));
   });
   return box;

@@ -28,7 +28,9 @@ neither the whole line nor a single operand can reach, one that zooms *into* suc
 a segment and splices it back, and two that exercise the
 display collapses — a one-step subproof folded
 into its parent line, and two zoom-ins matched by two zoom-outs drawn as one
-zoom step.
+zoom step. The grammar's named forms have replays of their own: `if … fi`, and the
+quantifiers `∀` and `∃`, where a law about `∀x: d· b` has to read a line about
+`∀i: nat· i ≥ 0` and the two places to zoom in to are a domain and a body.
 
 `Netty.Demo` holds several of these proofs as *scripts*, which is what
 `lake exe netty --demo=…` runs; `netty --selftest` checks that parsing each
@@ -663,6 +665,217 @@ def absNonneg : Law :=
       (Expr.cond (bin .le (num 0) (mvar "x")) (mvar "x") (bin .sub (num 0) (mvar "x"))) }
 
 theorem absNonneg_holdsOnInts : Law.holdsOnInts [-2, -1, 0, 1, 2] absNonneg = true := by decide
+
+/-! ### `∀ids: d· b` and `∃ids: d· b`
+
+The document's quantified expressions — `quantifier identifiers : expression ·
+expression` in its grammar — and the next of the grammar's named forms after
+`if … fi`. `Expr.quant` is one node: the quantifier, the identifiers it binds, the
+domain they range over, and the body they are bound in. There is no abbreviated
+form that leaves the domain out, because the document excluded those.
+
+Its two main operands are the domain and the body, so those are the two places to
+zoom in to and the two places a law may be applied to. The document's Scope
+section fixes their positions — said there of the function `〈v:d→b〉`, which binds
+the same way — "the domain is in a neutral position and the body is in a positive
+position", and "for the body, we gain the context `v:d`".
+
+Three things are new with this form, and none of them was needed before.
+
+* A **binder**. What a quantifier binds is a list of names, not an expression: not
+  an operand, not a place to zoom in to, and — this is what a law file needs — not
+  an identifier of the line that states a law (`Expr.vars`), so generalizing a law
+  file line leaves it alone. A quantifier in a law therefore has to match a
+  quantifier in a line *modulo the binder name*: the law's own name is renamed to
+  the line's before the bodies are matched, and the renaming comes back out when
+  the law's other side is instantiated.
+* A **domain**, which is a bunch. The kernel has no bunch type and still zooms in
+  to a domain: the position is neutral, so only `=` is admitted there. What it
+  cannot do is *type check* what it offers — see
+  `quant_domain_is_offered_boolean_laws`.
+* `:`, membership, one `BinOp` and no more of the bunch notation, because the
+  context a zoom in to the body gains has to be an expression before it can be a
+  law. -/
+
+/-- `∀i: nat· i ≥ 0`: a quantified line, whose binder is spelled `i` where every
+shipped quantifier law spells its own `x`. -/
+def bounded : Expr := Expr.quant .all ["i"] (var "nat") (bin .ge (var "i") (num 0))
+
+/-- It renders as the document writes it. That the parser reads it back — and that
+the body runs to the end, so `∀i: nat· i ≥ 0 ∧ p` quantifies the conjunction — is
+checked by `netty --selftest`, the parser being a `partial def` the kernel cannot
+reduce. -/
+theorem quant_renders : bounded.render = "∀i: nat· i ≥ 0" := by decide
+
+/-- Nothing closes the body, so the form brackets itself as soon as anything
+surrounds it. This is the difference from `if … fi`, which `fi` closes. -/
+theorem quant_brackets_itself :
+    (bin .and bounded (var "p")).render = "(∀i: nat· i ≥ 0) ∧ p" := by decide
+
+/-- It is boolean — `Σ` and `Π`, the quantifiers that would give a number, are not
+in the grammar — and so is its body. -/
+theorem quant_ty : (bounded.tyOf?, bounded.operandTy 1 .boolean) = (some .boolean, .boolean) := by
+  decide
+
+/-- The domain is neutral and the body is positive, so zooming in to a domain
+admits only `=` and zooming in to a body leaves the direction alone. -/
+theorem quant_positions :
+    ((List.range 2).map bounded.operandPos) = [.neutral, .positive] := by decide
+
+/-- Two clickable pieces, the domain and the body, and what the form opens with:
+the quantifier and the names it binds. Those names are not a piece — a display
+writes them, and a click on them is not a zoom. -/
+theorem quant_draws_as_two_pieces :
+    (bounded.mainOp, bounded.operandTexts) = ("∀i", ["nat", "i ≥ 0"]) := by decide
+
+/-- The one *free* identifier of `∀i: nat· i ≥ 0` is `nat`: what the quantifier
+binds is not an identifier of the expression, so generalizing a law file line —
+which is generalizing every identifier of it — turns `nat` into a law variable and
+leaves the bound `i` exactly where it was. Without this a law about `∀x: d· b`
+would quantify the `x` it binds and mean nothing at all. -/
+theorem quant_binds_what_generalizing_must_leave_alone :
+    (bounded.vars, bounded.generalize ["nat", "i"])
+      = (["nat"], Expr.quant .all ["i"] (mvar "nat") (bin .ge (var "i") (num 0))) := by decide
+
+/-- "For the body, we gain the context `v:d`" — one context law per identifier the
+quantifier binds, and that is what `:` is here for. The domain gains nothing: it
+is outside the scope of what is bound, and the document says it "cannot mention
+`v`" — which `Netty.Parser` refuses to read. -/
+theorem quant_body_gains_the_membership :
+    (Expr.contextOf bounded 1, Expr.contextOf bounded 0)
+      = ([bin .mem (var "i") (var "nat")], []) := by decide
+
+/-- And `:` is written as the document writes it, tight on its left. -/
+theorem mem_renders : (bin .mem (var "i") (var "nat")).render = "i: nat" := by decide
+
+/-- The boolean evaluator cannot decide a quantifier, and says so rather than
+guessing: what `∀i: nat· i ≥ 0` claims depends on the bunch `nat`, which is not a
+boolean. This is why the quantifier law list is trusted as transcribed
+(`Netty.quantifier_isBeyondTheBooleanEvaluator`) where the boolean one is checked
+(`Netty.boolean_isTautology`). -/
+theorem quant_is_beyond_the_boolean_evaluator : bounded.evalBool [] = none := by decide
+
+/-- Nor can the number evaluators, for the same reason: an assignment of integers
+to names says nothing about what bunch a domain is. `Σ` and `Π`, the quantifiers
+that would have a number to give, are not in the grammar at all.
+
+Like every theorem here that touches `Int` — `absNonneg_holdsOnInts` and
+`Netty.number_holdsOnInts` among them — this one carries `Classical.choice` and
+`Quot.sound` out of core's integer instances as well as `propext`. -/
+theorem quant_is_beyond_the_number_evaluators :
+    (bounded.evalProp [], bounded.evalInt []) = (none, none) := by decide
+
+/-- The shipped quantifier laws, and the one boolean law the proof inside a body
+uses: seven lines, so that these replays compute a suggestion list of a few rows
+and not of a few hundred (item 22). -/
+def quantSession : Doc :=
+  { laws := Laws.quantifier ++ Laws.boolean.filter fun l => l.name == "double negation" }
+
+/-- The law file line `generalized duality` is this expression, `x` and all: the
+binder name a law writes is part of the law, and the next two theorems are about
+what happens when a line spells it differently. -/
+theorem duality_is_the_law_file_line :
+    (Laws.quantifier.find? fun l => l.name == "generalized duality").map Law.stmt
+      = some (bin .eq (neg (Expr.quant .all ["x"] (mvar "d") (mvar "b")))
+                      (Expr.quant .ex ["x"] (mvar "d") (neg (mvar "b")))) := by decide
+
+/-- Matching is modulo the binder name: the law's `x` matches the line's `i` once
+and once only, and the law's *other* side comes back written in the line's own
+name. Nothing else about a binder is read — not what it is called, only how many
+names there are. -/
+theorem quant_matches_modulo_the_binder_name :
+    ((Expr.matchAll (neg (Expr.quant .all ["x"] (mvar "d") (mvar "b"))) (neg bounded) []).map
+      fun σ => (Expr.quant .ex ["x"] (mvar "d") (neg (mvar "b"))).instantiate σ)
+      = [Expr.quant .ex ["i"] (var "nat") (neg (bin .ge (var "i") (num 0)))] := by decide
+
+/-- A law that writes the same binder twice means the same variable twice, and
+refuses a line that binds two different ones: `(∀x: d· b) ∧ (∀x: d· c)` — the way
+back that `generalized distribution` also reads — does not match
+`(∀i: nat· p) ∧ (∀j: nat· q)`. Making it match would mean renaming inside the
+line, which is a different thing from renaming the law. -/
+theorem quant_binder_names_must_agree :
+    Expr.matchAll
+      (bin .and (Expr.quant .all ["x"] (mvar "d") (mvar "b"))
+                (Expr.quant .all ["x"] (mvar "d") (mvar "c")))
+      (bin .and (Expr.quant .all ["i"] (var "nat") (var "p"))
+                (Expr.quant .all ["j"] (var "nat") (var "q"))) [] = [] := by decide
+
+/-- A shipped law rewriting a quantified line: `¬(∀i: nat· i ≥ 0)` is
+`∃i: nat· ¬(i ≥ 0)` by `generalized duality`, with the law's `x` written as the
+line's `i`. -/
+def quantDuality : List Cmd :=
+  [ .start .boolean .same (neg bounded),
+    .applyNamed "generalized duality"
+      (some (.eq, Expr.quant .ex ["i"] (var "nat") (neg (bin .ge (var "i") (num 0))))) ]
+
+theorem quantDuality_proves :
+    provedIn quantSession quantDuality
+      = some (bin .eq (neg bounded)
+          (Expr.quant .ex ["i"] (var "nat") (neg (bin .ge (var "i") (num 0))))) := by decide
+
+/-- And a proof that works *inside* a body: `∀i: nat· ¬¬(i ≥ 0)`, by zooming in to
+the body — where `i: nat` becomes context — folding the double negation there, and
+zooming back out. -/
+def quantBody : List Cmd :=
+  [ .start .boolean .same
+      (Expr.quant .all ["i"] (var "nat") (neg (neg (bin .ge (var "i") (num 0))))),
+    .zoomIn (.operand 1),
+    .applyNamed "double negation" (some (.eq, bin .ge (var "i") (num 0))),
+    .zoomOut ]
+
+/-- Zooming in to the body gains `i: nat` and leaves the direction alone: the body
+is in positive position. -/
+theorem quantBody_gains_the_membership :
+    ((quantSession.steps (quantBody.take 2)).toOption.map fun d =>
+      (d.contextLaws.map Law.stmt, d.frame?.map Frame.dir))
+      = some ([bin .mem (var "i") (var "nat")], some .same) := by decide
+
+theorem quantBody_proves :
+    provedIn quantSession quantBody
+      = some (bin .eq
+          (Expr.quant .all ["i"] (var "nat") (neg (neg (bin .ge (var "i") (num 0)))))
+          bounded) := by decide
+
+theorem quantBody_complete :
+    ((quantSession.steps quantBody).toOption.map fun d => (d.gaps, d.stack.length))
+      = some ([], 1) := by decide
+
+/-- `∀i: nat· i ≥ 0 ∧ i ≤ 9`, which `generalized distribution` takes apart into
+two quantifications of the same variable. -/
+def distributionLine : Expr :=
+  Expr.quant .all ["i"] (var "nat")
+    (bin .and (bin .ge (var "i") (num 0)) (bin .le (var "i") (num 9)))
+
+/-- The law is named by the line it writes, because it offers two: symmetry reads
+the conjunction both ways round, so `∧` may be written in either order. -/
+def quantDistribution : List Cmd :=
+  [ .start .boolean .same distributionLine,
+    .applyNamed "generalized distribution"
+      (some (.eq, bin .and (Expr.quant .all ["i"] (var "nat") (bin .ge (var "i") (num 0)))
+                           (Expr.quant .all ["i"] (var "nat") (bin .le (var "i") (num 9))))) ]
+
+theorem quantDistribution_proves :
+    provedIn quantSession quantDistribution
+      = some (bin .eq distributionLine
+          (bin .and (Expr.quant .all ["i"] (var "nat") (bin .ge (var "i") (num 0)))
+                    (Expr.quant .all ["i"] (var "nat") (bin .le (var "i") (num 9))))) := by decide
+
+/-- The hole this form leaves, pinned down rather than left to be discovered.
+
+A domain is a *bunch*; the kernel's types are `boolean` and `number`; so a domain
+whose own spelling settles nothing is read as boolean, and the boolean laws are
+offered on it. `∀i: ¬¬nat· i ≥ 0 ∧ i ≤ 9` is a suggestion this tool makes and a
+type checker would refuse. The document's answer is its type checker and its
+warning sign — "if the type checker is unable to determine that the unifying
+expressions have the correct types, a warning sign is placed on the line to which
+the law is being applied" — and that is not built here. It is written as a theorem
+so that building it breaks this line instead of leaving it to rot. -/
+theorem quant_domain_is_offered_boolean_laws :
+    ((quantSession.steps [.start .boolean .same distributionLine]).toOption.map fun d =>
+      d.suggestions.any fun s =>
+        s.result == Expr.quant .all ["i"] (neg (neg (var "nat")))
+          (bin .and (bin .ge (var "i") (num 0)) (bin .le (var "i") (num 9))))
+      = some true := by decide
 
 /-! ### A gap, and closing it -/
 

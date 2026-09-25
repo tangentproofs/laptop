@@ -17,6 +17,7 @@ can be recognised rather than misread.
 namespace Netty
 
 deriving instance Lean.ToJson, Lean.FromJson for BinOp
+deriving instance Lean.ToJson, Lean.FromJson for Quant
 deriving instance Lean.ToJson, Lean.FromJson for Ty
 deriving instance Lean.ToJson, Lean.FromJson for Pos
 deriving instance Lean.ToJson, Lean.FromJson for Dir
@@ -32,7 +33,12 @@ deriving instance Lean.ToJson, Lean.FromJson for Doc
 Format 2 records, on each open level, the `Part` of the line it was zoomed in to
 — a main operand or a contiguous segment of an association — where format 1
 recorded a main operand number. A format 1 file is refused rather than read with
-its zooms mistaken for zooms into the whole line. -/
+its zooms mistaken for zooms into the whole line.
+
+Growing the *expression* language does not change the format: the derived
+encoding keys each node by its constructor, so a file written before `Expr.cond`
+or `Expr.quant` existed still reads, and one that uses them is simply a file an
+older kernel would not know. -/
 def saveFormatVersion : Nat := 2
 
 /-- A proof file: the format version and the document. -/

@@ -166,6 +166,9 @@ def lawFilePath : String := "Netty/laws/boolean.laws"
 /-- Where the number law list lives, for the same staleness check. -/
 def numberLawFilePath : String := "Netty/laws/number.laws"
 
+/-- Where the quantifier law list lives, for the same staleness check. -/
+def quantifierLawFilePath : String := "Netty/laws/quantifier.laws"
+
 /-- Lines to offer the whole law list, to check that every suggestion it makes
 is a sound step. Most are associations longer than the two operands most laws
 are written with, which is what matching modulo associativity reads apart and
@@ -1022,6 +1025,125 @@ def ifTest : IO Bool := do
     IO.eprintln s!"if: the proof inside the branch did not finish: {(Api.stateView u).outcome}"
   return ok
 
+/-- Check the document's quantified expressions through the request service the
+window talks to.
+
+The grammar puts a quantifier at the weakest level, so its body runs to the end of
+the expression: that is what the parse checks are about, and it is why they live
+here rather than in Lean, the parser being a `partial def` the kernel cannot
+reduce. Then: that the form travels as text, that the window is offered its domain
+and its body as two places to click, that a shipped law rewrites one with the
+line's own binder name in the answer, and that zooming in to a body gains `v: d`
+— which is what makes a proof inside a body possible. -/
+def quantTest : IO Bool := do
+  let mut ok := true
+  let fresh : Session := { doc := { laws := Laws.boolean ++ Laws.quantifier } }
+  let run := fun (s : Session) (arg : String) => Api.respond s { op := "cmd", arg := arg }
+  -- Read and written as one, and the body runs to the end: `∀i: nat· i ≥ 0 ∧ p` is
+  -- one quantification of a conjunction, and the conjunction of a quantification
+  -- with `p` has to bracket it.
+  let body := Expr.bin .and (Expr.bin .ge (Expr.var "i") (Expr.num 0)) (Expr.var "p")
+  let whole := Expr.quant .all ["i"] (Expr.var "nat") body
+  match Parser.expr "∀i: nat· i ≥ 0 ∧ p", Parser.expr "(∀i: nat· i ≥ 0) ∧ p" with
+  | .ok greedy, .ok bracketed =>
+      if greedy == whole && greedy.render == "∀i: nat· i ≥ 0 ∧ p"
+          && bracketed == Expr.bin .and (Expr.quant .all ["i"] (Expr.var "nat")
+              (Expr.bin .ge (Expr.var "i") (Expr.num 0))) (Expr.var "p")
+          && bracketed.render == "(∀i: nat· i ≥ 0) ∧ p" then
+        IO.println "quant: it parses, renders as it was written, and its body runs to the end"
+      else
+        ok := false
+        IO.eprintln s!"quant: parsed ‘{greedy.render}’ and ‘{bracketed.render}’"
+  | a, b =>
+      ok := false
+      IO.eprintln s!"quant: it does not parse: \
+        {match a with | .error e => e | .ok _ => ""}\
+        {match b with | .error e => e | .ok _ => ""}"
+  -- The law line's own `∀a, b·` binder and an expression quantifier both begin a
+  -- law file line with `∀`, and the `:` before the `·` is what tells them apart.
+  -- Both readings, on one line each, so the two cannot start reading each other.
+  match Parser.lawLine "specialization: ∀a, b· a ∧ b ⇒ a",
+        Parser.lawLine "a made-up law: ∀x: nat· x ≥ 0" with
+  | .ok (some binder), .ok (some quantified) =>
+      if binder.vars == ["a", "b"] && binder.stmt.vars == []
+          && quantified.vars == ["nat"] && quantified.stmt.vars == []
+          && quantified.stmt == Expr.quant .all ["x"] (Expr.mvar "nat")
+              (Expr.bin .ge (Expr.var "x") (Expr.num 0)) then
+        IO.println "quant: a law line's own binder and an expression quantifier \
+          still read as themselves"
+      else
+        ok := false
+        IO.eprintln s!"quant: the law line binder read {binder.vars} and the \
+          quantified law read {quantified.vars} over ‘{quantified.stmt.render}’"
+  | a, b =>
+      ok := false
+      IO.eprintln s!"quant: a law file line was not read: \
+        {match a with | .error e => e | _ => ""}{match b with | .error e => e | _ => ""}"
+  -- The two things the document rules out, refused rather than read.
+  match Parser.expr "∀i· i ≥ 0", Parser.expr "∀i: i· i ≥ 0" with
+  | .error _, .error _ =>
+      IO.println "quant: no domain is not a second form, and a domain may not \
+        mention what is bound"
+  | a, b =>
+      ok := false
+      IO.eprintln s!"quant: read \
+        {match a with | .ok e => s!"‘{e.render}’ " | .error _ => ""}\
+        {match b with | .ok e => s!"‘{e.render}’" | .error _ => ""}"
+  let (_, r) := run fresh "start = ∀i: nat· i ≥ 0"
+  if !r.ok then
+    ok := false
+    IO.eprintln s!"quant: ‘start = ∀i: nat· i ≥ 0’: {r.error}"
+  match r.state.lines with
+  | [l] =>
+      if l.expr == "∀i: nat· i ≥ 0" && l.kind == "quant" && l.op == "∀i"
+          && l.parts == ["nat", "i ≥ 0"] && l.zooms.length == 2 then
+        IO.println "quant: it reads back as it was written, in a domain and a body"
+      else
+        ok := false
+        IO.eprintln s!"quant: the line is ‘{l.expr}’, kind ‘{l.kind}’, opening ‘{l.op}’, \
+          with {l.parts.length} parts and {l.zooms.length} zoom targets"
+  | ls =>
+      ok := false
+      IO.eprintln s!"quant: the started proof draws {ls.length} lines, not one"
+  -- A shipped law, applied to a line whose binder is not the law's.
+  let (v, started) := run fresh "start = ¬(∀i: nat· i ≥ 0)"
+  if !started.ok then
+    ok := false
+    IO.eprintln s!"quant: ‘start = ¬(∀i: nat· i ≥ 0)’: {started.error}"
+  let (_, dual) := run v "apply generalized duality : = ∃i: nat· ¬(i ≥ 0)"
+  if dual.ok && dual.state.proved then
+    IO.println "quant: a shipped law rewrites it, in the line's own binder name"
+  else
+    ok := false
+    IO.eprintln s!"quant: ‘generalized duality’ on ‘¬(∀i: nat· i ≥ 0)’: \
+      {dual.error}{dual.state.outcome}"
+  -- Zooming in to the body gains `i: nat`, and a proof inside it finishes.
+  let mut u := fresh
+  for arg in ["start = ∀i: nat· ¬¬(i ≥ 0)", "zoom 1"] do
+    let (u', r') := run u arg
+    u := u'
+    if !r'.ok then
+      ok := false
+      IO.eprintln s!"quant: ‘{arg}’: {r'.error}"
+  if (Api.stateView u).context == ["i: nat"] then
+    IO.println "quant: zooming in to a body gains the membership the quantifier declares"
+  else
+    ok := false
+    IO.eprintln s!"quant: inside the body the context is \
+      {String.intercalate ", " (Api.stateView u).context}"
+  for arg in ["apply double negation : = i ≥ 0", "out"] do
+    let (u', r') := run u arg
+    u := u'
+    if !r'.ok then
+      ok := false
+      IO.eprintln s!"quant: ‘{arg}’: {r'.error}"
+  if (Api.stateView u).proved then
+    IO.println "quant: and the proof inside it finishes"
+  else
+    ok := false
+    IO.eprintln s!"quant: the proof inside the body did not finish: {(Api.stateView u).outcome}"
+  return ok
+
 /-- Check that a gap is carried out of the subproof that holds it, through the
 request service the window talks to.
 
@@ -1172,6 +1294,31 @@ def selftest : IO Bool := do
     | .error e =>
         ok := false
         IO.eprintln s!"laws: {numberLawFilePath}: {e}"
+  if ← System.FilePath.pathExists quantifierLawFilePath then
+    match Parser.lawFile (← IO.FS.readFile quantifierLawFilePath) with
+    | .ok ls =>
+        if ls == Laws.quantifier then
+          IO.println s!"laws: {quantifierLawFilePath} is the list compiled in, \
+            {Laws.quantifier.length} quantifier laws, trusted as transcribed"
+        else
+          ok := false
+          IO.eprintln s!"laws: {quantifierLawFilePath} and the list compiled in differ; \
+            rebuild Netty.Laws"
+    | .error e =>
+        ok := false
+        IO.eprintln s!"laws: {quantifierLawFilePath}: {e}"
+  -- A law whose statement writes a `:` has to round-trip through the law file
+  -- notation too, and a law's name is whatever precedes the first `:`.
+  match Parser.lawFile (renderLawFile Laws.quantifier) with
+  | .ok ls =>
+      if ls == Laws.quantifier then
+        IO.println "laws: the quantifier list is written out and read back unchanged"
+      else
+        ok := false
+        IO.eprintln "laws: writing the quantifier list out and reading it back changed it"
+  | .error e =>
+      ok := false
+      IO.eprintln s!"laws: the written-out quantifier list does not parse: {e}"
   for (name, text, expected) in Replay.demos do
     match Parser.script text with
     | .error e =>
@@ -1198,6 +1345,7 @@ def selftest : IO Bool := do
   if !(← conditionalTest) then ok := false
   if !(← dialogTest) then ok := false
   if !(← ifTest) then ok := false
+  if !(← quantTest) then ok := false
   if !(← siteTest) then ok := false
   if !(← apiTest) then ok := false
   return ok

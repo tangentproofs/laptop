@@ -44,9 +44,12 @@ export interface LineView {
   dir: string;
   /** The whole line, rendered. */
   expr: string;
-  /** Whether `op` is written before the one operand, between them, or not. */
-  kind: 'neg' | 'bin' | 'cond' | 'atom';
-  /** The main operator's symbol, or `''`. */
+  /** Whether `op` is written before the one operand, between them, not at all,
+   * or — for the two forms that are more than an operator — whether the display
+   * writes that form's own words and marks around its pieces. */
+  kind: 'neg' | 'bin' | 'cond' | 'quant' | 'atom';
+  /** The main operator's symbol, or `''`. For a `quant` line it is what the form
+   * opens with, quantifier and bound names together: `∀i`, `∃i, j`. */
   op: string;
   /** The main operands, rendered as they stand in `expr`. */
   parts: string[];

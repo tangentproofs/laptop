@@ -1,0 +1,36 @@
+# Netty quantifier laws — '∀' and '∃' with an explicit domain.
+#
+# The document's grammar writes a quantified expression
+# 'quantifier identifiers : expression · expression', and has no abbreviated form
+# that leaves the domain out, so every law here writes one. A quantifier is the
+# weakest thing in the grammar: its body runs to the end of the expression, which
+# is why '(∀x: d· b) ≡ …' needs its brackets and '∀x: d· b ∧ c' does not.
+#
+# 'x' is bound by the quantifier and is not a law variable; 'd', 'b' and 'c' are.
+# A law about '∀x: d· b' reads a line about '∀i: nat· i ≥ 0' — matching renames
+# the law's own binder name to the line's, and writes the line's name back into
+# the law's other side.
+#
+# These laws are *not* checked the way 'boolean.laws' is. An assignment of ⊤/⊥ to
+# names cannot decide a quantifier, so 'Law.isTautology' cannot reach them and
+# they are transcribed from aPToP and trusted. 'Netty.quantifier_wellFormed' and
+# 'Netty.quantifier_isBeyondTheBooleanEvaluator' say exactly that much and no
+# more.
+#
+# Left out on purpose: everything that needs machinery this kernel has not got.
+# Instantiation ('(∀x: d· b) ⇒ b' with 'x' replaced by a term) needs substitution;
+# the empty-domain and one-point laws need bunches; 'Σ' and 'Π' need the number
+# quantifiers; and '(∀x: d· b) ⇒ (∃x: d· b)' is false for an empty domain and is
+# exactly the kind of law the evaluator here could not catch.
+
+generalized duality: ¬(∀x: d· b) ≡ ∃x: d· ¬b
+generalized duality: ¬(∃x: d· b) ≡ ∀x: d· ¬b
+
+# '∀' distributes over '∧' and '∃' over '∨', for every domain, empty included.
+generalized distribution: (∀x: d· b ∧ c) ≡ (∀x: d· b) ∧ (∀x: d· c)
+generalized distribution: (∃x: d· b ∨ c) ≡ (∃x: d· b) ∨ (∃x: d· c)
+
+# The unit of the operator each quantifier generalizes: quantifying it says
+# nothing, whatever the domain is.
+generalized identity: (∀x: d· T) ≡ T
+generalized identity: (∃x: d· F) ≡ F

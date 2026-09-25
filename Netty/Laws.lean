@@ -39,6 +39,12 @@ private def binOp : BinOp → Lean.Ident
   | .add => Lean.mkCIdent ``BinOp.add
   | .sub => Lean.mkCIdent ``BinOp.sub
   | .mul => Lean.mkCIdent ``BinOp.mul
+  | .mem => Lean.mkCIdent ``BinOp.mem
+
+/-- Quote a `Quant` as a term. -/
+private def quant : Quant → Lean.Ident
+  | .all => Lean.mkCIdent ``Quant.all
+  | .ex => Lean.mkCIdent ``Quant.ex
 
 /-- Quote an expression as a term. -/
 private def expr : Expr → Lean.Term
@@ -50,6 +56,8 @@ private def expr : Expr → Lean.Term
   | .neg a => Lean.Syntax.mkCApp ``Expr.neg #[expr a]
   | .bin o l r => Lean.Syntax.mkCApp ``Expr.bin #[binOp o, expr l, expr r]
   | .cond c x y => Lean.Syntax.mkCApp ``Expr.cond #[expr c, expr x, expr y]
+  | .quant k ids d b =>
+      Lean.Syntax.mkCApp ``Expr.quant #[quant k, Lean.quote ids, expr d, expr b]
 
 /-- Quote a law as a term. -/
 def lawTerm (l : Law) : Lean.Term :=
@@ -75,6 +83,16 @@ namespace Laws
 
 /-- The boolean law list: the "Binary" laws of aPToP §11.3.1. -/
 def boolean : List Law := lawFile% "laws/boolean.laws"
+
+/-- The quantifier law list, `Netty/laws/quantifier.laws`: `∀` and `∃` with an
+explicit domain.
+
+It is a list of its own and not part of `boolean`, for two reasons. The suggestion
+pane computes every reading of every law in force for every place of a line, so a
+law a user is not quantifying over is a cost on every step they take; and — see
+`quantifier_isBeyondTheBooleanEvaluator` — these laws are not checked the way the
+boolean ones are, which a reader should not have to untangle from a list that is. -/
+def quantifier : List Law := lawFile% "laws/quantifier.laws"
 
 /-- A small number law list, `Netty/laws/number.laws`. It is not the whole of
 §11.3.2 and does not pretend to be: it exists so that the conditional readings of
@@ -107,4 +125,31 @@ transcribed, and this checks that none of them is wrong in a way that shows up o
 small integers. -/
 theorem number_holdsOnInts :
     Laws.number.all (Law.holdsOnInts [-2, -1, 0, 1, 2]) = true := by decide
+
+/-- Not one of the quantifier laws is checked, and this is the line that says so.
+
+`Expr.evalBool` returns `none` on a quantifier, because an assignment of `⊤`/`⊥`
+to names cannot decide one: what `∀x: d· b` says depends on the bunch `d`, and the
+kernel has no theory of bunches. `Law.isTautology` is therefore `false` on every
+law of the list — not because any of them is false, but because the evaluator
+cannot reach them. They are transcribed from aPToP and trusted, which is weaker
+than `number_holdsOnInts`, itself weaker than `boolean_isTautology`.
+
+Stating it as a theorem is not a virtue claimed; it is the hole, pinned down. If a
+later commit gives the evaluator a finite domain to work with, this theorem breaks
+and has to be replaced by a real check, which is the point of writing it this way
+round. -/
+theorem quantifier_isBeyondTheBooleanEvaluator :
+    Laws.quantifier.all (fun l => !l.isTautology) = true := by decide
+
+/-- What *can* be checked of the quantifier laws mechanically: each of them is a
+law the kernel can read as a step — its main operator can stand in a left margin —
+and each of them declares exactly the law variables it uses, so no identifier of
+one is a stray, and no name a quantifier binds has leaked into the list of law
+variables. That last is what would break: a bound name treated as a law variable
+would unify with anything at all. -/
+theorem quantifier_wellFormed :
+    Laws.quantifier.all (fun l =>
+      (match l.stmt with | .bin o _ _ => o.isMargin | _ => false)
+        && l.vars == l.stmt.mvars && l.stmt.vars.isEmpty) = true := by decide
 end Netty

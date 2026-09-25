@@ -17,11 +17,12 @@ imp    := or   (('⇒' | '⇐') or)*
 or     := and  ('∨' and)*
 and    := neg  ('∧' neg)*
 neg    := '¬' neg | rel
-rel    := arith (('=' | '⧧' | '<' | '>' | '≤' | '≥') arith)*
+rel    := arith (('=' | '⧧' | '<' | '>' | '≤' | '≥' | ':') arith)*
 arith  := term (('+' | '-') term)*
 term   := atom ('×' atom)*
 atom   := identifier | number | '⊤' | '⊥' | '(' expr ')'
         | 'if' expr 'then' expr 'else' expr 'fi'
+        | ('∀' | '∃') identifiers ':' expr '·' expr
 ```
 
 Two features of it are the book's and look odd at first.
@@ -48,13 +49,38 @@ can be typed on any keyboard:
 | `⇒`   | `=>`  | | `⊤`   | `T`   | | `·`   | `.`   |
 | `⇐`   | `<=`  | | `⊥`   | `F`   | | `⧧`   | `!=`  |
 
-`T` and `F` are therefore reserved and cannot be used as identifiers.
+`T` and `F` are therefore reserved and cannot be used as identifiers, and so are
+`forall` and `exists`, the ASCII spellings of `∀` and `∃`.
 
 `if … then … else … fi` is the document's conditional expression. It closes
 itself, so it needs no parentheses and takes whole expressions in all three
 places: `if b then x else y fi ∧ z` is the conditional and-ed with `z`. The four
 words are reserved in expression position for the same reason `T` and `F` are: an
 identifier spelled `if`, `then`, `else` or `fi` is no longer readable.
+
+`∀ids: d· b` and `∃ids: d· b` are the document's quantified expressions, written
+`quantifier identifiers : expression · expression` in its grammar. Two things
+follow from where that production sits.
+
+* The domain is closed by the `·`, but *nothing closes the body*: a quantifier is
+  the weakest thing in the grammar and its body runs to the end of the
+  expression. So `∀x: nat· x ≥ 0 ∧ x ≤ 9` quantifies the conjunction, and
+  `(∀x: nat· x ≥ 0) ∧ p` needs its brackets. `Expr.renderAt` writes exactly those
+  brackets back.
+* The parser reads a quantifier wherever an operand may begin, which is a shade
+  more permissive than the document's grammar — that grammar admits one only at
+  the outermost level, so `p ∧ ∀x: nat· x ≥ 0` is not a sentence of it. What is
+  read is the same expression either way, and it is written back bracketed.
+
+The document has no abbreviated quantifier that leaves the domain out, so neither
+has this, and `∀`/`∃` without a `:` is an error rather than a second form. The
+document also says of a scope that "the domain `d` cannot mention `v`", which is
+refused here (`Parser.quantifier`) rather than read and then quietly misused.
+
+`:` is `exp7` in the document's grammar — the level of `=` and the comparisons —
+and it is membership: `x: nat` says `x` is one of the bunch `nat`. It is here
+because zooming in to the body of a quantifier gains the context `v: d`. None of
+the rest of the bunch notation is.
 -/
 
 namespace Netty
@@ -74,6 +100,7 @@ inductive Tok
   /-- `,`, separating law variables. -/     | comma
   /-- `·`, ending a quantifier. -/          | dot
   /-- `∀`. -/                               | univ
+  /-- `∃`. -/                               | exis
   deriving Repr, DecidableEq, Inhabited
 
 namespace Tok
@@ -86,7 +113,8 @@ def render : Tok → String
   | bigOp .eq => "≡" | bigOp .imp => "⟹" | bigOp .rimp => "⟸"
   | bigOp o => o.symbol
   | neg => "¬" | top => "⊤" | bot => "⊥"
-  | lpar => "(" | rpar => ")" | comma => "," | dot => "·" | univ => "∀"
+  | lpar => "(" | rpar => ")" | comma => "," | dot => "·"
+  | univ => "∀" | exis => "∃"
 
 instance : ToString Tok := ⟨render⟩
 
@@ -131,7 +159,8 @@ private def symbols : List (List Char × Tok) :=
     ("¬".toList, .neg), ("~".toList, .neg),
     ("⊤".toList, .top), ("⊥".toList, .bot),
     ("(".toList, .lpar), (")".toList, .rpar), (",".toList, .comma),
-    ("·".toList, .dot), (".".toList, .dot), ("∀".toList, .univ) ]
+    ("·".toList, .dot), (".".toList, .dot), ("∀".toList, .univ), ("∃".toList, .exis),
+    (":".toList, .op .mem) ]
 
 /-- Split text into tokens. The fuel is the length of the input and every step
 consumes at least one character, so the function is total. -/
@@ -151,6 +180,7 @@ private def tokenizeAux : Nat → List Char → Except String (List Tok)
           if name == "T" then Tok.top
           else if name == "F" then Tok.bot
           else if name == "forall" then Tok.univ
+          else if name == "exists" then Tok.exis
           else Tok.ident name
         (tokenizeAux fuel rest).map (tok :: ·)
       else
@@ -171,7 +201,7 @@ private def opsAt : Nat → List BinOp
   | 1 => [.imp, .rimp]
   | 2 => [.or]
   | 3 => [.and]
-  | 5 => [.eq, .ne, .lt, .gt, .le, .ge]
+  | 5 => [.eq, .ne, .lt, .gt, .le, .ge, .mem]
   | 6 => [.add, .sub]
   | 7 => [.mul]
   | _ => []
@@ -186,6 +216,21 @@ private def expectWord (w : String) : List Tok → Except String (List Tok)
   | t :: _ => .error s!"expected ‘{w}’ but found ‘{t}’"
   | [] => .error s!"expected ‘{w}’"
 
+/-- Read the identifiers a quantifier binds: names separated by `,` and closed
+by the `:` that the domain follows. -/
+private def boundIds : List Tok → List String → Except String (List String × List Tok)
+  | .op .mem :: rest, acc =>
+      if acc.isEmpty then .error "a quantifier binds at least one identifier"
+      else .ok (acc.reverse, rest)
+  | .ident n :: rest, acc =>
+      if acc.contains n then .error s!"‘{n}’ is bound twice by the one quantifier"
+      else boundIds rest (n :: acc)
+  | .comma :: rest, acc => boundIds rest acc
+  | .dot :: _, _ =>
+      .error "a quantifier needs a domain: write ‘∀x: d· b’, not ‘∀x· b’"
+  | t :: _, _ => .error s!"unexpected ‘{t}’ among the identifiers a quantifier binds"
+  | [], _ => .error "expected ‘:’ and a domain after the identifiers a quantifier binds"
+
 mutual
 
 /-- Parse at precedence level `lvl`, returning the unconsumed tokens. -/
@@ -197,6 +242,11 @@ private partial def pLevel (lvl : Nat) (ts : List Tok) : PRes :=
       | _ => pLevel 5 ts
   | 8 =>
       match ts with
+      -- `∀ids: d· b`. The `·` closes the domain; the body is parsed at the
+      -- weakest level and so runs to the end of the expression, which is where
+      -- the document's grammar puts a quantifier.
+      | .univ :: rest => quantifier .all rest
+      | .exis :: rest => quantifier .ex rest
       -- `if … fi` brackets itself, so each of its three places takes a whole
       -- expression and none of them needs parentheses.
       | .ident "if" :: rest => do
@@ -222,6 +272,25 @@ private partial def pLevel (lvl : Nat) (ts : List Tok) : PRes :=
   | l => do
       let (e, r) ← pLevel (l + 1) ts
       pChain l (l == 0) (opsAt l) e r
+
+/-- Parse a quantified expression, the `∀` or `∃` already consumed.
+
+The document: "The domain `d` cannot mention `v`." A domain that mentions what the
+quantifier binds is refused here, so nothing downstream has to wonder what it
+would have meant. -/
+private partial def quantifier (k : Quant) (ts : List Tok) : PRes := do
+  let (ids, r) ← boundIds ts []
+  let (d, r) ← pLevel 0 r
+  let clash := d.vars.filter ids.contains
+  if !clash.isEmpty then
+    .error s!"the domain of ‘{k.symbol}{String.intercalate ", " ids}’ mentions \
+      {String.intercalate ", " clash}, which it binds"
+  match r with
+  | .dot :: r' => do
+      let (b, r') ← pLevel 0 r'
+      .ok (Expr.quant k ids d b, r')
+  | t :: _ => .error s!"expected ‘·’ after the domain but found ‘{t}’"
+  | [] => .error "expected ‘·’ after the domain"
 
 /-- Continue a left-associative chain at level `lvl`; `big` says whether the
 level's operators are the large ones. -/

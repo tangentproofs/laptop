@@ -6,8 +6,9 @@ assistant for calculational proofs (Hehner, Will, Naiman, Kordalewski; see
 `Netty_document.pdf`), so the expression language here is the boolean and
 number fragment of the aPToP grammar in that document: enough to state the
 Binary laws of aPToP §11.3.1 and to carry the direction machinery that a
-calculation needs. Bunches, strings, lists, functions, quantifiers, programs
-and channels are the later growth of the surface language and are absent.
+calculation needs. Bunches, strings, lists, functions, programs and channels
+are the later growth of the surface language and are absent; of the
+quantifiers, `∀` and `∃` are here and `Σ`, `Π` and `§` are not.
 
 Three things live here besides the syntax tree itself.
 
@@ -48,6 +49,11 @@ inductive BinOp
   /-- `a + b`. -/            | add
   /-- `a - b`. -/            | sub
   /-- `a × b`. -/            | mul
+  /-- `a: b`, membership: `a` is one of the bunch `b`. It is here because
+  zooming in to the body of a quantifier gains the context `v: d`, which has to
+  be an expression before it can be a law. The rest of the bunch notation —
+  `::`, the bunch comma, the set brackets — is not here. -/
+                             | mem
   deriving Repr, DecidableEq, Inhabited, Hashable
 
 /-- The type of a line of a proof. Netty allows lines of any type; the kernel
@@ -62,6 +68,13 @@ inductive Ty
 inductive Pos
   | positive | neutral | negative
   deriving Repr, DecidableEq, Inhabited
+
+/-- A quantifier of the document's grammar. The document's five are `Σ Π ∃ ∀ §`;
+these two are the boolean ones, and the other three are the later growth. -/
+inductive Quant
+  /-- `∀ids: dom· body`. -/ | all
+  /-- `∃ids: dom· body`. -/ | ex
+  deriving Repr, DecidableEq, Inhabited, Hashable
 
 /-- An expression: a formula on a line of a proof, or the statement of a law.
 
@@ -81,7 +94,32 @@ inductive Expr
   its own and not sugar for anything. The condition is boolean; the two branches
   share the type of the whole. -/
                                                      | cond (c t e : Expr)
+  /-- `∀ids: dom· body`, the document's quantified expression: the quantifier,
+  the identifiers it binds, the domain they range over, and the body they are
+  bound in. The document's grammar is `quantifier identifiers : expression ·
+  expression` and it has no abbreviated form that leaves the domain out, so
+  neither has this. -/
+                                                     | quant (k : Quant)
+                                                       (ids : List String)
+                                                       (dom body : Expr)
   deriving Repr, DecidableEq, Inhabited
+
+namespace Quant
+
+/-- How the quantifier is written. -/
+def symbol : Quant → String
+  | all => "∀" | ex => "∃"
+
+/-- The type of the whole quantification. `∀` and `∃` are boolean; `Σ` and `Π`
+would be numbers, which is one reason they are a separate piece of work. -/
+def resultTy : Quant → Ty
+  | all | ex => .boolean
+
+/-- The type the quantifier forces on its body. -/
+def bodyTy : Quant → Ty
+  | all | ex => .boolean
+
+end Quant
 
 namespace BinOp
 
@@ -90,6 +128,7 @@ def symbol : BinOp → String
   | and => "∧" | or => "∨" | imp => "⇒" | rimp => "⇐"
   | eq => "=" | ne => "⧧" | lt => "<" | gt => ">" | le => "≤" | ge => "≥"
   | add => "+" | sub => "-" | mul => "×"
+  | mem => ":"
 
 /-- Binding power, following the aPToP grammar of the Netty document: the
 larger the number, the *weaker* the operator binds. Note that `¬` (8) sits
@@ -98,7 +137,8 @@ def prec : BinOp → Nat
   | imp | rimp => 11
   | or => 10
   | and => 9
-  | eq | ne | lt | gt | le | ge => 7
+  -- `:` is `exp7` in the document's grammar, the level of the comparisons.
+  | eq | ne | lt | gt | le | ge | mem => 7
   | add | sub => 4
   | mul => 3
 
@@ -141,7 +181,10 @@ def resultTy : BinOp → Ty
 def operandTy : BinOp → Option Ty
   | and | or | imp | rimp => some .boolean
   | lt | gt | le | ge | add | sub | mul => some .number
-  | eq | ne => none
+  -- `=` and `⧧` accept any type. So does `:`, whose left side is an element or
+  -- a bunch of whatever type the domain is of, and whose right side is a bunch
+  -- — which is a type the kernel does not have.
+  | eq | ne | mem => none
 
 /-- The position of operand `i` (`0` left, `1` right).
 
@@ -154,7 +197,11 @@ def posOf : BinOp → Nat → Pos
   | imp, _ | le, _ | lt, _ | sub, _ => .positive
   | rimp, 0 | ge, 0 | gt, 0 => .positive
   | rimp, _ | ge, _ | gt, _ => .negative
-  | eq, _ | ne, _ | mul, _ => .neutral
+  -- `:` is monotonic in its right operand and antitonic in its left *as bunch
+  -- inclusion*, which is a reading that needs the bunch theory to justify. Until
+  -- there is one the kernel calls both operands neutral, as it does `×`'s: always
+  -- sound, and it merely loses some steps.
+  | eq, _ | ne, _ | mul, _ | mem, _ => .neutral
 
 /-- Whether the operator can appear in the left margin of a proof, that is,
 whether it is one of the three directions of some type. `⧧` cannot: the three
@@ -168,7 +215,7 @@ def flip : BinOp → Option BinOp
   | eq => some eq | imp => some rimp | rimp => some imp
   | lt => some gt | gt => some lt | le => some ge | ge => some le
   | ne => some ne
-  | and | or | add | sub | mul => none
+  | and | or | add | sub | mul | mem => none
 
 end BinOp
 
@@ -186,6 +233,11 @@ def prec : Expr → Nat
   | cond _ _ _ => 0
   | neg _ => 8
   | bin op _ _ => op.prec
+  -- A quantifier is the weakest thing in the document's grammar: its body runs
+  -- to the end of the expression, so anything that could reach into it has to
+  -- bracket it first. `20` is past every operator's own binding power, which is
+  -- what makes `renderAt` write those brackets.
+  | quant _ _ _ _ => 20
 
 /-- Render `e`, parenthesizing it when its main operator binds more weakly
 than the context allows. All the binary operators associate to the left. -/
@@ -197,12 +249,23 @@ def renderAt : Nat → Expr → String
   | _, bot => "⊥"
   | p, neg a => paren (8 > p) ("¬" ++ renderAt 8 a)
   | p, bin op l r =>
+      -- `:` is written tight on its left, as the document writes `a: bool`;
+      -- every other operator has a space on both sides.
+      let before := if op == .mem then "" else " "
       paren (op.prec > p)
-        (renderAt op.prec l ++ " " ++ op.symbol ++ " " ++ renderAt (op.prec - 1) r)
+        (renderAt op.prec l ++ before ++ op.symbol ++ " " ++ renderAt (op.prec - 1) r)
   -- `fi` is the closing bracket, so nothing inside needs parenthesizing and
   -- nothing outside can reach in.
   | _, cond c t e =>
       "if " ++ renderAt 99 c ++ " then " ++ renderAt 99 t ++ " else " ++ renderAt 99 e ++ " fi"
+  -- The `·` closes the domain, so the domain needs brackets only against another
+  -- quantifier — `19` is the one level a quantifier does not fit in. Nothing
+  -- closes the body, which is exactly why the whole form needs brackets when
+  -- anything surrounds it.
+  | p, quant k ids d b =>
+      paren (20 > p)
+        (k.symbol ++ String.intercalate ", " ids ++ ": "
+          ++ renderAt 19 d ++ "· " ++ renderAt 99 b)
 
 /-- Render an expression in the document's notation. -/
 def render (e : Expr) : String := renderAt 99 e
@@ -218,18 +281,31 @@ where
     | neg a, acc => go a acc
     | bin _ l r, acc => go r (go l acc)
     | cond c x y, acc => go y (go x (go c acc))
+    -- A quantifier binds *identifiers*, never law variables, so both its domain
+    -- and its body contribute whatever law variables they mention.
+    | quant _ _ d b, acc => go b (go d acc)
     | _, acc => acc
 
-/-- The ordinary identifiers occurring in `e`, in order of first occurrence. -/
+/-- The *free* ordinary identifiers occurring in `e`, in order of first
+occurrence: the identifiers a quantifier binds are not among them, since they
+mean nothing outside the body they are bound in.
+
+That is what makes `generalize` safe on a law file line: `∀x: nat· x ≥ 0` has the
+one free identifier `nat`, so `nat` becomes a law variable and the bound `x` stays
+the identifier the quantifier binds. -/
 def vars (e : Expr) : List String :=
-  go e [] |>.reverse
+  go [] e [] |>.reverse
 where
-  go : Expr → List String → List String
-    | var n, acc => if acc.contains n then acc else n :: acc
-    | neg a, acc => go a acc
-    | bin _ l r, acc => go r (go l acc)
-    | cond c x y, acc => go y (go x (go c acc))
-    | _, acc => acc
+  go : List String → Expr → List String → List String
+    | bnd, var n, acc => if bnd.contains n || acc.contains n then acc else n :: acc
+    | bnd, neg a, acc => go bnd a acc
+    | bnd, bin _ l r, acc => go bnd r (go bnd l acc)
+    | bnd, cond c x y, acc => go bnd y (go bnd x (go bnd c acc))
+    -- The domain is outside the scope of what the quantifier binds; the body is
+    -- inside it. (The document also says the domain "cannot mention `v`", which
+    -- `Netty.Parser` refuses to read.)
+    | bnd, quant _ ids d b, acc => go (ids ++ bnd) b (go bnd d acc)
+    | _, _, acc => acc
 
 /-- Turn the named identifiers into law variables. Used when a law file
 declares (or, by default, implies) that its identifiers are quantified. -/
@@ -238,6 +314,36 @@ def generalize (names : List String) : Expr → Expr
   | neg a => neg (generalize names a)
   | bin op l r => bin op (generalize names l) (generalize names r)
   | cond c x y => cond (generalize names c) (generalize names x) (generalize names y)
+  -- What a quantifier binds it binds: those names are not the law's variables,
+  -- however the law file lists them, so they are struck out of `names` before
+  -- the body is generalized. Without this a law about `∀x: d· b` would quantify
+  -- the `x` it binds and mean nothing at all.
+  | quant k ids d b =>
+      quant k ids (generalize names d)
+        (generalize (names.filter fun n => !ids.contains n) b)
+  | e => e
+
+/-- Rename free occurrences of identifiers, leaving what a quantifier binds to
+the quantifier: the renaming is dropped for the names an inner binder shadows.
+
+This is how a law about `∀x: d· b` reads a line about `∀i: nat· i ≥ 0`: the law's
+own binder name is renamed to the line's before the bodies are matched
+(`Netty.Expr.matchFuel`), and the same renaming is put back when the law's other
+side is instantiated (`Netty.Expr.instantiate`).
+
+It renames by *visible* name. The document does better — every declared variable
+gets an internal name a user cannot write, so "there is never a problem of
+‘variable capture’ or ‘variable hiding’" — and that stack of names is not built
+here. So a law whose own binder name collides with a free identifier of the line
+can capture it. See `.sci/netty-plan.md` item 23. -/
+def renameVars (ren : List (String × String)) : Expr → Expr
+  | var n => match ren.lookup n with | some m => var m | none => var n
+  | neg a => neg (renameVars ren a)
+  | bin o l r => bin o (renameVars ren l) (renameVars ren r)
+  | cond c x y => cond (renameVars ren c) (renameVars ren x) (renameVars ren y)
+  | quant k ids d b =>
+      quant k ids (renameVars ren d)
+        (renameVars (ren.filter fun p => !ids.contains p.1) b)
   | e => e
 
 /-- The number of nodes in an expression.
@@ -250,6 +356,7 @@ def size : Expr → Nat
   | neg a => 1 + a.size
   | bin _ l r => 1 + l.size + r.size
   | cond c t e => 1 + c.size + t.size + e.size
+  | quant _ _ d b => 1 + d.size + b.size
 
 /-- Flatten an association of `op`, so that `a ∧ b ∧ c` has three operands. -/
 def flattenOp (op : BinOp) : Expr → List Expr
@@ -269,6 +376,11 @@ def operands : Expr → List Expr
   -- The condition and the two branches, in reading order: three places a user can
   -- zoom in to, and three places a law can be applied to.
   | cond c t e => [c, t, e]
+  -- The domain and the body, in reading order: the document's Scope section says
+  -- those are the two places to zoom in to, and they are two places a law can be
+  -- applied to. What the quantifier binds is not an operand — it is a list of
+  -- names, not an expression.
+  | quant _ _ d b => [d, b]
   | _ => []
 
 /-- The symbol of the main operator of `e`: what stands between its main
@@ -280,6 +392,10 @@ def mainOp : Expr → String
   -- word the form begins with, and a display draws its own `if`, `then`, `else`
   -- and `fi` around the pieces rather than repeating one symbol between them.
   | cond _ _ _ => "if"
+  -- Nothing stands *between* a quantifier's two operands either. This is what the
+  -- form opens with, quantifier and bound names together, and a display writes
+  -- its own `:` and `·` around the domain and the body.
+  | quant k ids _ _ => k.symbol ++ String.intercalate ", " ids
   | _ => ""
 
 /-- The main operands of `e`, each rendered with exactly the parentheses it
@@ -299,6 +415,9 @@ def operandTexts (e : Expr) : List String :=
       | x :: xs => renderAt op.prec x :: xs.map (renderAt (op.prec - 1))
   -- The keywords delimit, so no piece of an `if … fi` carries parentheses.
   | cond c t e' => [renderAt 99 c, renderAt 99 t, renderAt 99 e']
+  -- The same two levels `renderAt` writes the form at: the `·` closes the
+  -- domain, and the body runs to the end.
+  | quant _ _ d b => [renderAt 19 d, renderAt 99 b]
   | _ => []
 
 /-- Replace the `i`-th main operand of `e`. This is how zooming out puts the
@@ -317,6 +436,10 @@ def replaceOperand (e : Expr) (i : Nat) (new : Expr) : Option Expr :=
       if i == 0 then some (cond new t e')
       else if i == 1 then some (cond c new e')
       else if i == 2 then some (cond c t new)
+      else none
+  | quant k ids d b =>
+      if i == 0 then some (quant k ids new b)
+      else if i == 1 then some (quant k ids d new)
       else none
   | _ => none
 
@@ -391,6 +514,10 @@ def operandPos (e : Expr) (i : Nat) : Pos :=
   -- are positive and the condition is neutral, and zooming in to a condition
   -- admits only `=`.
   | cond _ _ _ => if i == 0 then .neutral else .positive
+  -- The document's Scope section, for the function `〈v:d→b〉` and so for the
+  -- quantifier that binds the same way: "the domain is in a neutral position and
+  -- the body is in a positive position".
+  | quant _ _ _ _ => if i == 0 then .neutral else .positive
   | _ => .neutral
 
 /-- The type of `e`, when its main operator settles it. A bare identifier
@@ -402,6 +529,7 @@ def tyOf? : Expr → Option Ty
   -- The type of an `if … fi` is its branches', which they may or may not settle;
   -- the condition says nothing about it.
   | cond _ t e => match tyOf? t with | some ty => some ty | none => tyOf? e
+  | quant k _ _ _ => some k.resultTy
   | var _ | mvar _ => none
 
 /-- The type of the `i`-th main operand of `e`, falling back to `parent` (the
@@ -418,6 +546,11 @@ def operandTy (e : Expr) (i : Nat) (parent : Ty) : Ty :=
           | some t => t
           | none => (es.findSome? tyOf?).getD parent
   | cond _ _ _ => if i == 0 then .boolean else (tyOf? e).getD parent
+  -- A domain is a *bunch*, and the kernel has no bunch type; what it can say is
+  -- the type of the elements, when the domain itself settles one. That the guess
+  -- is crude costs nothing here: a domain is in neutral position, so zooming in
+  -- to it admits only `=`, and `=` belongs to every type.
+  | quant k _ d _ => if i == 0 then (tyOf? d).getD parent else k.bodyTy
   | _ => parent
 
 /-- Evaluate a boolean expression under an assignment of the law variables and
@@ -430,6 +563,11 @@ def evalBool (σ : List (String × Bool)) : Expr → Option Bool
   | num _ => none
   | neg a => (evalBool σ a).map not
   | cond c x y => do if ← evalBool σ c then evalBool σ x else evalBool σ y
+  -- An assignment of `⊤`/`⊥` to names cannot decide a quantifier: what `∀x: d· b`
+  -- says depends on the bunch `d`, which is not a boolean and which this kernel
+  -- has no theory of. So the quantifier laws are *not* checked by
+  -- `Law.isTautology`, and `Netty.Laws` says so rather than pretending otherwise.
+  | quant _ _ _ _ => none
   | bin op l r => do
       let a ← evalBool σ l
       let b ← evalBool σ r
@@ -458,6 +596,9 @@ def evalInt (σ : List (String × Int)) : Expr → Option Int
   | bin .sub l r => do return (← evalInt σ l) - (← evalInt σ r)
   | bin .mul l r => do return (← evalInt σ l) * (← evalInt σ r)
   | cond c x y => do if ← evalProp σ c then evalInt σ x else evalInt σ y
+  -- `∀` and `∃` are boolean, and `Σ` and `Π` — the quantifiers that would have a
+  -- number to give — are not in the grammar yet.
+  | quant _ _ _ _ => none
   | _ => none
 
 /-- Evaluate a binary expression whose atoms may be comparisons of numbers, under
@@ -488,6 +629,9 @@ def evalProp (σ : List (String × Int)) : Expr → Option Bool
           | _, _ => do return (← evalProp σ l) != (← evalProp σ r)
       | _ => none
   | cond c x y => do if ← evalProp σ c then evalProp σ x else evalProp σ y
+  -- As in `evalBool`: an assignment of integers to names says nothing about what
+  -- bunch a domain is, so a quantifier is not decided here either.
+  | quant _ _ _ _ => none
   | _ => none
 
 end

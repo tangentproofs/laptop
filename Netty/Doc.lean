@@ -351,6 +351,14 @@ def contextOfRange (e : Expr) (start len : Nat) : List Expr :=
       if start == 1 && len == 1 then splitAnd c
       else if start == 2 && len == 1 then splitAnd (negate c)
       else []
+  -- "For the body, we gain the context `v: d`" — the document's Scope section,
+  -- said there of the function `〈v:d→b〉`, and a quantifier binds the same way: one
+  -- context law per identifier the quantifier binds. The domain gains nothing,
+  -- since it is outside the scope of what is bound — the document says it "cannot
+  -- mention `v`", and `Netty.Parser` refuses one that does.
+  | quant _ ids d _ =>
+      if start == 1 && len == 1 then ids.map fun v => bin .mem (var v) d
+      else []
   | _ => []
 
 /-- The facts a zoom in to the `i`-th main operand of `e` adds to the context:

@@ -92,10 +92,15 @@ anywhere-focus, the display collapses, matching modulo symmetry and an identity 
 association segments as sites, zooming into one, clicking one in the window, ranking the suggestion
 list, the gap-on-splice justification, highlighting the site a suggestion would rewrite, and going
 back into a closed level, conditional laws at both levels, and the small dialog box that supplies a law
-variable by hand. Language growth has started: `if … then … else … fi` is in (item 21). What is left is
-the rest of the named chunks of the grammar below, and the one thing the kernel still says out loud that
-it cannot do: check a number law by anything better than small integers. Phase 2e (LoopBridge /
-concurrency) stays parked.
+variable by hand. Language growth has started: `if … then … else … fi` is in (item 21), and the expression quantifiers
+`∀` / `∃` with them (item 23) — the first form that *binds*, which brought membership `:`, free-variable
+discipline in `Expr.vars` / `generalize`, and matching modulo the binder name. What is left is the rest
+of the named chunks of the grammar below — function scope `〈v:d→b〉` and application are the natural
+next, since they bind exactly as a quantifier does and the document's Scope section is written about
+them — and three things the kernel now says out loud that it cannot do: check a number law by anything
+better than small integers, check a quantifier law at all, and *type* check what a law application
+offers (which is why `∀i: ¬¬nat· …` is a suggestion). Capture avoidance by the document's internal-name
+stack is the residual item 23 names. Phase 2e (LoopBridge / concurrency) stays parked.
 
 ### Kernel residuals to pick up alongside or after the UI
 
@@ -745,6 +750,122 @@ concurrency) stays parked.
     `decide`d at all, so the filter compares names with `==`.
     Not done here: any grammar, a better check for number laws than `holdsOnInts`, ML ranking,
     distributivity, arithmetic or normalisation, phase 2e.
+
+23. [x] **Expression quantifiers `∀` / `∃`**, 2026-09-25 on main. The next of the grammar's named forms
+    after `if … fi`, and the first one that *binds*. `Expr.quant` is one node — the quantifier, the
+    identifiers it binds, the domain they range over, and the body — following the document's
+    production `quantifier identifiers : expression · expression`. The document excluded "the
+    abbreviated function and quantifier notations that leave out the domain", so `∀x· b` is an error
+    here and not a second form, and the error says so. `Σ`, `Π` and `§` are not here; `Quant` has two
+    constructors and `Quant.resultTy` is the line that will have to change when a quantifier gives a
+    number rather than a boolean.
+    A quantifier sits at the **weakest** level of the document's grammar, so its body runs to the end
+    of the expression: `∀i: nat· i ≥ 0 ∧ i ≤ 9` quantifies the conjunction, and `(∀i: nat· i ≥ 0) ∧ p`
+    has to bracket it. That is the difference from `if … fi`, which `fi` closes — so `Expr.prec` gives a
+    quantifier `20`, past every operator's binding power, and `renderAt` writes exactly the brackets
+    that reparse. The parser reads one wherever an operand may begin, a shade more permissive than the
+    document's grammar (which admits one only outermost); the expression read is the same either way
+    and is written back bracketed.
+    Its two main operands are the **domain** and the **body**, in reading order, so those are the two
+    places to zoom in to and the two places a law may be applied to; the site machinery again needed
+    nothing added. The document's Scope section fixes the positions — said there of the function
+    `〈v:d→b〉`, which binds the same way — "the domain is in a neutral position and the body is in a
+    positive position", and "for the body, we gain the context `v:d`". So zooming in to a domain admits
+    only `=`, and zooming in to a body gains one context law per bound identifier.
+    That context has to be an expression before it can be a law, which is why `BinOp.mem` (`:`) is
+    here: `exp7` in the document's grammar, the level of `=` and the comparisons, rendered tight on its
+    left as the document writes `a: bool`. Both its operands are called **neutral** — as bunch
+    inclusion it is antitonic left and monotonic right, and justifying that needs the bunch theory, so
+    the kernel takes `×`'s conservative option. None of the rest of the bunch notation (`::`, the bunch
+    comma, set brackets as data) is here.
+    **Binders, and matching modulo the binder name.** What a quantifier binds is a list of names, not
+    an expression: not an operand, not a zoom target, and — the part a law file needs — not a free
+    identifier of the expression. `Expr.vars` is therefore the *free* identifiers, and `Expr.generalize`
+    strikes a quantifier's own names out before descending into its body; without that, a law file line
+    `∀x: d· b` would have quantified the `x` it binds and meant nothing at all. A law written about
+    `∀x: d· b` still has to read a line about `∀i: nat· i ≥ 0`, so `Expr.matchFuel` renames the
+    *pattern's* binder names to the line's before matching the bodies (`Expr.renameVars`) and remembers
+    the renaming under `Expr.binderKey n = "·" ++ n` — a key no law variable can be spelled as, `·` not
+    being an identifier character — so that `Expr.instantiate` writes the law's other side in the
+    line's own names. Two quantifiers match when they are the same quantifier binding the same *number*
+    of names; a law that writes one binder twice means the same variable twice and refuses a line that
+    binds two different ones, which is exactly right for the way back through
+    `generalized distribution`. `Expr.instantiate` became `instantiateRen σ ren` doing both passes at
+    once, because renaming after substituting would rename what came out of the *line*, and renaming
+    before it in a separate pass is not structural recursion (Lean says so).
+    **Law files.** `Law` already read an optional `∀a, b·` binder prefix on a law *line*, and that is
+    now ambiguous with an expression quantifier in statement position. The `:` before the `·` tells them
+    apart, and the document is why: a law line's binder leaves the domain out and an expression
+    quantifier may not (`Parser.isLawBinder`). The other collision is that a law's name is whatever
+    precedes the first `:`, which `:` as an operator walks into — so `Law.render` writes an *empty* name
+    (`": x: nat"`) for a nameless law whose statement contains a `:`, which round-trips, and the
+    `lawLine` docstring says that a hand-written nameless line with a `:` will have its first one taken
+    for the name's.
+    **`Netty/laws/quantifier.laws`**, six laws, a list of its own and deliberately not part of
+    `boolean.laws`: `generalized duality` twice (`¬(∀x: d· b) ≡ ∃x: d· ¬b` and its dual),
+    `generalized distribution` twice (`∀` over `∧`, `∃` over `∨`), `generalized identity` twice
+    (`(∀x: d· T) ≡ T`, `(∃x: d· F) ≡ F`). Keeping them out of the boolean list keeps them off every
+    boolean line's suggestion pane (item 22's bill) — and keeps them out of a list every member of which
+    `boolean_isTautology` checks, which these are not.
+    **The two holes, written as theorems so that closing them breaks a line.**
+    `Netty.quantifier_isBeyondTheBooleanEvaluator`: `Expr.evalBool` returns `none` on a quantifier,
+    because an assignment of `⊤`/`⊥` to names cannot decide one — what `∀x: d· b` says depends on the
+    bunch `d` — so `Law.isTautology` is `false` for every law of the file and the six are *trusted as
+    transcribed*, which is weaker than `number_holdsOnInts`, itself weaker than `boolean_isTautology`.
+    What can be checked is `Netty.quantifier_wellFormed`: each law's main operator can stand in a
+    margin, and each declares exactly the law variables it uses, so no bound name has leaked into the
+    variable list (a bound name read as a law variable would unify with anything).
+    `Netty.Replay.quant_domain_is_offered_boolean_laws`: a domain is a **bunch**, the kernel's types are
+    `boolean` and `number`, so a domain that settles nothing is read as boolean and the boolean laws are
+    offered on it — `∀i: ¬¬nat· i ≥ 0 ∧ i ≤ 9` is a suggestion this tool makes and a type checker would
+    refuse. The document's answer is its type checker and a warning sign ("if the type checker is unable
+    to determine that the unifying expressions have the correct types, a warning sign is placed on the
+    line to which the law is being applied"), and that is not built.
+    **Capture avoidance is the residual named in the scope of this chunk, and it is still a residual.**
+    The document gives every declared variable an internal name a user cannot write, keeps a stack of
+    them, and says that "there is never a problem of ‘variable capture’ or ‘variable hiding’". What is
+    shipped here binds and renames by *visible* name, which is enough for a law to read a line and write
+    it back, and is documented as the temporary rule on `Expr.renameVars`: a law whose own binder name
+    collides with a free identifier of the line can capture it. The internal-name stack, the greying out
+    of a shadowed context variable, and refusing a redeclaration since the last scope entry are the
+    honest end state and are not here. What *is* enforced is the document's other rule about a scope,
+    "the domain `d` cannot mention `v`": `Parser.quantifier` refuses such an expression.
+    Catch-alls that would have skipped the new node silently, all handled: `Expr.mvars`, `Expr.vars`,
+    `Expr.generalize`, `Expr.renameVars`, `size`, `operands`, `mainOp`, `operandTexts`,
+    `replaceOperand`, `operandPos`, `tyOf?`, `operandTy`, `prec`, `renderAt`, `evalBool`, `evalInt`,
+    `evalProp`, `Expr.matchFuel`, `Expr.instantiateRen`, `Expr.contextOfRange`, `Netty.Quoting.expr`
+    and `Netty.Quoting.quant`, `Api.lineView`'s `kind`, and `Netty/Json.lean` (which needed
+    `deriving instance … for Quant`; the save format version is unchanged, the derived encoding keying
+    each node by its constructor). `Expr.negate` and `Expr.splitAnd` were already right by their
+    catch-alls, and `segments` / `segmentExpr` / `replaceSegment` are right to offer nothing: a
+    quantifier is not an association.
+    In `netty-web/`, `LineView.kind` gained `"quant"`, `op` carries what the form opens with
+    (`"∀i"`, `"∃i, j"`), and `formula` draws its own `:` and `·` around the two clickable pieces; a
+    `:` between two operands is drawn tight on its left as the kernel renders it. No new request: the
+    form travels as text in a line a script already sends.
+    Witnessed in Lean, all by `decide`: `quant_renders`, `quant_brackets_itself`, `quant_ty`,
+    `quant_positions`, `quant_draws_as_two_pieces`, `quant_binds_what_generalizing_must_leave_alone`,
+    `quant_body_gains_the_membership`, `mem_renders`, `quant_is_beyond_the_boolean_evaluator`,
+    `duality_is_the_law_file_line`, `quant_matches_modulo_the_binder_name`,
+    `quant_binder_names_must_agree`, `quantDuality_proves`, `quantBody_gains_the_membership`,
+    `quantBody_proves`, `quantBody_complete`, `quantDistribution_proves` and
+    `quant_domain_is_offered_boolean_laws` — `propext` only — plus
+    `quant_is_beyond_the_number_evaluators`, which carries core's `Classical.choice` / `Quot.sound` as
+    every `Int` theorem in the file already does. `quantSession` is the six quantifier laws and
+    `double negation`, seven lines, so the replays compute a suggestion list of a few rows (item 22).
+    `netty --selftest` gained `quantTest`, which reads the parse, the greedy body, the two refusals,
+    the two clickable pieces, a shipped law rewriting a line whose binder is not the law's, and the
+    proof inside a body off the request service the window talks to; and the law-file staleness and
+    round-trip checks now cover `quantifier.laws` too.
+    Cost: `lake build netty` about 7 minutes from a touched `Netty/Expr.lean` (measured 6m53s;
+    `Netty.Replay` 380–410s across runs, up from 330s — the new node widens every pattern match the
+    existing replays reduce, and nineteen witnesses were added). The
+    shipped boolean list is untouched, so `--selftest` still reports 277 suggestions on
+    `x ∧ y ∧ y ∧ z` and 5932 sound suggested steps.
+    Not done here: `Σ` / `Π` / `§`, abbreviated quantifiers, the bunch/set/string/list surface,
+    function scope `〈v:d→b〉` and function application, `let`, hiding a region, the law query, the
+    internal-name scope stack, a type checker and its warning sign, a stronger number-law check than
+    `holdsOnInts`, ML ranking, distributivity, arithmetic or normalisation, phase 2e.
 
 ## Then grow language ↔ Netty grammar
 

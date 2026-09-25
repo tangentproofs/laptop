@@ -1002,3 +1002,56 @@
       "Then grow language ↔ Netty grammar"). Still parked: a stronger number-law check than
       `holdsOnInts`, ML suggestion ranking, distributivity, arithmetic/normalisation, phase 2e, the
       Infoview UI, VS Code webview and the execute-hook.
+- [x] Netty: expression quantifiers `∀` / `∃` (2026-09-25; on main) — item 23 of `.sci/netty-plan.md`,
+      the next named form after `if … fi` and the first one that **binds**. `Expr.quant` is one node
+      following the document's production `quantifier identifiers : expression · expression`; the
+      abbreviated forms that leave the domain out are excluded there and refused here, and `Σ` / `Π` / `§`
+      are not in. A quantifier sits at the grammar's weakest level, so its body runs to the end of the
+      expression — `∀i: nat· i ≥ 0 ∧ i ≤ 9` quantifies the conjunction, `(∀i: nat· i ≥ 0) ∧ p` brackets
+      it — which is the difference from `if … fi`, and `Expr.prec 20` plus `renderAt` writes back exactly
+      the brackets that reparse.
+      Its two main operands are the domain and the body, so the site machinery needed nothing added. The
+      document's Scope section fixes them: "the domain is in a neutral position and the body is in a
+      positive position", and "for the body, we gain the context `v:d`". That context is why `BinOp.mem`
+      (`:`) is here — `exp7` in the grammar, the level of `=`, written tight on its left, both operands
+      called neutral as `×`'s are until there is a bunch theory to justify better. No other bunch
+      notation.
+      Binding is the new work. `Expr.vars` is now the *free* identifiers and `Expr.generalize` strikes a
+      quantifier's own names out, without which a law file line `∀x: d· b` would have quantified the `x`
+      it binds. A law about `∀x: d· b` must still read a line about `∀i: nat· i ≥ 0`, so matching renames
+      the pattern's binder names to the line's (`Expr.renameVars`) and remembers it under
+      `Expr.binderKey n = "·" ++ n` — unspellable as a law variable — so `Expr.instantiate` writes the
+      law's other side in the line's names; `instantiate` became `instantiateRen σ ren`, one pass, because
+      renaming after substituting would rename what came out of the line. Two quantifiers match when they
+      are the same one binding the same *number* of names, and a law that writes one binder twice means
+      the same variable twice. On the law-file side, the `∀a, b·` binder prefix and an expression
+      quantifier are told apart by the `:` before the `·` (the document's own distinction), and
+      `Law.render` writes an empty name for a nameless law whose statement contains a `:`, since a law's
+      name is whatever precedes the first one.
+      `Netty/laws/quantifier.laws`: six laws (`generalized duality` ×2, `generalized distribution` ×2,
+      `generalized identity` ×2), a list of its own — off every boolean line's suggestion pane, and out
+      of the list `boolean_isTautology` checks, which these are not.
+      Two holes written as theorems so closing them breaks a line.
+      `quantifier_isBeyondTheBooleanEvaluator`: `evalBool` is `none` on a quantifier (what `∀x: d· b`
+      says depends on the bunch `d`), so the six are trusted as transcribed — weaker than
+      `number_holdsOnInts`, itself weaker than `boolean_isTautology`; `quantifier_wellFormed` checks what
+      can be checked. `Replay.quant_domain_is_offered_boolean_laws`: a domain is a bunch and the kernel's
+      types are boolean/number, so `∀i: ¬¬nat· …` is a suggestion this tool makes and a type checker
+      would refuse — the document's type checker and warning sign are not built. And capture avoidance is
+      still the residual: binding is by *visible* name, documented as the temporary rule on
+      `Expr.renameVars`, where the document gives every variable an internal name and a scope stack; what
+      *is* enforced is its other rule, that "the domain `d` cannot mention `v`".
+      Eighteen witnesses by `decide`, `propext` only (plus one `Int` one carrying core's
+      `Classical.choice` / `Quot.sound` as every `Int` theorem here does), on a seven-law `quantSession`;
+      `--selftest` gained `quantTest` through the request service and the staleness / round-trip checks
+      now cover the new law file; `netty-web/` draws the form's own `:` and `·` around its two clickable
+      pieces (`kind = "quant"`), no new request.
+      Cost: `lake build netty` about 7 minutes from a touched `Netty/Expr.lean` (measured 6m53s;
+      `Netty.Replay` 380–410s across runs, up from 330s — the new node widens every pattern match the
+      existing replays reduce). The shipped boolean list is untouched, so
+      `--selftest` still reports 277 suggestions on `x ∧ y ∧ y ∧ z` and 5932 sound suggested steps.
+      NEXT for Netty: function scope `〈v:d→b〉` and function application, which bind exactly as a
+      quantifier does and are what the document's Scope section is actually written about. Still parked:
+      the internal-name scope stack, a type checker and its warning sign, a stronger number-law check
+      than `holdsOnInts`, `Σ` / `Π` / `§`, the bunch/set/string/list surface, ML ranking, distributivity,
+      arithmetic/normalisation, phase 2e, the Infoview UI, VS Code webview and the execute-hook.

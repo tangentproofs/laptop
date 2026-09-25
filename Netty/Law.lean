@@ -45,6 +45,15 @@ same gap direct entry leaves, with the premise recorded as what would close it.
 Matching is one-way: law variables (`Expr.mvar`) are the only things that bind,
 so a law about `a` and a proof about `a` cannot capture one another.
 
+It is also *modulo the names a quantifier binds*. A law about `∀x: d· b` has to
+read a line about `∀i: nat· i ≥ 0`, so matching a quantifier against a quantifier
+renames the pattern's own binder names to the line's before the bodies are
+matched, and remembers the renaming (`Expr.binderKey`) so that `Expr.instantiate`
+puts the line's names into the law's other side. The two quantifiers must be the
+same one and bind the same number of identifiers; nothing else about the binder is
+read. The renaming is by *visible* name, which is weaker than the document's stack
+of internal names — see `Expr.renameVars`.
+
 It is *modulo associativity, symmetry and the identity element* — the three
 things the document says a user need not write an associative, symmetry or
 identity law to get. The document says that clicking any operand of `a + b + c`
@@ -148,6 +157,22 @@ def bindMVar (n : String) (e : Expr) (σ : Subst) : List Subst :=
   | some e' => if e' == e then [σ] else []
   | none => [(n, e) :: σ]
 
+/-- The key under which a substitution remembers that the pattern's binder `n` is
+the line's binder. A law variable can never be spelled this way — `·` is not a
+character an identifier may contain — so a binder renaming and a law variable
+cannot be mistaken for one another, and `Expr.instantiate` can read both out of
+the one substitution. -/
+def binderKey (n : String) : String := "·" ++ n
+
+/-- Record that the pattern binds `a` where the line binds `c`, for each binder of
+a quantifier, if that agrees with what is recorded already. It does not agree when
+one law mentions the same binder twice and the line binds two different names
+there: `(∀x: d· b) ∧ (∀x: d· c)` reads two quantifiers over the *same* variable
+and nothing else, which is what that law is about. -/
+def bindBinders : List (String × String) → Subst → List Subst
+  | [], σ => [σ]
+  | (a, c) :: rest, σ => (bindMVar (binderKey a) (var c) σ).flatMap (bindBinders rest)
+
 /-- Match one operand of the pattern against the operands of the line it has
 been given, using `m` when it is given exactly one.
 
@@ -233,6 +258,17 @@ def matchFuel : Nat → Expr → Expr → Subst → List Subst
   | f + 1, cond c x y, cond c' x' y', σ =>
       (matchFuel f c c' σ).flatMap fun σ₁ =>
         (matchFuel f x x' σ₁).flatMap fun σ₂ => matchFuel f y y' σ₂
+  -- A quantifier matches the same quantifier binding as many identifiers, domain
+  -- against domain and body against body, with the pattern's binder names renamed
+  -- to the line's first. Nothing is rearranged and nothing is instantiated: a law
+  -- that mentions `∀` reads a line that writes one.
+  | f + 1, quant k ids d b, quant k' ids' d' b', σ =>
+      if k == k' && ids.length == ids'.length then
+        let ren := ids.zip ids'
+        (bindBinders ren σ).flatMap fun σ₁ =>
+          (matchFuel f d d' σ₁).flatMap fun σ₂ =>
+            matchFuel f (renameVars ren b) b' σ₂
+      else []
   | f + 1, bin o l r, e, σ =>
       if o.assoc || o.identity.isSome then
         let es := flattenOp o e
@@ -268,13 +304,35 @@ def matchAll (pat e : Expr) (σ : Subst) : List Subst :=
 /-- The first way of matching `pat` against `e`, when there is one. -/
 def matchWith (pat e : Expr) (σ : Subst) : Option Subst := (matchAll pat e σ).head?
 
-/-- Replace the law variables bound by `σ`; leave the rest alone. -/
-def instantiate (σ : Subst) : Expr → Expr
+/-- Replace the law variables bound by `σ`, and rename the identifiers `ren`
+renames, in one pass.
+
+The two go together because of what a quantifier needs. A law read off
+`∀i: nat· …` must write `∃i: nat· …` and not `∃x: nat· …`, so the binder names the
+match renamed (`bindBinders`) are renamed here too, and the renaming goes on into
+the body. It has to be *one* pass and not a rename followed by a substitution:
+what a law variable stands for came from the line, and is already written in the
+line's own names, so renaming must not touch it. That is why `mvar` inserts what
+`σ` gives and recurses no further into it. -/
+def instantiateRen (σ : Subst) (ren : List (String × String)) : Expr → Expr
   | mvar n => match σ.lookup n with | some e => e | none => mvar n
-  | neg a => neg (instantiate σ a)
-  | bin o l r => bin o (instantiate σ l) (instantiate σ r)
-  | cond c x y => cond (instantiate σ c) (instantiate σ x) (instantiate σ y)
+  | var n => match ren.lookup n with | some m => var m | none => var n
+  | neg a => neg (instantiateRen σ ren a)
+  | bin o l r => bin o (instantiateRen σ ren l) (instantiateRen σ ren r)
+  | cond c x y =>
+      cond (instantiateRen σ ren c) (instantiateRen σ ren x) (instantiateRen σ ren y)
+  | quant k ids d b =>
+      let ids' := ids.map fun n =>
+        match σ.lookup (binderKey n) with | some (var m) => m | _ => n
+      -- Inside the body, this quantifier's own renaming comes first, so it wins
+      -- over an outer one for a name it shadows.
+      quant k ids' (instantiateRen σ ren d)
+        (instantiateRen σ (ids.zip ids' ++ ren.filter fun p => !ids.contains p.1) b)
   | e => e
+
+/-- Replace the law variables bound by `σ`; leave the rest alone, except for the
+binder names `σ` says a match renamed (`instantiateRen`). -/
+def instantiate (σ : Subst) : Expr → Expr := instantiateRen σ []
 
 end Expr
 
@@ -420,9 +478,16 @@ when the default reading — every identifier of the line is quantified — woul
 not reproduce the law. -/
 def render (l : Law) : String :=
   let needsQuantifier := l.vars != l.stmt.mvars || l.stmt.vars != []
-  (if l.name.isEmpty then "" else l.name ++ ": ")
-    ++ (if needsQuantifier then "∀" ++ String.intercalate ", " l.vars ++ "· " else "")
-    ++ l.stmt.render
+  let body :=
+    (if needsQuantifier then "∀" ++ String.intercalate ", " l.vars ++ "· " else "")
+      ++ l.stmt.render
+  -- A law's name is whatever precedes the first `:` (`Parser.lawLine`), and `:` is
+  -- now an operator. So a law with *no* name whose statement writes one — a
+  -- context law `x: nat`, say — is written with an empty name in front of it,
+  -- rather than left for `x` to be read as its name.
+  (if l.name.isEmpty then (if body.contains ':' then ": " else "")
+   else l.name ++ ": ")
+    ++ body
 
 instance : ToString Law := ⟨render⟩
 
@@ -438,23 +503,50 @@ private def lawVars : List Tok → List String → Except String (List String ×
   | t :: _, _ => .error s!"unexpected ‘{t}’ among the law variables"
   | [], _ => .error "expected ‘·’ after the law variables"
 
+/-- Whether an initial `∀` opens the law line's own binder rather than an
+expression quantifier.
+
+The law line's binder leaves the domain out — the document writes the law
+`a ∧ b ⇒ a` in full as `∀a, b: bool· a ∧ b ⇒ a` and a law file writes it short as
+`∀a, b· a ∧ b ⇒ a` — and an *expression* quantifier may not leave it out, the
+document having excluded the abbreviated forms. So the `:` before the `·` is
+exactly what tells the two apart, and a law file can write either. -/
+private def isLawBinder : List Tok → Bool
+  | .dot :: _ => true
+  | .op .mem :: _ => false
+  | .ident _ :: rest | .comma :: rest => isLawBinder rest
+  | _ => false
+
+/-- Every identifier of an expression is a law variable, which is what a law file
+line means when it writes no binder of its own. -/
+private def generalizeAll (ts : List Tok) : Except String (List String × Expr) := do
+  let e ← exprOfToks ts
+  let ns := e.vars
+  .ok (ns, e.generalize ns)
+
 /-- Parse the statement of a law: an optional `∀…·` prefix and an expression.
-Without the prefix, every identifier of the expression is quantified. -/
+Without the prefix, every identifier of the expression is quantified — and the
+identifiers a quantifier *inside* the expression binds are not identifiers of it
+(`Expr.vars`), so `∀x: nat· x ≥ 0` is a law about `nat` and not about `x`. -/
 def lawBody (s : String) : Except String (List String × Expr) := do
   let ts ← tokenize s
   match ts with
   | .univ :: rest =>
-      let (names, body) ← lawVars rest []
-      let e ← exprOfToks body
-      .ok (names, e.generalize names)
-  | _ =>
-      let e ← exprOfToks ts
-      let ns := e.vars
-      .ok (ns, e.generalize ns)
+      if isLawBinder rest then
+        let (names, body) ← lawVars rest []
+        let e ← exprOfToks body
+        .ok (names, e.generalize names)
+      else generalizeAll ts
+  | _ => generalizeAll ts
 
 /-- Parse one line of a law file. Blank lines and lines whose first
 non-blank character is `#` are comments and yield nothing. A law's name is
-whatever precedes the first `:`; the name may contain spaces. -/
+whatever precedes the first `:`; the name may contain spaces.
+
+That rule and the membership operator share the character, so a law whose
+statement writes a `:` has to be given a name — `Law.render` writes an empty one
+rather than a wrong one, and a hand-written line that leaves the name out will
+have its first `:` taken for the name's. -/
 def lawLine (s : String) : Except String (Option Law) := do
   let t := trim s
   if t.isEmpty || beginsWith t '#' then return none

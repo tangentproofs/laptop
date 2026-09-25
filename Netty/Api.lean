@@ -83,9 +83,10 @@ structure LineView where
   dir : String
   /-- The whole line, rendered. -/
   expr : String
-  /-- `"neg"`, `"bin"`, `"cond"` or `"atom"`: whether `op` is written before the
-  one main operand, between them, not at all, or — for `if … then … else … fi` —
-  whether the display writes that form's own four words around the three
+  /-- `"neg"`, `"bin"`, `"cond"`, `"quant"` or `"atom"`: whether `op` is written
+  before the one main operand, between them, not at all, or — for the two forms
+  that are more than an operator, `if … then … else … fi` and `∀ids: d· b` —
+  whether the display writes that form's own words and marks around its
   pieces. -/
   kind : String
   /-- The main operator's symbol, or `""`. -/
@@ -260,6 +261,7 @@ def lineView (d : Doc) (s : Shown) : LineView :=
       | .neg _ => "neg"
       | .bin _ _ _ => "bin"
       | .cond _ _ _ => "cond"
+      | .quant _ _ _ _ => "quant"
       | _ => "atom"
     op := l.expr.mainOp
     parts := l.expr.operandTexts
