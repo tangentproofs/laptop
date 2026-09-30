@@ -1,23 +1,22 @@
-import LaPToP.ProgramTheory.InterpreterSyntax
-import LaPToP.ProgramTheory.InterpreterTime
+import LaPToP.ProgramTheory.InterpreterLangSyntax
 
 /-!
-# `interp`: running the aPToP demonstration programs from a shell
+# `interp`: running programs of the aPToP interpreter from a shell
 
 A thin command-line wrapper over `LaPToP.ProgramTheory.Interpreter`. It parses a
-program in the concrete syntax of `Interpreter.Demo`, runs it with `run` (one
+program in the concrete syntax of `Interpreter.Lang`, runs it with `run` (one
 poststate, the deterministic fragment) or searches with `runAll` (every
 poststate, so a choice can backtrack), with `runT`/`runAllT` in place of those on
-a state with a clock, and prints the final state. No semantics
-lives here: the parser, the interpreter and their theorems are in the library,
-and this file is argument handling and printing.
+a state with a clock, and prints the final state. No semantics lives here: the
+parser, the interpreter and their theorems are in the library, and this file is
+argument handling and printing.
 
 The Verso blueprint generator is `LaPToPMain`; this is a separate executable and
 does not touch it.
 -/
 
 open LaPToP.ProgramTheory.Interpreter
-open LaPToP.ProgramTheory.Interpreter.Demo
+open LaPToP.ProgramTheory.Interpreter.Lang
 open LaPToP.ProgramTheory.Interpreter.Timed (TState runT runAllT renderTime)
 
 /-- What the command line asked for. -/
@@ -26,12 +25,8 @@ structure Options where
   file : Option String := none
   /-- A built-in demonstration program to run instead of reading one. -/
   demo : Option String := none
-  /-- The initial value of `n`. -/
-  n : Int := 0
-  /-- The initial value of `i`. -/
-  i : Int := 0
-  /-- The initial value of `s`. -/
-  s : Int := 0
+  /-- Initial values, as a name and the text of an expression, in the order given. -/
+  sets : List (String × String) := []
   /-- The execution fuel. -/
   fuel : Nat := 1000
   /-- Search for every poststate instead of running once. -/
@@ -47,14 +42,14 @@ structure Options where
 
 /-- How to call it. -/
 def usage : String :=
-"interp — run a program of the aPToP interpreter demonstrations
+"interp — run a program in the programming notation of aPToP
 
 usage: interp [options] [file]
 
   file               read the program from this file (default: standard input)
-  --demo=NAME        run a program written in Lean instead: sumTo, count,
-                     backtrack, withLocal
-  --n=K --i=K --s=K  initial values of the state variables (default 0)
+  --demo=NAME        run a demonstration program: sumTo, backtrack, arrays
+  --NAME=EXP         the initial value of variable NAME, an expression such as
+                     --n=10 or --L=[3;1;2] (every other variable starts at 0)
   --fuel=K           execution fuel (default 1000)
   --all              search for every poststate (runAll) rather than run once
   --timed            run on a state with a clock and print the final time;
@@ -71,27 +66,36 @@ exit status: 0 success, 1 bad usage or parse error, 2 no poststate,
 def grammarText : String :=
 "program   := choice ('.' choice)* '.'?
 choice    := statement ('or' statement)*
-statement := 'ok'
-           | 'tick'
-           | var ':=' exp
-           | 'if' cond 'then' program 'else' program 'fi'
-           | 'while' cond 'do' program 'od'
-           | 'new' var ':=' exp 'in' program 'end'
-           | 'ensure' cond
-           | 'assert' cond
+statement := 'ok' | 'tick'
+           | name atom* ':=' exp
+           | 'if' exp 'then' program ('else' program)? 'fi'
+           | 'while' exp 'do' program 'od'
+           | 'new' name ':=' exp 'in' program 'end'
+           | 'ensure' exp | 'assert' exp
            | '(' program ')'
-cond      := rel ('and' rel)*
-rel       := 'not' rel | exp ('=' | '<=' | '!=') exp
-exp       := term (('+' | '-') term)*
-term      := factor ('*' factor)*
-factor    := integer | var | '-' factor | '(' exp ')'
-var       := 'n' | 'i' | 's'
+exp       := disj ('⇒' exp)?
+disj      := conj ('∨' conj)*
+conj      := neg (('∧' | 'and') neg)*
+neg       := 'not' neg | cmp
+cmp       := sum (('=' | '≠' | '<' | '≤' | '>' | '≥') sum)?
+sum       := prod (('+' | '-') prod)*
+prod      := unary (('×' | '*' | 'div' | 'mod') unary)*
+unary     := ('-' | '¬' | '#') unary | pow
+pow       := app ('^' unary)?
+app       := atom atom*
+atom      := integer | '⊤' | '⊥' | name | '(' exp ')'
+           | '[' ']' | '[' exp (';' exp)* ']'
+           | 'if' exp 'then' exp 'else' exp 'fi'
 
-'.' is sequential composition and binds loosest, so
+Values are integers, binaries (⊤, ⊥) and lists ([3; 1; 2]); a variable never
+assigned is 0. '.' is sequential composition and binds loosest, so
   s:= 0 or s:= 1. ensure s = 1
-is the choice followed by the ensure, as in Section 5.4.0. A condition is not
-parenthesized; an expression may be. The state is the three integer variables
-n, i, s of the demonstrations."
+is the choice followed by the ensure, as in Section 5.4.0. Juxtaposition is
+indexing: A i is item i of list A, counting from 0, and A i:= e is the book's
+A:= i→e | A. '+' adds integers and catenates lists; #L is the length of L.
+ASCII spellings: => \\/ /\\ != <= >= * true false; ⧧ is accepted for ≠.
+¬ binds tightest, as in the book; the word 'not' binds looser than a
+comparison. A comment runs from -- to the end of the line."
 
 /-- The text of an option after its `--name=` prefix. -/
 private def optValue (a : String) (n : Nat) : String := String.ofList (a.toList.drop n)
@@ -111,36 +115,29 @@ def parseArgs : List String → Options → Except String Options
     else if a == "--selftest" then parseArgs rest { o with selftest := true }
     else if a == "--grammar" then parseArgs rest { o with grammar := true }
     else if a.startsWith "--demo=" then parseArgs rest { o with demo := some (optValue a 7) }
-    else if a.startsWith "--n=" then
-      match parseIntArg "--n" (optValue a 4) with
-      | .ok k => parseArgs rest { o with n := k }
-      | .error e => .error e
-    else if a.startsWith "--i=" then
-      match parseIntArg "--i" (optValue a 4) with
-      | .ok k => parseArgs rest { o with i := k }
-      | .error e => .error e
-    else if a.startsWith "--s=" then
-      match parseIntArg "--s" (optValue a 4) with
-      | .ok k => parseArgs rest { o with s := k }
-      | .error e => .error e
     else if a.startsWith "--fuel=" then
       match parseIntArg "--fuel" (optValue a 7) with
       | .ok k => if k < 0 then .error "the fuel must not be negative"
                  else parseArgs rest { o with fuel := k.toNat }
       | .error e => .error e
+    else if a.startsWith "--" && a.contains '=' then
+      let body := optValue a 2
+      let name := String.ofList (body.toList.takeWhile (· != '='))
+      let val := String.ofList ((body.toList.dropWhile (· != '=')).drop 1)
+      parseArgs rest { o with sets := o.sets ++ [(name, val)] }
     else if a.startsWith "-" then .error s!"unknown option '{a}'"
     else
       match o.file with
       | none => parseArgs rest { o with file := some a }
       | some _ => .error "give at most one program file"
 
-/-- The demonstration programs that can be named on the command line: the very
-terms `Interpreter.Demo` proves things about. -/
-def demoProg : String → Option (String × P)
-  | "sumTo" => some (sumToSrc, sumTo)
-  | "count" => some (countSrc, count)
-  | "backtrack" => some (backtrackSrc, backtrack)
-  | "withLocal" => some (withLocalSrc, withLocal)
+/-- The demonstration programs that can be named on the command line: their
+sources, which the self-test checks tokenize to the token lists the theorems of
+`Lang.Demo` are stated of. -/
+def demoSrc : String → Option String
+  | "sumTo" => some Lang.Demo.sumToSrc
+  | "backtrack" => some Lang.Demo.backtrackSrc
+  | "arrays" => some Lang.Demo.arraysSrc
   | _ => none
 
 /-- Read the program text. -/
@@ -159,7 +156,7 @@ fellows) prove that the parser turns those tokens into the Lean programs, so
 passing here means the binary runs exactly what the library proves about. -/
 def runSelfTest : IO UInt32 := do
   let mut bad : Nat := 0
-  for (name, src, toks) in selfTests do
+  for (name, src, toks) in Lang.Demo.selfTests do
     match tokenize (src.length + 1) src.toList with
     | .ok ts =>
       if ts == toks then
@@ -176,26 +173,39 @@ def runSelfTest : IO UInt32 := do
   else
     return 3
 
+/-- The initial state: the names given on the command line are the first in the
+table, so they print first, and each is set to the value of its expression. -/
+def initialState (names : List String) (sets : List (String × String)) :
+    Except String (List String × St) := do
+  let mut names := names
+  let mut s := init
+  for (w, src) in sets do
+    let (x, ns) := intern w names
+    let (e, ns) ← (parseExpression ns src).mapError fun m => s!"the value of {w}: {m}"
+    names := ns
+    s := Function.update s x (e.eval s)
+  return (names, s)
+
 /-- Run a program and print what it reaches. -/
-def runProgram (o : Options) (p : P) : IO UInt32 := do
-  let st := state o.n o.i o.s
+def runProgram (o : Options) (names : List String) (st : St) (p : P) : IO UInt32 := do
+  let shown (s : St) : String := renderState names s
   if o.timed && o.all then
     let results := runAllT o.fuel p ⟨st, 0⟩
     if results.isEmpty then
       IO.eprintln "interp: no poststate — the program has none, or the fuel ran out"
       return 2
     for r in results do
-      IO.println s!"{renderState r.mem}, t = {renderTime r.t}"
+      IO.println s!"{shown r.mem}, t = {renderTime r.t}"
     return 0
   if o.timed then
     match runT o.fuel p ⟨st, 0⟩ with
     | some r =>
-      IO.println s!"{renderState r.mem}, t = {renderTime r.t}"
+      IO.println s!"{shown r.mem}, t = {renderTime r.t}"
       return 0
     | none =>
       IO.eprintln
         "interp: no poststate — the program has none (a failed `ensure`), the fuel \
-         ran out, or the branch the deterministic interpreter chose failed"
+         ran out, or the branch the deterministic interpreter chose failed (try --all)"
       return 2
   if o.all then
     let results := runAll o.fuel p st
@@ -203,12 +213,12 @@ def runProgram (o : Options) (p : P) : IO UInt32 := do
       IO.eprintln "interp: no poststate — the program has none, or the fuel ran out"
       return 2
     for r in results do
-      IO.println (renderState r)
+      IO.println (shown r)
     return 0
   else
     match run o.fuel p st with
     | some r =>
-      IO.println (renderState r)
+      IO.println (shown r)
       return 0
     | none =>
       IO.eprintln
@@ -231,22 +241,25 @@ def main (args : List String) : IO UInt32 := do
       return 0
     if o.selftest then
       return (← runSelfTest)
-    match o.demo with
-    | some name =>
-      match demoProg name with
-      | some (_, p) => runProgram o p
-      | none =>
-        IO.eprintln s!"interp: unknown demonstration '{name}' \
-          (try sumTo, count, backtrack or withLocal)"
+    let src ← match o.demo with
+      | some name =>
+        match demoSrc name with
+        | some src => pure (Except.ok src)
+        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack or arrays)")
+      | none => readSource o
+    for (w, _) in o.sets do
+      if w.isEmpty || isKeyword w || !(parseName ⟨[.word w], []⟩ matches .ok _) ||
+          !w.all (fun c => c.isAlphanum || c == '_') then
+        IO.eprintln s!"interp: '{w}' cannot be a variable name"
         return 1
-    | none =>
-      match ← readSource o with
-      | .error e =>
-        IO.eprintln s!"interp: {e}"
-        return 1
-      | .ok src =>
-        match parseProgram src with
-        | .error e =>
-          IO.eprintln s!"interp: {e}"
-          return 1
-        | .ok p => runProgram o p
+    let setNames := (o.sets.map (·.1)).foldl (fun ns w => (intern w ns).2) []
+    let parsed := do
+      let src ← src
+      let (p, names) ← parseProgramWith setNames src
+      let (names, st) ← initialState names o.sets
+      return (p, names, st)
+    match parsed with
+    | .error e =>
+      IO.eprintln s!"interp: {e}"
+      return 1
+    | .ok (p, names, st) => runProgram o names st p

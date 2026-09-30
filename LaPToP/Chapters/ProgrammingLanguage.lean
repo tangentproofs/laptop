@@ -21,6 +21,7 @@ import LaPToP.ProgramTheory.Functional
 import LaPToP.ProgramTheory.Interpreter
 import LaPToP.ProgramTheory.InterpreterSyntax
 import LaPToP.ProgramTheory.InterpreterTime
+import LaPToP.ProgramTheory.InterpreterLangSyntax
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1277,4 +1278,54 @@ does not decrease to know each intermediate time is finite. The assertion case i
 where the two sides differ: a failed assertion has a timed behaviour, but only at
 $`t = \infty`, which the finiteness condition excludes — and that is exactly the
 untimed reading, where it has no behaviour at all.
+:::
+
+:::theorem "interpreter_language" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, arrays, cli, hehner-5.1.0") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Lang.Value, LaPToP.ProgramTheory.Interpreter.Lang.Value.decEq, LaPToP.ProgramTheory.Interpreter.Lang.Value.index, LaPToP.ProgramTheory.Interpreter.Lang.Value.update, LaPToP.ProgramTheory.Interpreter.Lang.Value.update_single, LaPToP.ProgramTheory.Interpreter.Lang.UnOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.BinOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.Exp, LaPToP.ProgramTheory.Interpreter.Lang.Exp.eval, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx_nil, LaPToP.ProgramTheory.Interpreter.Lang.getElem?_set_ite, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_iff, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_seq, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_test, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₂_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.twoDim_run, LaPToP.ProgramTheory.Interpreter.Lang.tokenize, LaPToP.ProgramTheory.Interpreter.Lang.parseProg, LaPToP.ProgramTheory.Interpreter.Lang.parseExp, LaPToP.ProgramTheory.Interpreter.Lang.parseToksWith, LaPToP.ProgramTheory.Interpreter.Lang.parseProgramWith, LaPToP.ProgramTheory.Interpreter.Lang.renderState, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_sumTo, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sumTo_ten, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_backtrack, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_runAll, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrays_run")
+The interpreter's own language. The syntax of {uses "interpreter_cli"}[] ran the
+demonstrations over three integer variables with fixed names; this is the
+language the command line now runs. Programs are still the core syntax of
+{uses "interpreter"}[], with variables numbered and values that are integers,
+binaries or lists, so every theorem of {uses "interpreter_soundness"}[],
+{uses "interpreter_partial_correctness"}[] and {uses "interpreter_time"}[] applies
+to a parsed program unchanged. The parser keeps a table from numbers to the names
+written in the source. Numbers, not strings, are the variables because the kernel
+compares them instantly, which keeps the demonstrations proofs by reduction.
+
+Expressions have the book's operators: arithmetic with floor $`\mathrm{div}` and
+$`\mathrm{mod}`, comparisons, $`\lnot`, $`\land`, $`\lor`, $`\Rightarrow`,
+list literals $`[a; b; c]`, catenation $`+`, length $`\#`, indexing by
+juxtaposition, and $`\mathbf{if}` in expressions.
+
+Arrays are what {uses "data_structures"}[] says they are: "in program theory, an
+array is a list variable, and array element assignment assigns the list variable
+to a new list that is like the old list but differs in one item". So there is no
+array construct. $`A\,i := e` is *defined* as the book's rewriting
+$`A := i \to e \mid A`, and it is proved to be the book's definition
+$`A'i = e \land (\forall j \cdot j \neq i \Rightarrow A'j = A\,j) \land x' = x \land \ldots`
+for an index inside the list, item by item. Written this way the Substitution Law
+is sound for it. A two-dimensional $`A\,i\,j := e` is the same construct with a
+path. This closes the gap {uses "interpreter_arrays"}[] recorded, where an array
+had to be a family of slots because a flat state had no room for a list value.
+
+The demonstrations are reductions in the kernel. The summation from a source
+given on the command line ends at $`55`. The backtracking example is found by the
+search and missed by the deterministic run. The book's two array examples end as
+the book says they should, the first read from source text: after
+$`A\,2 := 3.\ i := 2.\ A\,i := 4`, the test $`A\,i = A\,2` is $`\top`.
+
+Honest scope. The language is untyped: each operator reads its operands at the
+kind it expects, so an ill-typed expression has a value rather than an error, and
+where the book leaves a value undefined — division by zero, an index outside the
+list — a fixed one is chosen. The book's types, bunches, sets, strings, records
+and reals are not here. As before, the parser theorems are stated of token lists,
+and the tokenizer's agreement with the source text is checked when the binary runs.
+:::
+
+:::proof "interpreter_language"
+Equality of values, which are a nested inductive type, is decided by a mutual
+recursion that the kernel reduces. The element-assignment theorem unfolds the
+assignment to a single `List.set` of the list variable, and then compares lists
+by their items. The Substitution Law form is unfolding. The demonstrations are
+reflexivity, or `decide` evaluated by the kernel where the elaborator's own
+reduction is too slow.
 :::

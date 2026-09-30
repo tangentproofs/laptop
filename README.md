@@ -32,7 +32,8 @@ does **not** build PDF (`--pdf` is intentionally omitted from CI).
 
 The programming notations of Chapters 4 and 5 are not only specified but
 executed: `LaPToP/ProgramTheory/Interpreter.lean` is an interpreter for them,
-and `interp` runs programs written in the concrete syntax of its demonstrations.
+and `interp` runs programs written in the language of
+`LaPToP/ProgramTheory/InterpreterLang.lean`.
 
 ```bash
 lake build interp                      # first time: compiles the exe (a few minutes)
@@ -40,19 +41,25 @@ lake exe interp --help                 # options
 lake exe interp --grammar              # the grammar of the concrete syntax
 lake exe interp --demo=sumTo --n=10    # => n = 10, i = 10, s = 55
 lake exe interp --selftest             # the sources parse to the proved programs
-echo 'i:= 0. s:= 0. while i != n do i:= i+1. s:= s+i od' | lake exe interp --n=20
+echo 'i:= 0. s:= 0. while i ≠ n do i:= i+1. s:= s+i od' | lake exe interp --n=20
 echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --all   # backtracking
-echo 'while i != n do i:= i+1. tick od' | lake exe interp --n=7 --timed
+echo 'while i ≠ n do i:= i+1. tick od' | lake exe interp --n=7 --timed
 echo '(s:= 1 or s:= 2). assert s = 1' | lake exe interp --timed --all
+echo 'A:= [0;0;0;0;0]. A 2:= 3. i:= 2. A i:= 4. b:= A i = A 2' | lake exe interp
+lake exe interp --L='[5;3;9;1]' sort.ap   # a program in a file, with an initial list
 ```
 
-The state is the three integer variables `n`, `i`, `s`. `--all` searches for
-every poststate (`runAll`) instead of running the deterministic interpreter
-once, which is what a choice needs. `--timed` adds a clock: `tick` advances it,
-and a false `assert` waits until `∞` where a false `ensure` has no poststate at
-all. `--timed --all` searches on the clock (`runAllT`), so a choice and a
-clock combine. Exit status is 1 for a parse error and 2
-when there is no poststate. Building the executable links the whole import
+Variables have any names; their values are integers, binaries (`⊤`, `⊥`) and
+lists (`[3; 1; 2]`), and a variable never assigned is `0`. `--NAME=EXP` gives a
+variable its initial value. An array is a list variable, as in the book:
+juxtaposition indexes (`A i`), and `A i:= e` is the book's `A:= i→e | A`. The
+book's symbols (`≠ ≤ ≥ ∧ ∨ ¬ ⇒ ×`) are accepted, each with an ASCII spelling.
+`--all` searches for every poststate (`runAll`) instead of running the
+deterministic interpreter once, which is what a choice needs. `--timed` adds a
+clock: `tick` advances it, and a false `assert` waits until `∞` where a false
+`ensure` has no poststate at all. `--timed --all` searches on the clock
+(`runAllT`), so a choice and a clock combine. Exit status is 1 for a parse error
+and 2 when there is no poststate. Building the executable links the whole import
 chain, so it is a separate target: plain `lake build` and the Blueprint site do
 not build it.
 
