@@ -192,7 +192,7 @@ theorem time₄ :
   obtain ⟨k, hk⟩ := ho
   have h' := h (by simp only; rw [hk, Nat.add_sub_cancel]; exact even_two_mul k)
   simp only [T] at h' ⊢
-  rw [if_neg (by omega)]
+  rw [ite_eq_right (by omega)]
   split_ifs at h' with h0
   · rw [h']; exact le_self_add
   · exact le_trans h' (by gcongr; exact Nat.sub_le _ _)
@@ -207,8 +207,8 @@ theorem time₅ :
   have h2 : 2 ≤ s.y := by obtain ⟨k, hk⟩ := he; omega
   have h' := h (by simp only; omega)
   simp only [T] at h' ⊢
-  rw [if_neg (by omega)]
-  rw [if_neg (by omega)] at h'
+  rw [ite_eq_right (by omega)]
+  rw [ite_eq_right (by omega)] at h'
   refine le_trans h' (le_of_eq ?_)
   have hpos := Nat.log_pos (b := 2) one_lt_two h2
   have hlog : Nat.log 2 (s.y / 2) + 1 = Nat.log 2 s.y := by rw [Nat.log_div_base]; omega

@@ -61,10 +61,10 @@ section Case
 variable {α : Sort u} (x y : α)
 
 /-- `if ⊤ then x else y = x` Case Base. -/
-theorem ite_true_base : (if True then x else y) = x := if_pos trivial
+theorem ite_true_base : (if True then x else y) = x := ite_eq_left trivial
 
 /-- `if ⊥ then x else y = y` Case Base. -/
-theorem ite_false_base : (if False then x else y) = y := if_neg id
+theorem ite_false_base : (if False then x else y) = y := ite_eq_right id
 
 variable (a : Prop) [Decidable a]
 
@@ -176,18 +176,18 @@ theorem le_min_iff' : x ≤ min y z ↔ x ≤ y ∧ x ≤ z := le_min_iff
 /-- `x↑y = if x≥y then x else y`. -/
 theorem max_eq_ite : max x y = if x ≥ y then x else y := by
   rcases le_total y x with h | h
-  · rw [max_eq_left h, if_pos h]
+  · rw [max_eq_left h, ite_eq_left h]
   · rcases eq_or_lt_of_le h with rfl | h'
     · simp
-    · rw [max_eq_right h, if_neg (not_le.mpr h')]
+    · rw [max_eq_right h, ite_eq_right (not_le.mpr h')]
 
 /-- `x↓y = if x≤y then x else y`. -/
 theorem min_eq_ite : min x y = if x ≤ y then x else y := by
   rcases le_total x y with h | h
-  · rw [min_eq_left h, if_pos h]
+  · rw [min_eq_left h, ite_eq_left h]
   · rcases eq_or_lt_of_le h with rfl | h'
     · simp
-    · rw [min_eq_right h, if_neg (not_le.mpr h')]
+    · rw [min_eq_right h, ite_eq_right (not_le.mpr h')]
 
 end Order
 

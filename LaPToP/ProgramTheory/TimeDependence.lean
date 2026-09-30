@@ -1,6 +1,6 @@
 import LaPToP.ProgramTheory.Programs
 import Mathlib.Data.ENat.Basic
-import Mathlib.Data.ENNReal.Operations
+import Mathlib.Basic.ENNReal.Operations
 
 /-!
 # Time and space dependence

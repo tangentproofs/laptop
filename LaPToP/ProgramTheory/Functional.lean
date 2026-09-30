@@ -214,10 +214,10 @@ theorem implementable_search : Implementable (search L) := by
   intro x _
   simp only [search, lam, apply]
   by_cases h : occursIn L x
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     obtain ⟨n, hn, hx⟩ := h
     exact ⟨n, hn, hx⟩
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     exact ⟨len L, Set.self_mem_Ici⟩
 
 /-! ### The linear-search refinement -/
@@ -248,27 +248,27 @@ theorem search_step_refines (x : ℤ) :
   simp only [searchFrom, lam, apply, sfBody, beyond]
   have hi0 : (0 : ℤ) ≤ i := hi
   by_cases hlen : i = len L
-  · rw [if_pos hlen]
+  · rw [ite_eq_left hlen]
     have hno : ¬ occursFrom L x i := by rintro ⟨n, h1, h2, -⟩; omega
-    rw [if_neg hno]
+    rw [ite_eq_right hno]
     intro n hn
     rw [Bunch.elem, Set.mem_singleton_iff] at hn
     subst hn
     exact Set.self_mem_Ici
-  rw [if_neg hlen]
+  rw [ite_eq_right hlen]
   by_cases hx : x = L.at i.toNat
-  · rw [if_pos hx]
+  · rw [ite_eq_left hx]
     intro n hn
     rw [Bunch.elem, Set.mem_singleton_iff] at hn
     subst hn
     by_cases hlt : n < len L
     · have hocc : occursFrom L x n := ⟨n, le_rfl, hlt, hx.symm⟩
-      rw [if_pos hocc]
+      rw [ite_eq_left hocc]
       exact ⟨le_rfl, hlt, hx.symm⟩
     · have hno : ¬ occursFrom L x n := by rintro ⟨m, h1, h2, -⟩; omega
-      rw [if_neg hno]
+      rw [ite_eq_right hno]
       exact not_lt.mp hlt
-  · rw [if_neg hx]
+  · rw [ite_eq_right hx]
     have hiff : occursFrom L x (i + 1) ↔ occursFrom L x i := by
       constructor
       · rintro ⟨n, h1, h2, h3⟩; exact ⟨n, by omega, h2, h3⟩
@@ -277,10 +277,10 @@ theorem search_step_refines (x : ℤ) :
         · exact absurd h3.symm hx
         · exact ⟨n, by omega, h2, h3⟩
     by_cases hocc : occursFrom L x i
-    · rw [if_pos hocc, if_pos (hiff.mpr hocc)]
+    · rw [ite_eq_left hocc, ite_eq_left (hiff.mpr hocc)]
       rintro n ⟨h1, h2, h3⟩
       exact ⟨by omega, h2, h3⟩
-    · rw [if_neg hocc, if_neg (fun h => hocc (hiff.mp h))]
+    · rw [ite_eq_right hocc, ite_eq_right (fun h => hocc (hiff.mp h))]
 
 /-! ### Timing of the search, recursive measure -/
 

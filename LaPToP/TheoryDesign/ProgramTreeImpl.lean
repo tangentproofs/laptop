@@ -146,17 +146,17 @@ theorem child_up (a : Pos) : (if a.childDir = Dir.left then (up a).left else (up
   · -- `q = []`: the origin chain
     have hq0 : q = [] := List.getLast?_eq_none_iff.1 hq
     subst hq0
-    simp only [childDir, List.getLast?_nil, if_true, up, dif_pos]
+    simp only [childDir, List.getLast?_nil, ite_true, up, dite_eq_left]
     unfold left
-    rw [dif_pos ⟨Nat.succ_pos k, rfl⟩]
+    rw [dite_eq_left ⟨Nat.succ_pos k, rfl⟩]
     exact ext' (by simp) rfl
   · obtain ⟨r, rfl⟩ : ∃ r, q = r ++ [b] := List.getLast?_eq_some_iff.1 hq |>.imp fun r h => h
     have hne : r ++ [b] ≠ [] := by simp
     cases b
     · -- last step left
       have hcd : (⟨k, r ++ [false], hn⟩ : Pos).childDir = Dir.left := by simp [childDir, hq]
-      rw [hcd]; simp only [if_true]
-      unfold up; rw [dif_neg hne]; simp only [List.dropLast_concat]
+      rw [hcd]; simp only [ite_true]
+      unfold up; rw [dite_eq_right hne]; simp only [List.dropLast_concat]
       unfold left
       split_ifs with h
       · -- `k > 0` and `r = []`: then `q = [false]` is not normal
@@ -170,8 +170,8 @@ theorem child_up (a : Pos) : (if a.childDir = Dir.left then (up a).left else (up
         · simp at hh
       · exact ext' rfl rfl
     · have hcd : (⟨k, r ++ [true], hn⟩ : Pos).childDir = Dir.right := by simp [childDir, hq]
-      rw [hcd]; simp only [reduceCtorEq, if_false]
-      unfold up; rw [dif_neg hne]; simp only [List.dropLast_concat]
+      rw [hcd]; simp only [reduceCtorEq, ite_false]
+      unfold up; rw [dite_eq_right hne]; simp only [List.dropLast_concat]
       unfold right
       exact ext' rfl rfl
 
@@ -273,9 +273,9 @@ theorem neighbour_back (a : Pos) (d : Dir) : neighbour (neighbour a d) (back a d
   · have := Pos.child_up a
     rcases hc : a.childDir with _ | _ | _
     · exact absurd hc (Pos.childDir_ne_up a)
-    · rw [hc] at this; simp only [if_true] at this
+    · rw [hc] at this; simp only [ite_true] at this
       simp only [neighbour, back, hc]; exact this
-    · rw [hc] at this; simp only [reduceCtorEq, if_false] at this
+    · rw [hc] at this; simp only [reduceCtorEq, ite_false] at this
       simp only [neighbour, back, hc]; exact this
   · exact Pos.up_left a
   · exact Pos.up_right a
@@ -296,9 +296,9 @@ theorem beyond_neighbour_back (a : Pos) (d : Dir) : beyond (neighbour a d) (back
   · have := Pos.child_up a
     rcases hc : a.childDir with _ | _ | _
     · exact absurd hc (Pos.childDir_ne_up a)
-    · rw [hc] at this; simp only [if_true] at this
+    · rw [hc] at this; simp only [ite_true] at this
       simp only [neighbour, back, hc, beyond]; rw [this]; exact Pos.below_self a
-    · rw [hc] at this; simp only [reduceCtorEq, if_false] at this
+    · rw [hc] at this; simp only [reduceCtorEq, ite_false] at this
       simp only [neighbour, back, hc, beyond]; rw [this]; exact Pos.below_self a
   · exact Pos.not_below_left_self a
   · exact Pos.not_below_right_self a
@@ -309,9 +309,9 @@ theorem beyond_neighbour_back_iff (a b : Pos) (d : Dir) : beyond (neighbour a d)
   · have := Pos.child_up a
     rcases hc : a.childDir with _ | _ | _
     · exact absurd hc (Pos.childDir_ne_up a)
-    · rw [hc] at this; simp only [if_true] at this
+    · rw [hc] at this; simp only [ite_true] at this
       simp only [neighbour, back, hc, beyond, not_not]; rw [this]
-    · rw [hc] at this; simp only [reduceCtorEq, if_false] at this
+    · rw [hc] at this; simp only [reduceCtorEq, ite_false] at this
       simp only [neighbour, back, hc, beyond, not_not]; rw [this]
   · rfl
   · rfl

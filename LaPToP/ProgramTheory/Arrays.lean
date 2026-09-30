@@ -199,9 +199,9 @@ theorem orElse_arrow_apply (A : ℕ → ℤ) (i : ℕ) (e : ℤ) (j : ℕ)
   rw [Fn.apply_orElse]
   by_cases h : j = i
   · subst h
-    rw [dif_pos (hmem.mpr rfl), Function.update_self]
+    rw [dite_eq_left (hmem.mpr rfl), Function.update_self]
     rfl
-  · rw [dif_neg (fun h' => h (hmem.mp h')), Function.update_of_ne h]
+  · rw [dite_eq_right (fun h' => h (hmem.mp h')), Function.update_of_ne h]
     rfl
 
 /-! ### The Substitution Law fails for array elements -/

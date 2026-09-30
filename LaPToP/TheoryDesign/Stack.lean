@@ -179,12 +179,12 @@ theorem induction (P : HList ℤ → Prop) (h0 : P empty) (hs : ∀ s x, P s →
 
 /-- `pop (push s x) = s`: "index the list". -/
 theorem pop_push (s : HList ℤ) (x : ℤ) : pop (push s x) = s := by
-  rw [pop, if_neg (push_ne_empty s x)]
+  rw [pop, ite_eq_right (push_ne_empty s x)]
   exact HList.ext (List.dropLast_concat)
 
 /-- `top (push s x) = x`, the book's worked calculation. -/
 theorem top_push (s : HList ℤ) (x : ℤ) : top (push s x) = x := by
-  rw [top, if_neg (push_ne_empty s x)]
+  rw [top, ite_eq_right (push_ne_empty s x)]
   simp [push_contents, HList.at, Str.at, List.getD_eq_getElem?_getD]
 
 /-- `push s x = push t y = s=t ∧ x=y`. -/
@@ -211,10 +211,10 @@ def theory : DataStackTheory ℤ where
   top_push := top_push
 
 /-- `pop empty = empty` is a theorem of this implementation ... -/
-theorem pop_empty : pop empty = empty := if_pos rfl
+theorem pop_empty : pop empty = empty := ite_eq_left rfl
 
 /-- ... and so is `top empty = 0`. -/
-theorem top_empty : top empty = 0 := if_pos rfl
+theorem top_empty : top empty = 0 := ite_eq_left rfl
 
 end ListStack
 
@@ -243,19 +243,19 @@ def theory : DataStackTheory ℤ where
   push_ne_empty := ListStack.push_ne_empty
   push_inj := ListStack.push_inj
   pop_push s x := by
-    rw [pop, if_neg (ListStack.push_ne_empty s x)]
+    rw [pop, ite_eq_right (ListStack.push_ne_empty s x)]
     exact HList.ext List.dropLast_concat
   top_push s x := by
-    rw [top, if_neg (ListStack.push_ne_empty s x)]
+    rw [top, ite_eq_right (ListStack.push_ne_empty s x)]
     simp [ListStack.push_contents, HList.at, Str.at, List.getD_eq_getElem?_getD]
 
 /-- In the alternative implementation `pop empty ⧧ empty` ... -/
 theorem pop_empty_ne : pop ListStack.empty ≠ ListStack.empty := by
-  rw [pop, if_pos rfl]; exact ListStack.push_ne_empty _ _
+  rw [pop, ite_eq_left rfl]; exact ListStack.push_ne_empty _ _
 
 /-- ... and `top empty ⧧ 0`. -/
 theorem top_empty_ne : top ListStack.empty ≠ 0 := by
-  rw [top, if_pos rfl]; decide
+  rw [top, ite_eq_left rfl]; decide
 
 end ListStack'
 

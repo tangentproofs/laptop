@@ -67,8 +67,8 @@ def Prob (r : ℝ) : Prop := 0 ≤ r ∧ r ≤ 1
 /-- The axioms `⊤=1`, `⊥=0` as an indicator. -/
 noncomputable def ind (p : Prop) : ℝ := if p then 1 else 0
 
-theorem ind_true {p : Prop} (h : p) : ind p = 1 := if_pos h
-theorem ind_false {p : Prop} (h : ¬ p) : ind p = 0 := if_neg h
+theorem ind_true {p : Prop} (h : p) : ind p = 1 := ite_eq_left h
+theorem ind_false {p : Prop} (h : ¬ p) : ind p = 0 := ite_eq_right h
 theorem prob_ind (p : Prop) : Prob (ind p) := by unfold ind Prob; split_ifs <;> norm_num
 
 /-- `¬x = 1–x`. -/

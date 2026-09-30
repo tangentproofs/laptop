@@ -149,7 +149,7 @@ theorem gasIsOnBody_shutOff (Off On : TSpec) (temperature desired : ℕ∞ → �
     (hc : ¬ (temperature t < desired t + ε ∧ flame t = true)) :
     ∃ t₁, gas t₁ = false ∧ t + 20 ≤ t₁ ∧ Off temperature desired flame gas spark t₁ t' := by
   unfold gasIsOnBody at h
-  rw [if_neg hc] at h
+  rw [ite_eq_right hc] at h
   obtain ⟨t₁, ⟨hg, -, h20, -⟩, hOff⟩ := h
   exact ⟨t₁, hg, h20, hOff⟩
 
