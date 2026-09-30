@@ -1329,3 +1329,67 @@ by their items. The Substitution Law form is unfolding. The demonstrations are
 reflexivity, or `decide` evaluated by the kernel where the elaborator's own
 reduction is too slow.
 :::
+
+:::theorem "interpreter_recursion" (parent := "programming_language_core") (tags := "programs, interpreter, recursion, refinement, exit-loop, for-loop, hehner-4.1.1, hehner-5.2.1, hehner-5.2.3") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Prog, LaPToP.ProgramTheory.Interpreter.Defs, LaPToP.ProgramTheory.Interpreter.DetDefs, LaPToP.ProgramTheory.Interpreter.Eval, LaPToP.ProgramTheory.Interpreter.run_call, LaPToP.ProgramTheory.Interpreter.runAll_call, LaPToP.ProgramTheory.Interpreter.denote_call, LaPToP.ProgramTheory.Interpreter.writes_call, LaPToP.ProgramTheory.Interpreter.exists_run_of_eval, LaPToP.ProgramTheory.Interpreter.denoteWith, LaPToP.ProgramTheory.Interpreter.denote_eq_denoteWith, LaPToP.ProgramTheory.Interpreter.denote_call_eq, LaPToP.ProgramTheory.Interpreter.refines_denote_call, LaPToP.ProgramTheory.Interpreter.run_call_sound, LaPToP.ProgramTheory.Interpreter.CallFree, LaPToP.ProgramTheory.Interpreter.denoteWith_callFree, LaPToP.ProgramTheory.Interpreter.refines_exitLoop, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_call, LaPToP.ProgramTheory.Interpreter.Timed.runT_call, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_call, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_of_eval, LaPToP.ProgramTheory.Interpreter.Timed.eval_of_evalT, LaPToP.ProgramTheory.Interpreter.Lang.assigns, LaPToP.ProgramTheory.Interpreter.Lang.Program, LaPToP.ProgramTheory.Interpreter.Lang.Program.body, LaPToP.ProgramTheory.Interpreter.Lang.Program.env, LaPToP.ProgramTheory.Interpreter.Lang.Program.run, LaPToP.ProgramTheory.Interpreter.Lang.Program.runAll, LaPToP.ProgramTheory.Interpreter.Lang.Program.runT, LaPToP.ProgramTheory.Interpreter.Lang.Program.runAllT, LaPToP.ProgramTheory.Interpreter.Lang.Raw, LaPToP.ProgramTheory.Interpreter.Lang.compile, LaPToP.ProgramTheory.Interpreter.Lang.parseBody, LaPToP.ProgramTheory.Interpreter.Lang.parseItem, LaPToP.ProgramTheory.Interpreter.Lang.parseFile, LaPToP.ProgramTheory.Interpreter.Lang.scanDefs, LaPToP.ProgramTheory.Interpreter.Lang.Demo.listSum_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_exitLoop, LaPToP.ProgramTheory.Interpreter.Lang.Demo.exitLoop_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.exitLoop_run_above, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deepExit_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.forLoop_run")
+Named specifications, recursion, and the loops the book defines by refinement.
+The book develops a program by refining named specifications, and a name on the
+right of a refinement is a call of the program that refines it, as in
+{uses "list_summation"}[], the name being refined included. The core syntax of
+{uses "interpreter"}[] gains `call k`, which runs the program refining the `k`-th named
+specification. The definitions in scope are a class with an empty default, so a
+program with no calls, and every theorem proved before, need not mention them.
+
+A call is denoted by its executions, and that is the book's reading of a
+recursive refinement. The calls solve their refinements with equality: the
+specification a call names is its body, with each call in the body read as the
+specification it names. And they are the strongest solution: any family of
+specifications that satisfies the refinements is refined by the calls, exactly as
+{uses "interpreter_soundness"}[] has it for the while-loop. So whatever a
+development proves by refinement holds of every terminating run, and nothing is
+claimed about termination. Soundness and completeness of both interpreters, the
+searching interpreters, and the projection theorem of {uses "interpreter_time"}[]
+extend to calls. The ones that went by induction on the program now go by
+induction on the execution, since a call's body is not a part of the call.
+
+The exit-loop of {uses "exit_loop"}[] is "an alternative notation for $`L \Leftarrow A.\ \mathbf{if}\ b\ \mathbf{then}\ ok\ \mathbf{else}\ C.\ L`",
+and the parser compiles `do A. exit when b. C od` to exactly that: a fresh
+specification refined by that body, the loop being a call of it. The book's
+exit-loop rule is proved for such a loop: every terminating run satisfies each
+$`L` the rule establishes. `exit n when b` leaves $`n` loops, and the inner loop
+is then named as the book names it, so $`P \Leftarrow \mathbf{do}\ A.\ \mathbf{do}\ B.\ \mathbf{exit}\ 2\ \mathbf{when}\ c.\ D\ \mathbf{od}.\ E\ \mathbf{od}`
+becomes $`P \Leftarrow A.\ Q` with $`Q \Leftarrow B.\ \mathbf{if}\ c\ \mathbf{then}\ ok\ \mathbf{else}\ D.\ Q`.
+The for-loop of {uses "for_loop"}[] is the refinement
+$`F \Leftarrow \mathbf{if}\ i < n\ \mathbf{then}\ P.\ i := i+1.\ F\ \mathbf{else}\ ok`,
+with the index local, the bound evaluated once, and a body that assigns the
+index rejected, as the book requires.
+
+The demonstrations are reductions in the kernel from parsed source:
+- the list summation of Section 4.1.1, run from its two refinements;
+- the exit-loop that counts up to $`n`, from below and from above;
+- a deep exit;
+- a for-loop summing $`1` to $`10`.
+
+From the command line, the Towers of Hanoi of Section 4.3, with a `tick` per
+disk move, reports $`2^n - 1` moves in time $`2^n - 1`.
+
+Honest scope. The exit-loop rule is proved for the loop whose parts contain no
+calls; nested loops rest on the general theorem about calls. The for-loop is
+justified by the general theorem too, not by the book's for-loop rule, whose
+index is a parameter where here it is a local variable. Procedures with
+parameters, `go to` with labels in the middle of a program, and a call's write
+set are not here.
+:::
+
+:::proof "interpreter_recursion"
+A call is denoted by the execution relation, which is defined inductively with a
+rule for a call, so the denotation stays structural. That the calls solve their
+refinements is the agreement of execution and denotation, read through the
+definition of a call. That they are the strongest solution is an induction on
+executions, each rule matching the corresponding specification combinator and
+the call rule being the hypothesis. The exit-loop rule instantiates this with the
+family that is the loop's specification at the loop and everything elsewhere, the
+loop's parts, having no calls, meaning the same under any reading of calls.
+Completeness of the fuelled interpreters and the projection theorem are
+inductions on executions, the intermediate times of a finite execution being
+finite because time does not decrease.
+:::

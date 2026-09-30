@@ -47,7 +47,8 @@ def usage : String :=
 usage: interp [options] [file]
 
   file               read the program from this file (default: standard input)
-  --demo=NAME        run a demonstration program: sumTo, backtrack, arrays
+  --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
+                     listSum, exitLoop, deepExit, forLoop
   --NAME=EXP         the initial value of variable NAME, an expression such as
                      --n=10 or --L=[3;1;2] (every other variable starts at 0)
   --fuel=K           execution fuel (default 1000)
@@ -64,15 +65,24 @@ exit status: 0 success, 1 bad usage or parse error, 2 no poststate,
 
 /-- The grammar of the concrete syntax. -/
 def grammarText : String :=
-"program   := choice ('.' choice)* '.'?
+"file      := (name '⇐' program | program)*
+program   := choice ('.' choice)* '.'?
 choice    := statement ('or' statement)*
 statement := 'ok' | 'tick'
            | name atom* ':=' exp
+           | name                                   -- a call
            | 'if' exp 'then' program ('else' program)? 'fi'
            | 'while' exp 'do' program 'od'
+           | 'do' body 'od'
+           | 'for' name ':=' exp ';..' exp 'do' program 'od'
            | 'new' name ':=' exp 'in' program 'end'
            | 'ensure' exp | 'assert' exp
            | '(' program ')'
+body      := item ('.' item)* '.'?
+item      := 'exit' integer? ('when' exp)?
+           | 'if' exp 'then' body ('else' body)? 'fi'
+           | 'do' body 'od'
+           | choice
 exp       := disj ('⇒' exp)?
 disj      := conj ('∨' conj)*
 conj      := neg (('∧' | 'and') neg)*
@@ -87,13 +97,18 @@ atom      := integer | '⊤' | '⊥' | name | '(' exp ')'
            | '[' ']' | '[' exp (';' exp)* ']'
            | 'if' exp 'then' exp 'else' exp 'fi'
 
+A file is a list of refinements P ⇐ ... and a main program; with no main
+program the first specification is run. A specification's name on the right of
+a refinement is a call, and may be recursive. 'do ... od' is the exit-loop:
+'exit n when b' leaves n loops. 'for i:= m;..n do P od' runs i from m to n-1.
+
 Values are integers, binaries (⊤, ⊥) and lists ([3; 1; 2]); a variable never
 assigned is 0. '.' is sequential composition and binds loosest, so
   s:= 0 or s:= 1. ensure s = 1
 is the choice followed by the ensure, as in Section 5.4.0. Juxtaposition is
 indexing: A i is item i of list A, counting from 0, and A i:= e is the book's
 A:= i→e | A. '+' adds integers and catenates lists; #L is the length of L.
-ASCII spellings: => \\/ /\\ != <= >= * true false; ⧧ is accepted for ≠.
+ASCII spellings: <== => \\/ /\\ != <= >= * true false; ⧧ is accepted for ≠.
 ¬ binds tightest, as in the book; the word 'not' binds looser than a
 comparison. A comment runs from -- to the end of the line."
 
@@ -138,6 +153,10 @@ def demoSrc : String → Option String
   | "sumTo" => some Lang.Demo.sumToSrc
   | "backtrack" => some Lang.Demo.backtrackSrc
   | "arrays" => some Lang.Demo.arraysSrc
+  | "listSum" => some Lang.Demo.listSumSrc
+  | "exitLoop" => some Lang.Demo.exitLoopSrc
+  | "deepExit" => some Lang.Demo.deepExitSrc
+  | "forLoop" => some Lang.Demo.forLoopSrc
   | _ => none
 
 /-- Read the program text. -/
@@ -187,10 +206,10 @@ def initialState (names : List String) (sets : List (String × String)) :
   return (names, s)
 
 /-- Run a program and print what it reaches. -/
-def runProgram (o : Options) (names : List String) (st : St) (p : P) : IO UInt32 := do
+def runProgram (o : Options) (names : List String) (st : St) (prog : Program) : IO UInt32 := do
   let shown (s : St) : String := renderState names s
   if o.timed && o.all then
-    let results := runAllT o.fuel p ⟨st, 0⟩
+    let results := prog.runAllT o.fuel ⟨st, 0⟩
     if results.isEmpty then
       IO.eprintln "interp: no poststate — the program has none, or the fuel ran out"
       return 2
@@ -198,7 +217,7 @@ def runProgram (o : Options) (names : List String) (st : St) (p : P) : IO UInt32
       IO.println s!"{shown r.mem}, t = {renderTime r.t}"
     return 0
   if o.timed then
-    match runT o.fuel p ⟨st, 0⟩ with
+    match prog.runT o.fuel ⟨st, 0⟩ with
     | some r =>
       IO.println s!"{shown r.mem}, t = {renderTime r.t}"
       return 0
@@ -208,7 +227,7 @@ def runProgram (o : Options) (names : List String) (st : St) (p : P) : IO UInt32
          ran out, or the branch the deterministic interpreter chose failed (try --all)"
       return 2
   if o.all then
-    let results := runAll o.fuel p st
+    let results := prog.runAll o.fuel st
     if results.isEmpty then
       IO.eprintln "interp: no poststate — the program has none, or the fuel ran out"
       return 2
@@ -216,7 +235,7 @@ def runProgram (o : Options) (names : List String) (st : St) (p : P) : IO UInt32
       IO.println (shown r)
     return 0
   else
-    match run o.fuel p st with
+    match prog.run o.fuel st with
     | some r =>
       IO.println (shown r)
       return 0
@@ -245,21 +264,21 @@ def main (args : List String) : IO UInt32 := do
       | some name =>
         match demoSrc name with
         | some src => pure (Except.ok src)
-        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack or arrays)")
+        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit or forLoop)")
       | none => readSource o
     for (w, _) in o.sets do
-      if w.isEmpty || isKeyword w || !(parseName ⟨[.word w], []⟩ matches .ok _) ||
+      if w.isEmpty || isKeyword w || !(parseName ⟨[.word w], [], [], []⟩ matches .ok _) ||
           !w.all (fun c => c.isAlphanum || c == '_') then
         IO.eprintln s!"interp: '{w}' cannot be a variable name"
         return 1
     let setNames := (o.sets.map (·.1)).foldl (fun ns w => (intern w ns).2) []
     let parsed := do
       let src ← src
-      let (p, names) ← parseProgramWith setNames src
-      let (names, st) ← initialState names o.sets
-      return (p, names, st)
+      let prog ← parseProgramWith setNames src
+      let (names, st) ← initialState prog.names o.sets
+      return (prog, names, st)
     match parsed with
     | .error e =>
       IO.eprintln s!"interp: {e}"
       return 1
-    | .ok (p, names, st) => runProgram o names st p
+    | .ok (prog, names, st) => runProgram o names st prog

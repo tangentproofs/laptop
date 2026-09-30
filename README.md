@@ -47,7 +47,23 @@ echo 'while i ≠ n do i:= i+1. tick od' | lake exe interp --n=7 --timed
 echo '(s:= 1 or s:= 2). assert s = 1' | lake exe interp --timed --all
 echo 'A:= [0;0;0;0;0]. A 2:= 3. i:= 2. A i:= 4. b:= A i = A 2' | lake exe interp
 lake exe interp --L='[5;3;9;1]' sort.ap   # a program in a file, with an initial list
+lake exe interp --demo=listSum --L='[3;1;4;1;5]'   # the refinements of Section 4.1.1
+lake exe interp --demo=deepExit                    # do ... exit 2 when ... od
 ```
+
+A program file may be written the book's way, as refinements; a name on the
+right is a call, and may be recursive:
+
+```
+-- Towers of Hanoi (Section 4.3): one tick per disk move
+MovePile ⇐ if n = 0 then ok
+           else n:= n-1. MovePile. moves:= moves+1. tick. MovePile. n:= n+1 fi
+```
+
+`lake exe interp --n=10 --timed hanoi.ap` reports `moves = 1023, t = 1023`.
+`do ... exit when b ... od` is the exit-loop (`exit n when b` leaves `n` loops) and
+`for i:= m;..n do P od` the for-loop; both are compiled to the refinements the
+book defines them by.
 
 Variables have any names; their values are integers, binaries (`⊤`, `⊥`) and
 lists (`[3; 1; 2]`), and a variable never assigned is `0`. `--NAME=EXP` gives a

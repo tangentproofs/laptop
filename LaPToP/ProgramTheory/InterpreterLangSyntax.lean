@@ -4,23 +4,33 @@ import LaPToP.ProgramTheory.InterpreterSyntax
 /-!
 # The concrete syntax of the interpreter's language
 
-A tokenizer and a recursive-descent parser from text to `Lang.P`, the programs of
-`LaPToP.ProgramTheory.Interpreter.Lang`, together with the table of variable names
-the parser builds. As for the demonstration syntax, nothing new is denoted: a
-parsed program is a `Prog ℕ Value` and means its `denote`.
+A tokenizer and a recursive-descent parser from text to a `Lang.Program`: named
+specifications with the programs that refine them, and a main program, over the
+values and expressions of `LaPToP.ProgramTheory.Interpreter.Lang`. As for the
+demonstration syntax, nothing new is denoted: a parsed program is `Prog ℕ Value`
+with its definitions, and means its `denote`.
 
 ## The grammar
 
 ```
+file      := (name '⇐' program | program)*
 program   := choice ('.' choice)* '.'?
 choice    := statement ('or' statement)*
 statement := 'ok' | 'tick'
            | name atom* ':=' exp
+           | name                                   -- a call
            | 'if' exp 'then' program ('else' program)? 'fi'
            | 'while' exp 'do' program 'od'
+           | 'do' body 'od'
+           | 'for' name ':=' exp ';..' exp 'do' program 'od'
            | 'new' name ':=' exp 'in' program 'end'
            | 'ensure' exp | 'assert' exp
            | '(' program ')'
+body      := item ('.' item)* '.'?
+item      := 'exit' integer? ('when' exp)?
+           | 'if' exp 'then' body ('else' body)? 'fi'
+           | 'do' body 'od'
+           | choice
 exp       := disj ('⇒' exp)?
 disj      := conj ('∨' conj)*
 conj      := neg (('∧' | 'and') neg)*
@@ -36,12 +46,27 @@ atom      := integer | '⊤' | '⊥' | name | '(' exp ')'
            | 'if' exp 'then' exp 'else' exp 'fi'
 ```
 
+A file is a list of refinements `P ⇐ ...`, as the book develops a program
+(Section 4.1.1), and a main program; with no main program the first
+specification is run. A name on the right of a refinement is a call, and may be
+the name being refined: that is recursion.
+
+`do body od` is the exit-loop of Section 5.2.1, and is compiled to exactly the
+refinement the book says it abbreviates: `do A. exit when b. C od` becomes a
+fresh specification `L ⇐ A. if b then ok else C. L`, and the loop is a call of
+`L`. `exit n when b` leaves `n` loops; the inner loop is then named as the book
+does it, so `P ⇐ do A. do B. exit 2 when c. D od. E od` is `P ⇐ A. Q` with
+`Q ⇐ B. if c then ok else D. Q`. An exit may not leave a `while`, a local
+scope or a choice. `for i:= m;..n do P od` (Section 5.2.3) is the refinement
+`F ⇐ if i < n then P. i:= i+1. F else ok`, with `i` local, `n` evaluated once
+before the loop, and `P` forbidden to assign `i`.
+
 Juxtaposition is indexing, as in the book: `A i` is item `i` of `A`, and
 `A i j:= e` assigns an item of a two-dimensional array. Each symbol has an ASCII
-spelling: `=>` `\/` `/\` `!=` `<=` `>=` `*` `true` `false`, and `⧧` is accepted
-for `≠`. `¬` binds tightest, as in the book, so `¬x = y` is `(¬x) = y`; the word
-`not` binds looser than a comparison, so `not x = y` is `¬(x = y)`. A comment
-runs from `--` to the end of the line.
+spelling: `<==` `=>` `\/` `/\` `!=` `<=` `>=` `*` `true` `false`, and `⧧` is
+accepted for `≠`. `¬` binds tightest, as in the book, so `¬x = y` is `(¬x) = y`;
+the word `not` binds looser than a comparison, so `not x = y` is `¬(x = y)`. A
+comment runs from `--` to the end of the line.
 -/
 
 namespace LaPToP.ProgramTheory.Interpreter.Lang
@@ -71,6 +96,7 @@ private def unicodeTok : Char → Option Tok
   | '≠' => some (.sym "!=")
   | '⧧' => some (.sym "!=")
   | '⇒' => some (.sym "=>")
+  | '⇐' => some (.sym "<==")
   | '∧' => some (.sym "/\\")
   | '∨' => some (.sym "\\/")
   | '¬' => some (.sym "¬")
@@ -103,7 +129,9 @@ def tokenize : ℕ → List Char → Except String Toks
       match c, cs with
       | '-', '-' :: rest => tokenize f (rest.dropWhile (· != '\n'))
       | ':', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym ":=" :: ts)
+      | '<', '=' :: '=' :: rest => do let ts ← tokenize f rest; .ok (.sym "<==" :: ts)
       | '<', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym "<=" :: ts)
+      | ';', '.' :: '.' :: rest => do let ts ← tokenize f rest; .ok (.sym ";.." :: ts)
       | '>', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym ">=" :: ts)
       | '!', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym "!=" :: ts)
       | '=', '>' :: rest => do let ts ← tokenize f rest; .ok (.sym "=>" :: ts)
@@ -128,47 +156,73 @@ def keywords : List String :=
 /-- Whether a word is a keyword. -/
 def isKeyword (w : String) : Bool := keywords.contains w
 
-/-- The variable a name stands for, adding it to the table if it is new. -/
+/-- The index a name stands for in a table, adding it if it is new. -/
 def intern (w : String) (names : List String) : ℕ × List String :=
   match names.idxOf? w with
   | some k => (k, names)
   | none => (names.length, names ++ [w])
 
-/-- The parser's state: the tokens left and the names seen so far. -/
+/-- The names defined by a refinement `name ⇐ ...` anywhere in the tokens, in
+order of their first definition. -/
+def scanDefs : Toks → List String → List String
+  | .word w :: .sym "<==" :: ts, acc => scanDefs ts (if acc.contains w then acc else acc ++ [w])
+  | _ :: ts, acc => scanDefs ts acc
+  | [], acc => acc
+
+/-- The parser's state. -/
 structure PS where
   /-- The tokens not yet read. -/
   toks : Toks
-  /-- The table of names: variable `k` is written `names[k]`. -/
+  /-- The variables: variable `k` is written `names[k]`. -/
   names : List String
+  /-- The specifications: those defined in the source first, then the loops'. -/
+  procs : List String
+  /-- The definitions read so far. -/
+  bodies : List (ℕ × P)
 
+/-- The state with other tokens. -/
+def PS.at (st : PS) (ts : Toks) : PS := { st with toks := ts }
 
 private def expectSym (s : String) (st : PS) : Except String PS :=
   match st.toks with
-  | .sym t :: rest => if t == s then .ok ⟨rest, st.names⟩ else .error s!"expected '{s}', found '{t}'"
+  | .sym t :: rest => if t == s then .ok (st.at rest) else .error s!"expected '{s}', found '{t}'"
   | t :: _ => .error s!"expected '{s}', found '{t.render}'"
   | [] => .error s!"expected '{s}', found the end of the program"
 
 private def expectWord (w : String) (st : PS) : Except String PS :=
   match st.toks with
-  | .word v :: rest => if v == w then .ok ⟨rest, st.names⟩ else .error s!"expected '{w}', found '{v}'"
+  | .word v :: rest => if v == w then .ok (st.at rest) else .error s!"expected '{w}', found '{v}'"
   | t :: _ => .error s!"expected '{w}', found '{t.render}'"
   | [] => .error s!"expected '{w}', found the end of the program"
 
-/-- A name, interned. -/
+/-- A variable's name, interned. -/
 def parseName (st : PS) : Except String (ℕ × PS) :=
   match st.toks with
   | .word w :: rest =>
     if isKeyword w then .error s!"expected a name, found the keyword '{w}'"
-    else let (x, names) := intern w st.names; .ok (x, ⟨rest, names⟩)
+    else if st.procs.contains w then .error s!"'{w}' names a specification, not a variable"
+    else let (x, names) := intern w st.names; .ok (x, { st with toks := rest, names := names })
   | t :: _ => .error s!"expected a name, found '{t.render}'"
   | [] => .error "expected a name, found the end of the program"
 
+/-- A fresh specification for a loop to be compiled to. -/
+def newProc (tag : String) (st : PS) : ℕ × PS :=
+  (st.procs.length, { st with procs := st.procs ++ [tag ++ "#" ++ toString st.procs.length] })
+
+/-- A fresh variable no source can name, for a loop's bound. -/
+def newHidden (st : PS) : ℕ × PS :=
+  (st.names.length, { st with names := st.names ++ ["#" ++ toString st.names.length] })
+
+/-- Record a definition. -/
+def PS.define (st : PS) (k : ℕ) (body : P) : PS := { st with bodies := st.bodies ++ [(k, body)] }
+
 /-! ### Expressions -/
 
-/-- Whether a token can begin an atom, so that juxtaposition continues. -/
-def startsAtom : Tok → Bool
+/-- Whether a token can begin an atom, so that juxtaposition continues: not a
+keyword, and not the name of a specification. -/
+def startsAtom (procs : List String) : Tok → Bool
   | .num _ => true
-  | .word w => w == "true" || w == "false" || !isKeyword w
+  | .word w => w == "true" || w == "false" || (!isKeyword w && !procs.contains w)
   | .sym s => s == "(" || s == "["
 
 /-- The left-associative operators at each level of precedence: `∨` at 1, `∧` at
@@ -196,7 +250,7 @@ def cmpOp : Tok → Option BinOp
 
 private def headTok (st : PS) : Option Tok := st.toks.head?
 
-private def advance (st : PS) : PS := ⟨st.toks.tail, st.names⟩
+private def advance (st : PS) : PS := st.at st.toks.tail
 
 mutual
 
@@ -290,7 +344,7 @@ def parseAppTail (fuel : ℕ) (a : Exp) (st : PS) : Except String (Exp × PS) :=
   | f + 1 =>
     match headTok st with
     | some t =>
-      if startsAtom t then do
+      if startsAtom st.procs t then do
         let (i, st) ← parseAtom f st
         parseAppTail f (.index a i) st
       else .ok (a, st)
@@ -318,20 +372,20 @@ def parseAtom (fuel : ℕ) (st : PS) : Except String (Exp × PS) :=
   | 0 => .error "expression too long or too deeply nested"
   | f + 1 =>
     match st.toks with
-    | .num k :: ts => .ok (.lit (.int k), ⟨ts, st.names⟩)
-    | .word "true" :: ts => .ok (.lit (.bool true), ⟨ts, st.names⟩)
-    | .word "false" :: ts => .ok (.lit (.bool false), ⟨ts, st.names⟩)
+    | .num k :: ts => .ok (.lit (.int k), st.at ts)
+    | .word "true" :: ts => .ok (.lit (.bool true), st.at ts)
+    | .word "false" :: ts => .ok (.lit (.bool false), st.at ts)
     | .sym "(" :: ts => do
-      let (a, st) ← parseExp f ⟨ts, st.names⟩
+      let (a, st) ← parseExp f (st.at ts)
       let st ← expectSym ")" st
       .ok (a, st)
-    | .sym "[" :: .sym "]" :: ts => .ok (.nil, ⟨ts, st.names⟩)
+    | .sym "[" :: .sym "]" :: ts => .ok (.nil, (st.at ts))
     | .sym "[" :: ts => do
-      let (a, st) ← parseExp f ⟨ts, st.names⟩
+      let (a, st) ← parseExp f (st.at ts)
       let (as, st) ← parseItems f st
       .ok (Exp.ofList (a :: as), st)
     | .word "if" :: ts => do
-      let (c, st) ← parseExp f ⟨ts, st.names⟩
+      let (c, st) ← parseExp f (st.at ts)
       let st ← expectWord "then" st
       let (a, st) ← parseExp f st
       let st ← expectWord "else" st
@@ -347,6 +401,67 @@ termination_by structural fuel
 
 end
 
+/-! ### Loops, compiled to refinements -/
+
+/-- An item of the body of an exit-loop, before it is compiled: a statement, an
+exit, an `if` whose branches may exit, or an inner loop. -/
+inductive Raw where
+  /-- A statement. -/
+  | stmt (p : P)
+  /-- `exit n when c`. -/
+  | exit (n : ℕ) (c : Exp)
+  /-- `if c then t else e fi` in a loop body; `jumps` says whether it contains
+  an exit or a loop, so that it must be compiled with the rest of the body. -/
+  | ifr (jumps : Bool) (c : Exp) (t e : List Raw)
+  /-- `do body od`. -/
+  | loop (body : List Raw)
+
+/-- Whether an item exits or loops. -/
+def Raw.jumps : Raw → Bool
+  | .stmt _ => false
+  | .ifr j _ _ _ => j
+  | _ => true
+
+/-- Compile the rest of a loop body. `K` is what follows the body — the call
+that repeats the loop — or nothing at the top of a plain `if`; `E` lists what
+`exit 1`, `exit 2`, ... continue with. Each loop becomes a fresh specification
+refined by its compiled body, and is itself a call of it. -/
+def compile (fuel : ℕ) (items : List Raw) (K : Option P) (E : List P) (st : PS) :
+    Except String (P × PS) :=
+  match fuel with
+  | 0 => .error "loop too long or too deeply nested"
+  | f + 1 =>
+    match items with
+    | [] => .ok (K.getD .ok, st)
+    | [.stmt p] =>
+      match K with
+      | none => .ok (p, st)
+      | some k => .ok (.seq p k, st)
+    | .stmt p :: rest => do
+      let (q, st) ← compile f rest K E st
+      .ok (.seq p q, st)
+    | .exit n c :: rest =>
+      match E[n - 1]? with
+      | some target =>
+        if n = 0 then .error "there is no 'exit 0'" else do
+        let (q, st) ← compile f rest K E st
+        .ok (.cond c.test target q, st)
+      | none => .error s!"'exit {n}' leaves more loops than there are"
+    | .ifr jumps c t e :: rest =>
+      if jumps then do
+        let (pt, st) ← compile f (t ++ rest) K E st
+        let (pe, st) ← compile f (e ++ rest) K E st
+        .ok (.cond c.test pt pe, st)
+      else do
+        let (pt, st) ← compile f t none [] st
+        let (pe, st) ← compile f e none [] st
+        compile f (.stmt (.cond c.test pt pe) :: rest) K E st
+    | .loop body :: rest => do
+      let (after, st) ← compile f rest K E st
+      let (k, st) := newProc "do" st
+      let (b, st) ← compile f body (some (.call k)) (after :: E) st
+      .ok (.call k, st.define k b)
+
 /-! ### Programs -/
 
 /-- The tokens that close an enclosing block, so that a trailing `.` is allowed. -/
@@ -357,6 +472,7 @@ private def endsBlock : Toks → Bool
   | .word "od" :: _ => true
   | .word "end" :: _ => true
   | .sym ")" :: _ => true
+  | .word _ :: .sym "<==" :: _ => true
   | _ => false
 
 mutual
@@ -369,9 +485,9 @@ def parseProg (fuel : ℕ) (st : PS) : Except String (P × PS) :=
     let (p, st) ← parseChoice f st
     match st.toks with
     | .sym "." :: ts₁ =>
-      if endsBlock ts₁ then .ok (p, ⟨ts₁, st.names⟩)
+      if endsBlock ts₁ then .ok (p, st.at ts₁)
       else do
-        let (q, st) ← parseProg f ⟨ts₁, st.names⟩
+        let (q, st) ← parseProg f (st.at ts₁)
         .ok (.seq p q, st)
     | _ => .ok (p, st)
 termination_by structural fuel
@@ -384,22 +500,74 @@ def parseChoice (fuel : ℕ) (st : PS) : Except String (P × PS) :=
     let (p, st) ← parseStmt f st
     match st.toks with
     | .word "or" :: ts₁ => do
-      let (q, st) ← parseChoice f ⟨ts₁, st.names⟩
+      let (q, st) ← parseChoice f (st.at ts₁)
       .ok (.or p q, st)
     | _ => .ok (p, st)
 termination_by structural fuel
 
 /-- The indices of an assignment's target, up to the `:=`. -/
-def parseTarget (fuel : ℕ) (st : PS) : Except String ((List Exp) × PS) :=
+def parseTarget (fuel : ℕ) (st : PS) : Except String (List Exp × PS) :=
   match fuel with
   | 0 => .error "assignment target too long"
   | f + 1 =>
     match st.toks with
-    | .sym ":=" :: ts => .ok ([], ⟨ts, st.names⟩)
+    | .sym ":=" :: ts => .ok ([], st.at ts)
     | _ => do
       let (i, st) ← parseAtom f st
       let (is, st) ← parseTarget f st
       .ok (i :: is, st)
+termination_by structural fuel
+
+/-- `body := item ('.' item)* '.'?`, the body of an exit-loop or of an `if` in
+one, up to the word that closes it. -/
+def parseBody (fuel : ℕ) (st : PS) : Except String (List Raw × PS) :=
+  match fuel with
+  | 0 => .error "loop body too long or too deeply nested"
+  | f + 1 => do
+    let (r, st) ← parseItem f st
+    match st.toks with
+    | .sym "." :: ts₁ =>
+      if endsBlock ts₁ then .ok ([r], st.at ts₁)
+      else do
+        let (rs, st) ← parseBody f (st.at ts₁)
+        .ok (r :: rs, st)
+    | _ => .ok ([r], st)
+termination_by structural fuel
+
+/-- An item of a loop body. -/
+def parseItem (fuel : ℕ) (st : PS) : Except String (Raw × PS) :=
+  match fuel with
+  | 0 => .error "loop body too long or too deeply nested"
+  | f + 1 =>
+    match st.toks with
+    | .word "exit" :: ts =>
+      let (n, ts) := match ts with
+        | .num k :: ts => (k.toNat, ts)
+        | ts => (1, ts)
+      match ts with
+      | .word "when" :: ts => do
+        let (c, st) ← parseExp f (st.at ts)
+        .ok (.exit n c, st)
+      | ts => .ok (.exit n (.lit (.bool true)), st.at ts)
+    | .word "if" :: ts => do
+      let (c, st) ← parseExp f (st.at ts)
+      let st ← expectWord "then" st
+      let (t, st) ← parseBody f st
+      match st.toks with
+      | .word "else" :: ts => do
+        let (e, st) ← parseBody f (st.at ts)
+        let st ← expectWord "fi" st
+        .ok (.ifr ((t ++ e).any Raw.jumps) c t e, st)
+      | _ => do
+        let st ← expectWord "fi" st
+        .ok (.ifr (t.any Raw.jumps) c t [.stmt .ok], st)
+    | .word "do" :: ts => do
+      let (b, st) ← parseBody f (st.at ts)
+      let st ← expectWord "od" st
+      .ok (.loop b, st)
+    | _ => do
+      let (p, st) ← parseChoice f st
+      .ok (.stmt p, st)
 termination_by structural fuel
 
 /-- A single statement. -/
@@ -408,34 +576,57 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
   | 0 => .error "program too long or too deeply nested"
   | f + 1 =>
     match st.toks with
-    | .word "ok" :: ts => .ok (.ok, ⟨ts, st.names⟩)
-    | .word "tick" :: ts => .ok (.tick, ⟨ts, st.names⟩)
+    | .word "ok" :: ts => .ok (.ok, st.at ts)
+    | .word "tick" :: ts => .ok (.tick, st.at ts)
     | .word "ensure" :: ts => do
-      let (c, st) ← parseExp f ⟨ts, st.names⟩
+      let (c, st) ← parseExp f (st.at ts)
       .ok (ensure c, st)
     | .word "assert" :: ts => do
-      let (c, st) ← parseExp f ⟨ts, st.names⟩
+      let (c, st) ← parseExp f (st.at ts)
       .ok (assert c, st)
     | .word "if" :: ts => do
-      let (c, st) ← parseExp f ⟨ts, st.names⟩
+      let (c, st) ← parseExp f (st.at ts)
       let st ← expectWord "then" st
       let (p, st) ← parseProg f st
       match st.toks with
       | .word "else" :: ts => do
-        let (q, st) ← parseProg f ⟨ts, st.names⟩
+        let (q, st) ← parseProg f (st.at ts)
         let st ← expectWord "fi" st
         .ok (ifThen c p q, st)
       | _ => do
         let st ← expectWord "fi" st
         .ok (ifThen c p .ok, st)
     | .word "while" :: ts => do
-      let (c, st) ← parseExp f ⟨ts, st.names⟩
+      let (c, st) ← parseExp f (st.at ts)
       let st ← expectWord "do" st
       let (p, st) ← parseProg f st
       let st ← expectWord "od" st
       .ok (loop c p, st)
+    | .word "do" :: ts => do
+      let (b, st) ← parseBody f (st.at ts)
+      let st ← expectWord "od" st
+      compile f [.loop b] none [] st
+    | .word "for" :: ts => do
+      let (i, st) ← parseName (st.at ts)
+      let st ← expectSym ":=" st
+      let (m, st) ← parseExp f st
+      let st ← expectSym ";.." st
+      let (n, st) ← parseExp f st
+      let st ← expectWord "do" st
+      let (body, st) ← parseProg f st
+      let st ← expectWord "od" st
+      if assigns i body then
+        .error s!"the body of a for-loop may not assign its index '{st.names.getD i "?"}'"
+      else
+        let (hi, st) := newHidden st
+        let (k, st) := newProc "for" st
+        let step : P := .seq body (.seq (assign i (.bin .add (.var i) (.lit (.int 1)))) (.call k))
+        let st := st.define k (ifThen (.bin .lt (.var i) (.var hi)) step .ok)
+        .ok (declare hi n (declare i m (.call k)), st)
+    | .word "exit" :: _ =>
+      .error "'exit' is allowed only in a do-loop, and not inside a while-loop, a scope or a choice"
     | .word "new" :: ts => do
-      let (x, st) ← parseName ⟨ts, st.names⟩
+      let (x, st) ← parseName (st.at ts)
       let st ← expectSym ":=" st
       let (e, st) ← parseExp f st
       let st ← expectWord "in" st
@@ -443,52 +634,87 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
       let st ← expectWord "end" st
       .ok (declare x e p, st)
     | .sym "(" :: ts => do
-      let (p, st) ← parseProg f ⟨ts, st.names⟩
+      let (p, st) ← parseProg f (st.at ts)
       let st ← expectSym ")" st
       .ok (p, st)
-    | _ => do
-      let (x, st) ← parseName st
-      let (idx, st) ← parseTarget f st
-      let (e, st) ← parseExp f st
-      match idx with
-      | [] => .ok (assign x e, st)
-      | _ => .ok (assignIdx x idx e, st)
+    | .word w :: ts =>
+      match st.procs.idxOf? w with
+      | some k => .ok (.call k, st.at ts)
+      | none => do
+        let (x, st) ← parseName st
+        let (idx, st) ← parseTarget f st
+        let (e, st) ← parseExp f st
+        match idx with
+        | [] => .ok (assign x e, st)
+        | _ => .ok (assignIdx x idx e, st)
+    | t :: _ => .error s!"expected a statement, found '{t.render}'"
+    | [] => .error "expected a statement, found the end of the program"
 termination_by structural fuel
 
 end
 
-/-- Parse a whole token list, starting from a table of names already in use. The
-fuel is read off its length, and nothing may be left over. -/
-def parseToksWith (names : List String) (ts : Toks) : Except String (P × List String) :=
-  match parseProg (8 * ts.length + 32) ⟨ts, names⟩ with
-  | .ok (p, ⟨[], names⟩) => .ok (p, names)
-  | .ok (_, ⟨t :: _, _⟩) => .error s!"unexpected '{t.render}' after the end of the program"
-  | .error e => .error e
+/-- `file := (name '⇐' program | program)*`, with at most one main program. -/
+def parseFile (fuel : ℕ) (main : Option P) (st : PS) : Except String (Option P × PS) :=
+  match fuel with
+  | 0 => .error "program too long"
+  | f + 1 =>
+    match st.toks with
+    | [] => .ok (main, st)
+    | .word w :: .sym "<==" :: ts =>
+      match st.procs.idxOf? w with
+      | none => .error s!"'{w}' cannot be defined"
+      | some k =>
+        if st.bodies.any (·.1 == k) then .error s!"'{w}' is defined twice"
+        else do
+          let (b, st) ← parseProg f (st.at ts)
+          parseFile f main (st.define k b)
+    | t :: _ =>
+      match main with
+      | some _ => .error s!"unexpected '{t.render}' after the end of the program"
+      | none => do
+        let (p, st) ← parseProg f st
+        parseFile f (some p) st
+termination_by structural fuel
+
+/-- Parse a whole token list, starting from a table of variable names already in
+use. The fuel is read off its length. -/
+def parseToksWith (names : List String) (ts : Toks) : Except String Program := do
+  let procs := scanDefs ts []
+  for w in procs do
+    if isKeyword w then throw s!"the keyword '{w}' cannot be defined"
+    if names.contains w then throw s!"'{w}' names a variable given a value, not a specification"
+  let (main, st) ← parseFile (8 * ts.length + 32) none ⟨ts, names, procs, []⟩
+  let main ← match main, procs with
+    | some p, _ => pure p
+    | none, _ :: _ => pure (.call 0)
+    | none, [] => throw "the program is empty"
+  .ok ⟨main, st.bodies, st.names, st.procs⟩
 
 /-- Parse a whole token list with no names in use. -/
-def parseToks (ts : Toks) : Except String (P × List String) := parseToksWith [] ts
+def parseToks (ts : Toks) : Except String Program := parseToksWith [] ts
 
-/-- Parse a program, given the names already in use, into the abstract syntax and
-the extended table of names. -/
-def parseProgramWith (names : List String) (src : String) : Except String (P × List String) := do
+/-- Parse a program, given the variable names already in use. -/
+def parseProgramWith (names : List String) (src : String) : Except String Program := do
   parseToksWith names (← tokenize (src.length + 1) src.toList)
 
 /-- Parse a program. -/
-def parseProgram (src : String) : Except String (P × List String) := parseProgramWith [] src
+def parseProgram (src : String) : Except String Program := parseProgramWith [] src
 
-/-- Parse a lone expression, given the names in use. -/
+/-- Parse a lone expression, given the variable names in use. -/
 def parseExpression (names : List String) (src : String) : Except String (Exp × List String) := do
   let ts ← tokenize (src.length + 1) src.toList
-  match parseExp (8 * ts.length + 32) ⟨ts, names⟩ with
-  | .ok (e, ⟨[], names⟩) => .ok (e, names)
-  | .ok (_, ⟨t :: _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
+  match parseExp (8 * ts.length + 32) ⟨ts, names, [], []⟩ with
+  | .ok (e, ⟨[], names, _, _⟩) => .ok (e, names)
+  | .ok (_, ⟨t :: _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
   | .error e => .error e
 
 /-! ### States -/
 
-/-- A state, written out: each name in the table with its value. -/
+/-- A state, written out: each name in the table with its value. The loops'
+hidden variables are not shown. -/
 def renderState (names : List String) (s : St) : String :=
-  ", ".intercalate (names.zipIdx.map fun (w, k) => s!"{w} = {(s k).render}")
+  ", ".intercalate ((names.zipIdx.filter fun (w, _) => !w.startsWith "#").map
+    fun (w, k) => s!"{w} = {(s k).render}")
 
 /-! ### The parser produces the demonstration programs
 
@@ -519,7 +745,7 @@ def sumToToks : Toks :=
      .word "s", .sym ":=", .word "s", .sym "+", .word "i",
    .word "od"]
 
-theorem parse_sumTo : parseToksWith ["n"] sumToToks = .ok (sumTo, ["n", "i", "s"]) := rfl
+theorem parse_sumTo : parseToksWith ["n"] sumToToks = .ok ⟨sumTo, [], ["n", "i", "s"], []⟩ := rfl
 
 /-- `1 + ... + 10 = 55`, computed by the interpreter and checked by the kernel. -/
 theorem sumTo_ten : (run 100 sumTo (initWith [(0, .int 10)])).map (· 2) = some (.int 55) := by decide +kernel
@@ -535,7 +761,7 @@ def backtrackToks : Toks :=
   [.word "s", .sym ":=", .num 0, .word "or", .word "s", .sym ":=", .num 1, .sym ".",
    .word "ensure", .word "s", .sym "=", .num 1]
 
-theorem parse_backtrack : parseToks backtrackToks = .ok (backtrack, ["s"]) := rfl
+theorem parse_backtrack : parseToks backtrackToks = .ok ⟨backtrack, [], ["s"], []⟩ := rfl
 
 /-- The search finds the one poststate; the deterministic run finds none. -/
 theorem backtrack_runAll : (runAll 10 backtrack init).map (· 0) = [.int 1] := rfl
@@ -554,14 +780,96 @@ def arraysToks : Toks :=
 
 /-- `A 2:= 3. i:= 2. A i:= 4. A i = A 2` "should equal ⊤", and does. -/
 theorem arrays_run :
-    ((parseToks arraysToks).toOption.bind fun (p, _) => run 20 p init).map (· 2) =
+    ((parseToks arraysToks).toOption.bind fun prog => prog.run 20 init).map (· 2) =
       some (.bool true) := by decide +kernel
+
+/-! #### Named specifications: the list summation of Section 4.1.1
+
+The book's development, as refinements: `A ⇐ s:= 0. n:= 0. B` and
+`B ⇐ if n = #L then ok else s:= s + L n. n:= n+1. B fi`, where `B` on the right
+is a recursive call. -/
+
+def listSumSrc : String := "A ⇐ s:= 0. n:= 0. B\nB ⇐ if n = #L then ok else s:= s + L n. n:= n+1. B fi"
+
+def listSumToks : Toks :=
+  [.word "A", .sym "<==", .word "s", .sym ":=", .num 0, .sym ".", .word "n", .sym ":=",
+   .num 0, .sym ".", .word "B", .word "B", .sym "<==", .word "if", .word "n", .sym "=",
+   .sym "#", .word "L", .word "then", .word "ok", .word "else", .word "s", .sym ":=",
+   .word "s", .sym "+", .word "L", .word "n", .sym ".", .word "n", .sym ":=", .word "n",
+   .sym "+", .num 1, .sym ".", .word "B", .word "fi"]
+
+/-- The sum of `[3; 1; 4; 1; 5]` is `14`, computed by the interpreter from the
+refinements and checked by the kernel. -/
+theorem listSum_run :
+    ((parseToksWith ["L"] listSumToks).toOption.bind fun prog =>
+      prog.run 50 (initWith [(0, .list [.int 3, .int 1, .int 4, .int 1, .int 5])])).map (· 1) =
+      some (.int 14) := by decide +kernel
+
+/-! #### The exit-loop of Section 5.2.1 -/
+
+/-- `do exit when n ≤ x. x:= x+1 od`, which counts `x` up to `n`: the book's
+`x′ = max x n` (`ExitLoopExample.count_up`). -/
+def exitLoopSrc : String := "do exit when n ≤ x. x:= x+1 od"
+
+def exitLoopToks : Toks :=
+  [.word "do", .word "exit", .word "when", .word "n", .sym "<=", .word "x", .sym ".",
+   .word "x", .sym ":=", .word "x", .sym "+", .num 1, .word "od"]
+
+/-- The loop is compiled to a fresh specification refined by the loop body, and
+the main program is a call of it. -/
+theorem parse_exitLoop :
+    (parseToksWith ["n"] exitLoopToks).map (fun prog => (prog.procs, prog.defs.map (·.1))) =
+      .ok (["do#0"], [0]) := rfl
+
+theorem exitLoop_run :
+    ((parseToksWith ["n"] exitLoopToks).toOption.bind fun prog =>
+      prog.run 50 (initWith [(0, .int 5)])).map (· 1) = some (.int 5) := by decide +kernel
+
+theorem exitLoop_run_above :
+    ((parseToksWith ["n", "x"] exitLoopToks).toOption.bind fun prog =>
+      prog.run 50 (initWith [(0, .int 5), (1, .int 9)])).map (· 1) = some (.int 9) := by
+  decide +kernel
+
+/-! #### A deep exit -/
+
+/-- Two loops, the inner one leaving both with `exit 2`. -/
+def deepExitSrc : String := "i:= 0. s:= 0. do j:= 0. do exit 2 when i × j > 6. exit when j = 3. j:= j+1. s:= s+1 od. i:= i+1 od"
+
+def deepExitToks : Toks :=
+  [.word "i", .sym ":=", .num 0, .sym ".", .word "s", .sym ":=", .num 0, .sym ".",
+   .word "do", .word "j", .sym ":=", .num 0, .sym ".", .word "do", .word "exit", .num 2,
+   .word "when", .word "i", .sym "*", .word "j", .sym ">", .num 6, .sym ".", .word "exit",
+   .word "when", .word "j", .sym "=", .num 3, .sym ".", .word "j", .sym ":=", .word "j",
+   .sym "+", .num 1, .sym ".", .word "s", .sym ":=", .word "s", .sym "+", .num 1,
+   .word "od", .sym ".", .word "i", .sym ":=", .word "i", .sym "+", .num 1, .word "od"]
+
+/-- It stops the first time `i × j > 6`, at `i = 3`, `j = 3`, having counted
+`12` inner iterations. -/
+theorem deepExit_run :
+    ((parseToks deepExitToks).toOption.bind fun prog => prog.run 200 init).map
+      (fun s => (s 0, s 1, s 2)) = some (.int 3, .int 12, .int 3) := by decide +kernel
+
+/-! #### The for-loop of Section 5.2.3 -/
+
+/-- `for i:= 1;..n+1 do s:= s + i od`, summing `1` to `n`. -/
+def forLoopSrc : String := "s:= 0. for i:= 1;..n+1 do s:= s + i od"
+
+def forLoopToks : Toks :=
+  [.word "s", .sym ":=", .num 0, .sym ".", .word "for", .word "i", .sym ":=", .num 1,
+   .sym ";..", .word "n", .sym "+", .num 1, .word "do", .word "s", .sym ":=", .word "s",
+   .sym "+", .word "i", .word "od"]
+
+theorem forLoop_run :
+    ((parseToksWith ["n"] forLoopToks).toOption.bind fun prog =>
+      prog.run 100 (initWith [(0, .int 10)])).map (· 1) = some (.int 55) := by decide +kernel
 
 /-- The self-test the binary runs: each demonstration's name, source, and the
 tokens the theorems above are stated of. -/
 def selfTests : List (String × String × Toks) :=
   [("sumTo", sumToSrc, sumToToks), ("backtrack", backtrackSrc, backtrackToks),
-   ("arrays", arraysSrc, arraysToks)]
+   ("arrays", arraysSrc, arraysToks), ("listSum", listSumSrc, listSumToks),
+   ("exitLoop", exitLoopSrc, exitLoopToks), ("deepExit", deepExitSrc, deepExitToks),
+   ("forLoop", forLoopSrc, forLoopToks)]
 
 end Demo
 

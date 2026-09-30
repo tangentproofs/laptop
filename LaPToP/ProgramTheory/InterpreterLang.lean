@@ -252,6 +252,60 @@ def init : St := fun _ => default
 def initWith (xs : List (ℕ × Value)) : St :=
   xs.foldl (fun s (x, v) => Function.update s x v) init
 
+/-- Whether a program can assign to the variable `x`: the syntactic check that a
+for-loop's body leaves its index alone ("it cannot be assigned within `P`",
+Section 5.2.3). A local declaration of `x` hides the assignments inside it; a
+call is not looked into. -/
+def assigns (x : ℕ) : P → Bool
+  | .assign y _ => y == x
+  | .seq p q => assigns x p || assigns x q
+  | .cond _ p q => assigns x p || assigns x q
+  | .or p q => assigns x p || assigns x q
+  | .whileDo _ p => assigns x p
+  | .newLocal y _ p => y != x && assigns x p
+  | .assignAt _ _ => true
+  | _ => false
+
+/-! ### Whole programs -/
+
+/-- A program as the command line runs it: named specifications, each with the
+program that refines it, and a main program. -/
+structure Program where
+  /-- The main program. -/
+  main : P
+  /-- The definitions: specification `k` is refined by its program. -/
+  defs : List (ℕ × P)
+  /-- The names of the variables: variable `k` is written `names[k]`. -/
+  names : List String
+  /-- The names of the specifications, the loops' generated ones included. -/
+  procs : List String
+
+/-- The program refining specification `k`; a name with no definition has no
+behaviour. -/
+def Program.body (prog : Program) (k : ℕ) : P :=
+  (prog.defs.lookup k).getD (.ensure fun _ => false)
+
+/-- The definitions of a program, as the interpreter reads them. -/
+@[instance_reducible] def Program.env (prog : Program) : Defs ℕ Value := ⟨prog.body⟩
+
+/-- Run a program once. -/
+def Program.run (prog : Program) (fuel : ℕ) (s : St) : Option St :=
+  letI := prog.env; Interpreter.run fuel prog.main s
+
+/-- Every poststate of a program within the fuel. -/
+def Program.runAll (prog : Program) (fuel : ℕ) (s : St) : List St :=
+  letI := prog.env; Interpreter.runAll fuel prog.main s
+
+/-- Run a program once on the clock. -/
+def Program.runT (prog : Program) (fuel : ℕ) (st : Timed.TState ℕ Value) :
+    Option (Timed.TState ℕ Value) :=
+  letI := prog.env; Timed.runT fuel prog.main st
+
+/-- Every timed poststate of a program within the fuel. -/
+def Program.runAllT (prog : Program) (fuel : ℕ) (st : Timed.TState ℕ Value) :
+    List (Timed.TState ℕ Value) :=
+  letI := prog.env; Timed.runAllT fuel prog.main st
+
 /-! ### Array element assignment is the book's -/
 
 /-- With no index, element assignment is plain assignment. -/
