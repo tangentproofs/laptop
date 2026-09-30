@@ -1330,7 +1330,7 @@ reflexivity, or `decide` evaluated by the kernel where the elaborator's own
 reduction is too slow.
 :::
 
-:::theorem "interpreter_recursion" (parent := "programming_language_core") (tags := "programs, interpreter, recursion, refinement, exit-loop, for-loop, hehner-4.1.1, hehner-5.2.1, hehner-5.2.3") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Prog, LaPToP.ProgramTheory.Interpreter.Defs, LaPToP.ProgramTheory.Interpreter.DetDefs, LaPToP.ProgramTheory.Interpreter.Eval, LaPToP.ProgramTheory.Interpreter.run_call, LaPToP.ProgramTheory.Interpreter.runAll_call, LaPToP.ProgramTheory.Interpreter.denote_call, LaPToP.ProgramTheory.Interpreter.writes_call, LaPToP.ProgramTheory.Interpreter.exists_run_of_eval, LaPToP.ProgramTheory.Interpreter.denoteWith, LaPToP.ProgramTheory.Interpreter.denote_eq_denoteWith, LaPToP.ProgramTheory.Interpreter.denote_call_eq, LaPToP.ProgramTheory.Interpreter.refines_denote_call, LaPToP.ProgramTheory.Interpreter.run_call_sound, LaPToP.ProgramTheory.Interpreter.CallFree, LaPToP.ProgramTheory.Interpreter.denoteWith_callFree, LaPToP.ProgramTheory.Interpreter.refines_exitLoop, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_call, LaPToP.ProgramTheory.Interpreter.Timed.runT_call, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_call, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_of_eval, LaPToP.ProgramTheory.Interpreter.Timed.eval_of_evalT, LaPToP.ProgramTheory.Interpreter.Lang.assigns, LaPToP.ProgramTheory.Interpreter.Lang.Program, LaPToP.ProgramTheory.Interpreter.Lang.Program.body, LaPToP.ProgramTheory.Interpreter.Lang.Program.env, LaPToP.ProgramTheory.Interpreter.Lang.Program.run, LaPToP.ProgramTheory.Interpreter.Lang.Program.runAll, LaPToP.ProgramTheory.Interpreter.Lang.Program.runT, LaPToP.ProgramTheory.Interpreter.Lang.Program.runAllT, LaPToP.ProgramTheory.Interpreter.Lang.Raw, LaPToP.ProgramTheory.Interpreter.Lang.compile, LaPToP.ProgramTheory.Interpreter.Lang.parseBody, LaPToP.ProgramTheory.Interpreter.Lang.parseItem, LaPToP.ProgramTheory.Interpreter.Lang.parseFile, LaPToP.ProgramTheory.Interpreter.Lang.scanDefs, LaPToP.ProgramTheory.Interpreter.Lang.Demo.listSum_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_exitLoop, LaPToP.ProgramTheory.Interpreter.Lang.Demo.exitLoop_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.exitLoop_run_above, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deepExit_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.forLoop_run")
+:::theorem "interpreter_recursion" (parent := "programming_language_core") (tags := "programs, interpreter, recursion, refinement, exit-loop, for-loop, hehner-4.1.1, hehner-5.2.1, hehner-5.2.3") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Prog, LaPToP.ProgramTheory.Interpreter.Defs, LaPToP.ProgramTheory.Interpreter.DetDefs, LaPToP.ProgramTheory.Interpreter.Eval, LaPToP.ProgramTheory.Interpreter.run_call, LaPToP.ProgramTheory.Interpreter.runAll_call, LaPToP.ProgramTheory.Interpreter.denote_call, LaPToP.ProgramTheory.Interpreter.writes_call, LaPToP.ProgramTheory.Interpreter.exists_run_of_eval, LaPToP.ProgramTheory.Interpreter.denoteWith, LaPToP.ProgramTheory.Interpreter.denote_eq_denoteWith, LaPToP.ProgramTheory.Interpreter.denote_call_eq, LaPToP.ProgramTheory.Interpreter.refines_denote_call, LaPToP.ProgramTheory.Interpreter.run_call_sound, LaPToP.ProgramTheory.Interpreter.CallFree, LaPToP.ProgramTheory.Interpreter.denoteWith_callFree, LaPToP.ProgramTheory.Interpreter.refines_exitLoop, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_call, LaPToP.ProgramTheory.Interpreter.Timed.runT_call, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_call, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_of_eval, LaPToP.ProgramTheory.Interpreter.Timed.eval_of_evalT, LaPToP.ProgramTheory.Interpreter.Lang.assigns, LaPToP.ProgramTheory.Interpreter.Lang.Program, LaPToP.ProgramTheory.Interpreter.Lang.Program.body, LaPToP.ProgramTheory.Interpreter.Lang.Program.env, LaPToP.ProgramTheory.Interpreter.Lang.Program.run, LaPToP.ProgramTheory.Interpreter.Lang.Program.runAll, LaPToP.ProgramTheory.Interpreter.Lang.Program.runT, LaPToP.ProgramTheory.Interpreter.Lang.Program.runAllT, LaPToP.ProgramTheory.Interpreter.Lang.Raw, LaPToP.ProgramTheory.Interpreter.Lang.compile, LaPToP.ProgramTheory.Interpreter.Lang.parseBody, LaPToP.ProgramTheory.Interpreter.Lang.parseItem, LaPToP.ProgramTheory.Interpreter.Lang.parseFile, LaPToP.ProgramTheory.Interpreter.Lang.scanDefs, LaPToP.ProgramTheory.Interpreter.Lang.Demo.listSum_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_exitLoop, LaPToP.ProgramTheory.Interpreter.Lang.Demo.exitLoop_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.exitLoop_run_above, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deepExit_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.forLoop_run, LaPToP.ProgramTheory.Interpreter.Lang.scanParams, LaPToP.ProgramTheory.Interpreter.Lang.internParams, LaPToP.ProgramTheory.Interpreter.Lang.declareAll, LaPToP.ProgramTheory.Interpreter.Lang.callWith, LaPToP.ProgramTheory.Interpreter.Lang.assignAll, LaPToP.ProgramTheory.Interpreter.Lang.Demo.gcd_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.swap_run")
 Named specifications, recursion, and the loops the book defines by refinement.
 The book develops a program by refining named specifications, and a name on the
 right of a refinement is a call of the program that refines it, as in
@@ -1369,15 +1369,26 @@ The demonstrations are reductions in the kernel from parsed source:
 - a deep exit;
 - a for-loop summing $`1` to $`10`.
 
+A specification may have parameters, `P(x, y) ⇐ ...`, called as `P(e, f)`.
+That is the translation {uses "function_and_procedure"}[] proves,
+$`\langle x: D \cdot B\rangle\,e = (\mathbf{new}\ x: D := e \cdot B)` when $`B` does not
+assign $`x`: the arguments are all computed before any parameter is bound, and a
+body that assigns a parameter is rejected. A simultaneous assignment
+$`x, y := e, f` likewise computes both values before assigning either. Euclid's
+algorithm as a recursive procedure and the swap $`x, y := y, x` are among the
+kernel-checked demonstrations.
+
 From the command line, the Towers of Hanoi of Section 4.3, with a `tick` per
-disk move, reports $`2^n - 1` moves in time $`2^n - 1`.
+disk move, reports $`2^n - 1` moves in time $`2^n - 1`, and with the parameters
+`from`, `to`, `using` it records the moves themselves.
 
 Honest scope. The exit-loop rule is proved for the loop whose parts contain no
 calls; nested loops rest on the general theorem about calls. The for-loop is
 justified by the general theorem too, not by the book's for-loop rule, whose
-index is a parameter where here it is a local variable. Procedures with
-parameters, `go to` with labels in the middle of a program, and a call's write
-set are not here.
+index is a parameter where here it is a local variable. Parameters are value
+parameters only; the book's variable parameters, whose aliasing it warns
+against, are not here, nor are `go to` with labels in the middle of a program or
+a call's write set.
 :::
 
 :::proof "interpreter_recursion"

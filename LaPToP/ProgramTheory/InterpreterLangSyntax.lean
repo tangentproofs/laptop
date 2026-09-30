@@ -13,12 +13,14 @@ with its definitions, and means its `denote`.
 ## The grammar
 
 ```
-file      := (name '⇐' program | program)*
+file      := (name params? '⇐' program | program)*
+params    := '(' name (',' name)* ')'
 program   := choice ('.' choice)* '.'?
 choice    := statement ('or' statement)*
 statement := 'ok' | 'tick'
            | name atom* ':=' exp
-           | name                                   -- a call
+           | name (',' name)* ':=' exp (',' exp)*   -- simultaneous
+           | name ('(' exp (',' exp)* ')')?         -- a call
            | 'if' exp 'then' program ('else' program)? 'fi'
            | 'while' exp 'do' program 'od'
            | 'do' body 'od'
@@ -60,6 +62,12 @@ does it, so `P ⇐ do A. do B. exit 2 when c. D od. E od` is `P ⇐ A. Q` with
 scope or a choice. `for i:= m;..n do P od` (Section 5.2.3) is the refinement
 `F ⇐ if i < n then P. i:= i+1. F else ok`, with `i` local, `n` evaluated once
 before the loop, and `P` forbidden to assign `i`.
+
+A specification may have parameters, `P(x, y) ⇐ ...`, and is then called as
+`P(e, f)`: the book's `⟨x: D· B⟩ e = (new x: D := e· B)` of Section 5.5.2, the
+arguments all computed before any parameter is bound and the body forbidden to
+assign a parameter. `x, y:= e, f` likewise computes both values before assigning
+either.
 
 Juxtaposition is indexing, as in the book: `A i` is item `i` of `A`, and
 `A i j:= e` assigns an item of a two-dimensional array. Each symbol has an ASCII
@@ -162,12 +170,25 @@ def intern (w : String) (names : List String) : ℕ × List String :=
   | some k => (k, names)
   | none => (names.length, names ++ [w])
 
-/-- The names defined by a refinement `name ⇐ ...` anywhere in the tokens, in
-order of their first definition. -/
-def scanDefs : Toks → List String → List String
-  | .word w :: .sym "<==" :: ts, acc => scanDefs ts (if acc.contains w then acc else acc ++ [w])
-  | _ :: ts, acc => scanDefs ts acc
-  | [], acc => acc
+/-- The parameters of a definition's head after its `(`, up to the `⇐`. -/
+def scanParams : Toks → Option (List String × Toks)
+  | .word p :: .sym ")" :: .sym "<==" :: ts => some ([p], ts)
+  | .word p :: .sym "," :: ts => (scanParams ts).map fun (ps, ts) => (p :: ps, ts)
+  | _ => none
+
+/-- The specifications defined by a refinement `name ⇐ ...` or
+`name(p, q, ...) ⇐ ...` anywhere in the tokens, with their parameters, in order
+of their first definition. -/
+def scanDefs : ℕ → Toks → List (String × List String) → List (String × List String)
+  | 0, _, acc => acc
+  | f + 1, .word w :: .sym "<==" :: ts, acc =>
+    scanDefs f ts (if acc.any (·.1 == w) then acc else acc ++ [(w, [])])
+  | f + 1, .word w :: rest@(.sym "(" :: ts), acc =>
+    match scanParams ts with
+    | some (ps, ts) => scanDefs f ts (if acc.any (·.1 == w) then acc else acc ++ [(w, ps)])
+    | none => scanDefs f rest acc
+  | f + 1, _ :: ts, acc => scanDefs f ts acc
+  | _, [], acc => acc
 
 /-- The parser's state. -/
 structure PS where
@@ -179,6 +200,8 @@ structure PS where
   procs : List String
   /-- The definitions read so far. -/
   bodies : List (ℕ × P)
+  /-- The parameters of each specification, as variables. -/
+  params : List (List ℕ)
 
 /-- The state with other tokens. -/
 def PS.at (st : PS) (ts : Toks) : PS := { st with toks := ts }
@@ -215,6 +238,40 @@ def newHidden (st : PS) : ℕ × PS :=
 
 /-- Record a definition. -/
 def PS.define (st : PS) (k : ℕ) (body : P) : PS := { st with bodies := st.bodies ++ [(k, body)] }
+
+/-- Fresh hidden variables, one for each of a list. -/
+def newHiddens {α : Type} : List α → PS → List ℕ × PS
+  | [], st => ([], st)
+  | _ :: as, st =>
+    let (t, st) := newHidden st
+    let (ts, st) := newHiddens as st
+    (t :: ts, st)
+
+/-- `new t₁ := e₁ in ... new tₙ := eₙ in p`: every value computed before any is
+used, which is what a simultaneous assignment and a call with arguments need. -/
+def declareAll : List (ℕ × Exp) → P → P
+  | [], p => p
+  | (t, e) :: rest, p => declare t e (declareAll rest p)
+
+/-- A call `P(a, b, ...)` of a specification with parameters `p, q, ...`: the
+book's `⟨p: D· B⟩ a = (new p: D := a· B)` (Section 5.5.2), the arguments all
+evaluated before any parameter is bound. -/
+def callWith (k : ℕ) (ps : List ℕ) (args : List Exp) (st : PS) : P × PS :=
+  match ps, args with
+  | [p], [a] => (declare p a (.call k), st)
+  | _, _ =>
+    let (ts, st) := newHiddens args st
+    (declareAll (ts.zip args) (declareAll (ps.zip (ts.map Exp.var)) (.call k)), st)
+
+/-- `x, y, ...:= e, f, ...`: the values all computed before any is assigned. -/
+def assignAll (xs : List ℕ) (es : List Exp) (st : PS) : P × PS :=
+  let (ts, st) := newHiddens es st
+  let sets : List P := (xs.zip ts).map fun (x, t) => assign x (.var t)
+  (declareAll (ts.zip es) (sets.foldr (fun a b => if b matches .ok then a else .seq a b) .ok), st)
+
+/-- `n` things, for a message. -/
+def plural (n : ℕ) (thing : String) : String :=
+  if n == 1 then s!"1 {thing}" else s!"{n} {thing}s"
 
 /-! ### Expressions -/
 
@@ -401,6 +458,52 @@ termination_by structural fuel
 
 end
 
+/-! ### Lists of arguments, names and values -/
+
+/-- The arguments of a call, after its `(`, up to the `)`. -/
+def parseArgs (fuel : ℕ) (st : PS) : Except String (List Exp × PS) :=
+  match fuel with
+  | 0 => .error "too many arguments"
+  | f + 1 => do
+    let (a, st) ← parseExp f st
+    match st.toks with
+    | .sym "," :: ts => do
+      let (as, st) ← parseArgs f (st.at ts)
+      .ok (a :: as, st)
+    | _ => do
+      let st ← expectSym ")" st
+      .ok ([a], st)
+termination_by structural fuel
+
+/-- The rest of the targets of a simultaneous assignment, after the first `,`, up
+to the `:=`. -/
+def parseNames (fuel : ℕ) (st : PS) : Except String (List ℕ × PS) :=
+  match fuel with
+  | 0 => .error "too many variables"
+  | f + 1 => do
+    let (x, st) ← parseName st
+    match st.toks with
+    | .sym "," :: ts => do
+      let (xs, st) ← parseNames f (st.at ts)
+      .ok (x :: xs, st)
+    | _ => do
+      let st ← expectSym ":=" st
+      .ok ([x], st)
+termination_by structural fuel
+
+/-- The values of a simultaneous assignment. -/
+def parseExps (fuel : ℕ) (st : PS) : Except String (List Exp × PS) :=
+  match fuel with
+  | 0 => .error "too many values"
+  | f + 1 => do
+    let (e, st) ← parseExp f st
+    match st.toks with
+    | .sym "," :: ts => do
+      let (es, st) ← parseExps f (st.at ts)
+      .ok (e :: es, st)
+    | _ => .ok ([e], st)
+termination_by structural fuel
+
 /-! ### Loops, compiled to refinements -/
 
 /-- An item of the body of an exit-loop, before it is compiled: a statement, an
@@ -473,6 +576,7 @@ private def endsBlock : Toks → Bool
   | .word "end" :: _ => true
   | .sym ")" :: _ => true
   | .word _ :: .sym "<==" :: _ => true
+  | .word _ :: .sym "(" :: ts => (scanParams ts).isSome
   | _ => false
 
 mutual
@@ -639,14 +743,33 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
       .ok (p, st)
     | .word w :: ts =>
       match st.procs.idxOf? w with
-      | some k => .ok (.call k, st.at ts)
+      | some k =>
+        match st.params.getD k [], ts with
+        | [], .sym "(" :: _ => .error s!"'{w}' takes no arguments"
+        | [], ts => .ok (.call k, st.at ts)
+        | ps, .sym "(" :: ts => do
+          let (args, st) ← parseArgs f (st.at ts)
+          if args.length != ps.length then
+            .error s!"'{w}' takes {plural ps.length "argument"}, not {args.length}"
+          else .ok (callWith k ps args st)
+        | ps, _ => .error s!"'{w}' takes {plural ps.length "argument"}"
       | none => do
         let (x, st) ← parseName st
-        let (idx, st) ← parseTarget f st
-        let (e, st) ← parseExp f st
-        match idx with
-        | [] => .ok (assign x e, st)
-        | _ => .ok (assignIdx x idx e, st)
+        match st.toks with
+        | .sym "," :: ts => do
+          let (xs, st) ← parseNames f (st.at ts)
+          let (es, st) ← parseExps f st
+          let xs := x :: xs
+          if es.length != xs.length then
+            .error s!"{plural xs.length "variable"} cannot be assigned {plural es.length "value"}"
+          else if !xs.Nodup then .error "a variable is assigned twice at once"
+          else .ok (assignAll xs es st)
+        | _ => do
+          let (idx, st) ← parseTarget f st
+          let (e, st) ← parseExp f st
+          match idx with
+          | [] => .ok (assign x e, st)
+          | _ => .ok (assignIdx x idx e, st)
     | t :: _ => .error s!"expected a statement, found '{t.render}'"
     | [] => .error "expected a statement, found the end of the program"
 termination_by structural fuel
@@ -660,14 +783,24 @@ def parseFile (fuel : ℕ) (main : Option P) (st : PS) : Except String (Option P
   | f + 1 =>
     match st.toks with
     | [] => .ok (main, st)
-    | .word w :: .sym "<==" :: ts =>
-      match st.procs.idxOf? w with
-      | none => .error s!"'{w}' cannot be defined"
-      | some k =>
+    | .word w :: ts =>
+      match st.procs.idxOf? w, (match ts with
+          | .sym "<==" :: ts => some ts
+          | .sym "(" :: ts => (scanParams ts).map (·.2)
+          | _ => none) with
+      | some k, some ts =>
         if st.bodies.any (·.1 == k) then .error s!"'{w}' is defined twice"
         else do
           let (b, st) ← parseProg f (st.at ts)
-          parseFile f main (st.define k b)
+          match (st.params.getD k []).find? (assigns · b) with
+          | some x => .error s!"'{w}' may not assign its parameter '{st.names.getD x "?"}'"
+          | none => parseFile f main (st.define k b)
+      | _, _ =>
+        match main with
+        | some _ => .error s!"unexpected '{w}' after the end of the program"
+        | none => do
+          let (p, st) ← parseProg f st
+          parseFile f (some p) st
     | t :: _ =>
       match main with
       | some _ => .error s!"unexpected '{t.render}' after the end of the program"
@@ -676,19 +809,39 @@ def parseFile (fuel : ℕ) (main : Option P) (st : PS) : Except String (Option P
         parseFile f (some p) st
 termination_by structural fuel
 
+/-- The parameters of the definitions, interned as variables. -/
+def internParams : List (String × List String) → List String → List String × List (List ℕ)
+  | [], names => (names, [])
+  | (_, ps) :: defs, names =>
+    let (xs, names) := internAll ps names
+    let (names, rest) := internParams defs names
+    (names, xs :: rest)
+where
+  /-- Intern each of a list of names. -/
+  internAll : List String → List String → List ℕ × List String
+    | [], names => ([], names)
+    | p :: ps, names =>
+      let (x, names) := intern p names
+      let (xs, names) := internAll ps names
+      (x :: xs, names)
+
 /-- Parse a whole token list, starting from a table of variable names already in
 use. The fuel is read off its length. -/
-def parseToksWith (names : List String) (ts : Toks) : Except String Program := do
-  let procs := scanDefs ts []
-  for w in procs do
-    if isKeyword w then throw s!"the keyword '{w}' cannot be defined"
-    if names.contains w then throw s!"'{w}' names a variable given a value, not a specification"
-  let (main, st) ← parseFile (8 * ts.length + 32) none ⟨ts, names, procs, []⟩
-  let main ← match main, procs with
-    | some p, _ => pure p
-    | none, _ :: _ => pure (.call 0)
-    | none, [] => throw "the program is empty"
-  .ok ⟨main, st.bodies, st.names, st.procs⟩
+def parseToksWith (names : List String) (ts : Toks) : Except String Program :=
+  let defs := scanDefs (ts.length + 1) ts []
+  let procs := defs.map (·.1)
+  let (names, params) := internParams defs names
+  match procs.find? isKeyword, procs.find? names.contains with
+  | some w, _ => .error s!"the keyword '{w}' cannot be defined"
+  | none, some w => .error s!"'{w}' names a variable or a parameter, not a specification"
+  | none, none =>
+    match parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params⟩ with
+    | .error e => .error e
+    | .ok (some p, st) => .ok ⟨p, st.bodies, st.names, st.procs⟩
+    | .ok (none, st) =>
+      match procs with
+      | [] => .error "the program is empty"
+      | _ :: _ => .ok ⟨.call 0, st.bodies, st.names, st.procs⟩
 
 /-- Parse a whole token list with no names in use. -/
 def parseToks (ts : Toks) : Except String Program := parseToksWith [] ts
@@ -703,9 +856,9 @@ def parseProgram (src : String) : Except String Program := parseProgramWith [] s
 /-- Parse a lone expression, given the variable names in use. -/
 def parseExpression (names : List String) (src : String) : Except String (Exp × List String) := do
   let ts ← tokenize (src.length + 1) src.toList
-  match parseExp (8 * ts.length + 32) ⟨ts, names, [], []⟩ with
-  | .ok (e, ⟨[], names, _, _⟩) => .ok (e, names)
-  | .ok (_, ⟨t :: _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
+  match parseExp (8 * ts.length + 32) ⟨ts, names, [], [], []⟩ with
+  | .ok (e, ⟨[], names, _, _, _⟩) => .ok (e, names)
+  | .ok (_, ⟨t :: _, _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
   | .error e => .error e
 
 /-! ### States -/
@@ -716,24 +869,20 @@ def renderState (names : List String) (s : St) : String :=
   ", ".intercalate ((names.zipIdx.filter fun (w, _) => !w.startsWith "#").map
     fun (w, k) => s!"{w} = {(s k).render}")
 
-/-! ### The parser produces the demonstration programs
+/-! ### Demonstrations, from their tokens
 
-As in `InterpreterSyntax`, the agreement of the parser with programs written in
-Lean is a theorem about token lists, and the tokenizer's agreement with the
-source text is checked by `interp --selftest`. -/
+Each demonstration is stated of its token list: the kernel parses the tokens and
+runs the program it gets, so these are facts about what the parser produces,
+not about a program written separately in Lean. That the tokenizer takes each
+source to those tokens is checked by `interp --selftest`, since reducing a string
+to its characters in the kernel is prohibitively slow. The facts are checked by
+`decide` evaluated in the kernel, which reduces the parser far faster than the
+elaborator does. -/
 
 namespace Demo
 
-/-- `i:= 0. s:= 0. while i ≠ n do i:= i+1. s:= s+i od`, with `n` the first name
-in use (given on the command line), then `i` and `s`. -/
-def sumTo : P :=
-  .seq (assign 1 (.lit (.int 0)))
-    (.seq (assign 2 (.lit (.int 0)))
-      (loop (.bin .ne (.var 1) (.var 0))
-        (.seq (assign 1 (.bin .add (.var 1) (.lit (.int 1))))
-          (assign 2 (.bin .add (.var 2) (.var 1))))))
-
-/-- Its source. -/
+/-- `i:= 0. s:= 0. while i ≠ n do i:= i+1. s:= s+i od`, with `n` given on the
+command line. -/
 def sumToSrc : String := "i:= 0. s:= 0. while i ≠ n do i:= i+1. s:= s+i od"
 
 /-- Its tokens. -/
@@ -745,27 +894,37 @@ def sumToToks : Toks :=
      .word "s", .sym ":=", .word "s", .sym "+", .word "i",
    .word "od"]
 
-theorem parse_sumTo : parseToksWith ["n"] sumToToks = .ok ⟨sumTo, [], ["n", "i", "s"], []⟩ := rfl
+/-- The names given on the command line come first in the table, the others in
+order of appearance, and a program with no refinements defines nothing. -/
+theorem parse_sumTo :
+    (parseToksWith ["n"] sumToToks).map (fun prog => (prog.names, prog.procs, prog.defs.length)) =
+      .ok (["n", "i", "s"], [], 0) := by decide +kernel
 
-/-- `1 + ... + 10 = 55`, computed by the interpreter and checked by the kernel. -/
-theorem sumTo_ten : (run 100 sumTo (initWith [(0, .int 10)])).map (· 2) = some (.int 55) := by decide +kernel
+/-- `1 + ... + 10 = 55`, computed by the interpreter from the parsed tokens and
+checked by the kernel. -/
+theorem sumTo_ten :
+    ((parseToksWith ["n"] sumToToks).toOption.bind fun prog =>
+      prog.run 100 (initWith [(0, .int 10)])).map (· 2) = some (.int 55) := by decide +kernel
 
 /-- `s:= 0 or s:= 1. ensure s = 1`, the example of Section 5.4.0. -/
-def backtrack : P :=
-  .seq (.or (assign 0 (.lit (.int 0))) (assign 0 (.lit (.int 1))))
-    (ensure (.bin .eq (.var 0) (.lit (.int 1))))
-
 def backtrackSrc : String := "s:= 0 or s:= 1. ensure s = 1"
 
 def backtrackToks : Toks :=
   [.word "s", .sym ":=", .num 0, .word "or", .word "s", .sym ":=", .num 1, .sym ".",
    .word "ensure", .word "s", .sym "=", .num 1]
 
-theorem parse_backtrack : parseToks backtrackToks = .ok ⟨backtrack, [], ["s"], []⟩ := rfl
+theorem parse_backtrack :
+    (parseToks backtrackToks).map (fun prog => (prog.names, prog.procs)) = .ok (["s"], []) := by
+  decide +kernel
 
 /-- The search finds the one poststate; the deterministic run finds none. -/
-theorem backtrack_runAll : (runAll 10 backtrack init).map (· 0) = [.int 1] := rfl
-theorem backtrack_run : run 10 backtrack init = none := rfl
+theorem backtrack_runAll :
+    ((parseToks backtrackToks).toOption.map fun prog => (prog.runAll 10 init).map (· 0)) =
+      some [.int 1] := by decide +kernel
+
+theorem backtrack_run :
+    ((parseToks backtrackToks).toOption.map fun prog => (prog.run 10 init).isSome) =
+      some false := by decide +kernel
 
 /-- The two examples of Section 5.1.0, as source text. -/
 def arraysSrc : String := "A:= [0;0;0;0;0]. A 2:= 3. i:= 2. A i:= 4. b:= A i = A 2"
@@ -863,13 +1022,45 @@ theorem forLoop_run :
     ((parseToksWith ["n"] forLoopToks).toOption.bind fun prog =>
       prog.run 100 (initWith [(0, .int 10)])).map (· 1) = some (.int 55) := by decide +kernel
 
+/-! #### A procedure with parameters, Section 5.5.2 -/
+
+/-- Euclid's algorithm as a recursive procedure: a call `Gcd(a, b)` is the book's
+`new a := ...· new b := ...· body`, the arguments computed first. -/
+def gcdSrc : String := "Gcd(a, b) ⇐ if b = 0 then g:= a else Gcd(b, a mod b) fi\nGcd(x, y)"
+
+def gcdToks : Toks :=
+  [.word "Gcd", .sym "(", .word "a", .sym ",", .word "b", .sym ")", .sym "<==", .word "if",
+   .word "b", .sym "=", .num 0, .word "then", .word "g", .sym ":=", .word "a",
+   .word "else", .word "Gcd", .sym "(", .word "b", .sym ",", .word "a", .word "mod",
+   .word "b", .sym ")", .word "fi", .word "Gcd", .sym "(", .word "x", .sym ",", .word "y",
+   .sym ")"]
+
+/-- `gcd(1071, 462) = 21`. -/
+theorem gcd_run :
+    ((parseToksWith ["x", "y"] gcdToks).toOption.bind fun prog =>
+      prog.run 100 (initWith [(0, .int 1071), (1, .int 462)])).map (· 4) = some (.int 21) := by
+  decide +kernel
+
+/-! #### Simultaneous assignment -/
+
+/-- `x, y:= y, x` swaps: both values are computed before either is assigned. -/
+def swapSrc : String := "x, y:= y, x"
+
+def swapToks : Toks :=
+  [.word "x", .sym ",", .word "y", .sym ":=", .word "y", .sym ",", .word "x"]
+
+theorem swap_run :
+    ((parseToksWith ["x", "y"] swapToks).toOption.bind fun prog =>
+      prog.run 10 (initWith [(0, .int 1), (1, .int 2)])).map (fun s => (s 0, s 1)) =
+      some (.int 2, .int 1) := by decide +kernel
+
 /-- The self-test the binary runs: each demonstration's name, source, and the
 tokens the theorems above are stated of. -/
 def selfTests : List (String × String × Toks) :=
   [("sumTo", sumToSrc, sumToToks), ("backtrack", backtrackSrc, backtrackToks),
    ("arrays", arraysSrc, arraysToks), ("listSum", listSumSrc, listSumToks),
    ("exitLoop", exitLoopSrc, exitLoopToks), ("deepExit", deepExitSrc, deepExitToks),
-   ("forLoop", forLoopSrc, forLoopToks)]
+   ("forLoop", forLoopSrc, forLoopToks), ("gcd", gcdSrc, gcdToks), ("swap", swapSrc, swapToks)]
 
 end Demo
 

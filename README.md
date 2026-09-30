@@ -61,6 +61,8 @@ MovePile ⇐ if n = 0 then ok
 ```
 
 `lake exe interp --n=10 --timed hanoi.ap` reports `moves = 1023, t = 1023`.
+A specification may take parameters, `MovePile(from, to, using) ⇐ ...`, called as
+`MovePile(0, 1, 2)`; `x, y:= y, x` assigns simultaneously.
 `do ... exit when b ... od` is the exit-loop (`exit n when b` leaves `n` loops) and
 `for i:= m;..n do P od` the for-loop; both are compiled to the refinements the
 book defines them by.

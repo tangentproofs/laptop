@@ -48,7 +48,7 @@ usage: interp [options] [file]
 
   file               read the program from this file (default: standard input)
   --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
-                     listSum, exitLoop, deepExit, forLoop
+                     listSum, exitLoop, deepExit, forLoop, gcd, swap
   --NAME=EXP         the initial value of variable NAME, an expression such as
                      --n=10 or --L=[3;1;2] (every other variable starts at 0)
   --fuel=K           execution fuel (default 1000)
@@ -65,12 +65,14 @@ exit status: 0 success, 1 bad usage or parse error, 2 no poststate,
 
 /-- The grammar of the concrete syntax. -/
 def grammarText : String :=
-"file      := (name '⇐' program | program)*
+"file      := (name params? '⇐' program | program)*
+params    := '(' name (',' name)* ')'
 program   := choice ('.' choice)* '.'?
 choice    := statement ('or' statement)*
 statement := 'ok' | 'tick'
            | name atom* ':=' exp
-           | name                                   -- a call
+           | name (',' name)* ':=' exp (',' exp)*   -- simultaneous
+           | name ('(' exp (',' exp)* ')')?         -- a call
            | 'if' exp 'then' program ('else' program)? 'fi'
            | 'while' exp 'do' program 'od'
            | 'do' body 'od'
@@ -101,6 +103,8 @@ A file is a list of refinements P ⇐ ... and a main program; with no main
 program the first specification is run. A specification's name on the right of
 a refinement is a call, and may be recursive. 'do ... od' is the exit-loop:
 'exit n when b' leaves n loops. 'for i:= m;..n do P od' runs i from m to n-1.
+A specification with parameters, P(x, y) ⇐ ..., is called as P(e, f); the
+arguments are computed first and bound as locals, which the body may not assign.
 
 Values are integers, binaries (⊤, ⊥) and lists ([3; 1; 2]); a variable never
 assigned is 0. '.' is sequential composition and binds loosest, so
@@ -157,6 +161,8 @@ def demoSrc : String → Option String
   | "exitLoop" => some Lang.Demo.exitLoopSrc
   | "deepExit" => some Lang.Demo.deepExitSrc
   | "forLoop" => some Lang.Demo.forLoopSrc
+  | "gcd" => some Lang.Demo.gcdSrc
+  | "swap" => some Lang.Demo.swapSrc
   | _ => none
 
 /-- Read the program text. -/
@@ -264,10 +270,10 @@ def main (args : List String) : IO UInt32 := do
       | some name =>
         match demoSrc name with
         | some src => pure (Except.ok src)
-        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit or forLoop)")
+        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd or swap)")
       | none => readSource o
     for (w, _) in o.sets do
-      if w.isEmpty || isKeyword w || !(parseName ⟨[.word w], [], [], []⟩ matches .ok _) ||
+      if w.isEmpty || isKeyword w || !(parseName ⟨[.word w], [], [], [], []⟩ matches .ok _) ||
           !w.all (fun c => c.isAlphanum || c == '_') then
         IO.eprintln s!"interp: '{w}' cannot be a variable name"
         return 1
