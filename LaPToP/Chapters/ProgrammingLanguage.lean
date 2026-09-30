@@ -1213,7 +1213,7 @@ the string library for the same reason. The four agreements are then reflexivity
 on closed terms.
 :::
 
-:::theorem "interpreter_time" (parent := "programming_language_core") (tags := "programs, interpreter, time, assertions, hehner-4.2") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.run_tick, LaPToP.ProgramTheory.Interpreter.run_assert, LaPToP.ProgramTheory.Interpreter.denote_tick, LaPToP.ProgramTheory.Interpreter.denote_assert, LaPToP.ProgramTheory.Interpreter.runAll_tick, LaPToP.ProgramTheory.Interpreter.runAll_assert, LaPToP.ProgramTheory.Interpreter.writes_tick, LaPToP.ProgramTheory.Interpreter.writes_assert, LaPToP.ProgramTheory.Interpreter.Timed.TState, LaPToP.ProgramTheory.Interpreter.Timed.denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_ne_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT, LaPToP.ProgramTheory.Interpreter.Timed.runT_le, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_of_runT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.denote_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT_assert_of_not, LaPToP.ProgramTheory.Interpreter.Timed.runT_ensure_of_not, LaPToP.ProgramTheory.Interpreter.Timed.implementableT_assert, LaPToP.ProgramTheory.Interpreter.Timed.not_implementable_ensure, LaPToP.ProgramTheory.Interpreter.Timed.refines_assertSpec, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_unfold, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_tick, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_whileDo, LaPToP.ProgramTheory.Interpreter.Timed.renderTime, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount_seven, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.ensure_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_ne_ensure")
+:::theorem "interpreter_time" (parent := "programming_language_core") (tags := "programs, interpreter, time, assertions, hehner-4.2") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.run_tick, LaPToP.ProgramTheory.Interpreter.run_assert, LaPToP.ProgramTheory.Interpreter.denote_tick, LaPToP.ProgramTheory.Interpreter.denote_assert, LaPToP.ProgramTheory.Interpreter.runAll_tick, LaPToP.ProgramTheory.Interpreter.runAll_assert, LaPToP.ProgramTheory.Interpreter.writes_tick, LaPToP.ProgramTheory.Interpreter.writes_assert, LaPToP.ProgramTheory.Interpreter.Timed.TState, LaPToP.ProgramTheory.Interpreter.Timed.denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_ne_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT, LaPToP.ProgramTheory.Interpreter.Timed.runT_le, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_of_runT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runAllT, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_le, LaPToP.ProgramTheory.Interpreter.Timed.evalT_of_mem_runAllT, LaPToP.ProgramTheory.Interpreter.Timed.exists_mem_runAllT_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.mem_runAllT_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.denote_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT_assert_of_not, LaPToP.ProgramTheory.Interpreter.Timed.runT_ensure_of_not, LaPToP.ProgramTheory.Interpreter.Timed.implementableT_assert, LaPToP.ProgramTheory.Interpreter.Timed.not_implementable_ensure, LaPToP.ProgramTheory.Interpreter.Timed.refines_assertSpec, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_unfold, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_tick, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_whileDo, LaPToP.ProgramTheory.Interpreter.Timed.renderTime, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount_seven, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.ensure_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_ne_ensure, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.backtrack_runAllT, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.quickOrSlow_runAllT")
 A clock in the interpreter. Two of the notations are invisible to the state of
 {uses "interpreter"}[]: $`t := t+1` does nothing observable, and
 $`\mathbf{assert}\ b` cannot be told from $`\mathbf{ensure}\ b`, because what
@@ -1227,8 +1227,9 @@ Time is not charged automatically. The programmer advances it with `tick`, as
 the book writes $`t := t+1`, so a loop takes time exactly when its body ticks;
 nothing here claims a cost model for the other notations. `denoteT` is the timed
 specification of a program, `runT` its fuelled interpreter — sound always,
-complete on the deterministic fragment — and `EvalT` the fuel-free execution
-relation, equal to `denoteT` as in
+complete on the deterministic fragment — `runAllT` its searching interpreter,
+which keeps both branches of a choice and so is sound and complete for every
+program, and `EvalT` the fuel-free execution relation, equal to `denoteT` as in
 {uses "interpreter_partial_correctness"}[]. Two facts hold of every program:
 time does not decrease, which is the base axiom of {uses "loop_definition"}[]
 holding here of the whole language, and $`\infty` is absorbing — after a
@@ -1248,8 +1249,10 @@ With the clock the two part company, closing the gap left by
 forever, so its run succeeds and ends at $`t = \infty`, while a false
 $`\mathbf{ensure}` has no poststate and no run at any fuel. The demonstration
 shows both, and a counting loop whose body ticks ending at $`t = 7` after seven
-iterations, computed in the kernel. The command line runs timed programs with
-`--timed`.
+iterations, computed in the kernel. With the search, the backtracking example
+finds its one poststate at the time it started, and `tick or (tick. tick)` is
+reported at both of its times. The command line runs timed programs with
+`--timed`, and searches on the clock with `--timed --all`.
 
 What remains. The memory of a false assertion is left as it was, where the book
 says nothing about the memory variables, so what is implemented refines the
@@ -1258,9 +1261,8 @@ modelled. The loop whose body ends in `tick` has exactly the body
 $`P.\ t := t+1` of the axioms of {uses "loop_definition"}[] and satisfies the
 first of them, but those axioms are stated over the concrete state of that node;
 generalizing them to an arbitrary clocked state, and so restating the
-terminating-runs bridge over programs, is left. There is no searching timed
-interpreter, so a choice and a clock cannot yet be combined. Concurrency and
-channels are untouched.
+terminating-runs bridge over programs, is left. Concurrency and channels are
+untouched.
 :::
 
 :::proof "interpreter_time"

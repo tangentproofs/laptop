@@ -7,7 +7,8 @@ import LaPToP.ProgramTheory.InterpreterTime
 A thin command-line wrapper over `LaPToP.ProgramTheory.Interpreter`. It parses a
 program in the concrete syntax of `Interpreter.Demo`, runs it with `run` (one
 poststate, the deterministic fragment) or searches with `runAll` (every
-poststate, so a choice can backtrack), and prints the final state. No semantics
+poststate, so a choice can backtrack), with `runT`/`runAllT` in place of those on
+a state with a clock, and prints the final state. No semantics
 lives here: the parser, the interpreter and their theorems are in the library,
 and this file is argument handling and printing.
 
@@ -17,7 +18,7 @@ does not touch it.
 
 open LaPToP.ProgramTheory.Interpreter
 open LaPToP.ProgramTheory.Interpreter.Demo
-open LaPToP.ProgramTheory.Interpreter.Timed (TState runT renderTime)
+open LaPToP.ProgramTheory.Interpreter.Timed (TState runT runAllT renderTime)
 
 /-- What the command line asked for. -/
 structure Options where
@@ -57,7 +58,8 @@ usage: interp [options] [file]
   --fuel=K           execution fuel (default 1000)
   --all              search for every poststate (runAll) rather than run once
   --timed            run on a state with a clock and print the final time;
-                     `tick` advances it and a false `assert` waits until \u221e
+                     `tick` advances it and a false `assert` waits until \u221e;
+                     with --all, search on the clock (runAllT)
   --selftest         check the tokenizer against the proved token lists
   --grammar          print the grammar of the concrete syntax
   --help             print this message
@@ -177,6 +179,14 @@ def runSelfTest : IO UInt32 := do
 /-- Run a program and print what it reaches. -/
 def runProgram (o : Options) (p : P) : IO UInt32 := do
   let st := state o.n o.i o.s
+  if o.timed && o.all then
+    let results := runAllT o.fuel p ⟨st, 0⟩
+    if results.isEmpty then
+      IO.eprintln "interp: no poststate — the program has none, or the fuel ran out"
+      return 2
+    for r in results do
+      IO.println s!"{renderState r.mem}, t = {renderTime r.t}"
+    return 0
   if o.timed then
     match runT o.fuel p ⟨st, 0⟩ with
     | some r =>
@@ -221,10 +231,6 @@ def main (args : List String) : IO UInt32 := do
       return 0
     if o.selftest then
       return (← runSelfTest)
-    if o.timed && o.all then
-      IO.eprintln "interp: --timed and --all cannot be combined (there is no searching \
-        timed interpreter yet)"
-      return 1
     match o.demo with
     | some name =>
       match demoProg name with

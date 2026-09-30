@@ -20,6 +20,9 @@ programmer advances it with `Prog.tick`, exactly as the book writes `t:= t+1`,
 and the loop of Section 5.2 takes time only if its body ticks. `denoteT` is the
 timed specification of a program and `runT` its fuelled interpreter; `EvalT` is
 the fuel-free execution relation, equal to `denoteT` as in the untimed module.
+`runAllT` is the searching timed interpreter, `runAll` with a clock: it keeps
+both branches of every choice and finds exactly the timed behaviours
+(`mem_runAllT_iff_denoteT`), where `runT` is complete only without a choice.
 
 Two facts hold of every program: time does not decrease (`time_le_of_denoteT`),
 and `∞` is absorbing (`time_top_of_denoteT`) — once a computation has waited
@@ -530,6 +533,239 @@ theorem evalT_iff_denoteT {p : Prog Var Val} {st st' : TState Var Val} :
       · rw [show st' = st from hok]; exact .assertTrue hb
       · exact hst ▸ .assertFalse (by simpa using hb)
 
+/-! ### The searching timed interpreter
+
+`runT` resolves a choice by taking its left branch, as `run` does. `runAllT` is
+`runAll` with a clock: it keeps every branch, so it finds each timed behaviour of
+every program, the choice included (`mem_runAllT_iff_denoteT`). -/
+
+/-- `runAllT fuel p st` is the list of every timed state `p` can reach from `st`
+within the fuel. -/
+def runAllT : ℕ → Prog Var Val → TState Var Val → List (TState Var Val)
+  | 0, _, _ => []
+  | _ + 1, .ok, st => [st]
+  | _ + 1, .assign x e, st => [⟨Function.update st.mem x (e st.mem), st.t⟩]
+  | n + 1, .seq p q, st => (runAllT n p st).flatMap (runAllT n q)
+  | n + 1, .cond b p q, st => if b st.mem then runAllT n p st else runAllT n q st
+  | n + 1, .whileDo b p, st =>
+      if b st.mem then (runAllT n p st).flatMap (runAllT n (.whileDo b p)) else [st]
+  | n + 1, .newLocal x e p, st =>
+      (runAllT n p ⟨Function.update st.mem x (e st.mem), st.t⟩).map
+        fun u => ⟨Function.update u.mem x (st.mem x), u.t⟩
+  | _ + 1, .assignAt x e, st => [⟨Function.update st.mem (x st.mem) (e st.mem), st.t⟩]
+  | _ + 1, .ensure b, st => if b st.mem then [st] else []
+  | n + 1, .or p q, st => runAllT n p st ++ runAllT n q st
+  | _ + 1, .tick, st => [⟨st.mem, st.t + 1⟩]
+  | _ + 1, .assert b, st => if b st.mem then [st] else [⟨st.mem, ⊤⟩]
+
+@[simp] theorem runAllT_zero (p : Prog Var Val) (st : TState Var Val) :
+    runAllT 0 p st = [] := by cases p <;> rfl
+
+@[simp] theorem runAllT_ok (n : ℕ) (st : TState Var Val) :
+    runAllT (n + 1) .ok st = [st] := rfl
+
+@[simp] theorem runAllT_assign (n : ℕ) (x : Var) (e : Spec.State Var Val → Val)
+    (st : TState Var Val) :
+    runAllT (n + 1) (.assign x e) st = [⟨Function.update st.mem x (e st.mem), st.t⟩] := rfl
+
+@[simp] theorem runAllT_seq (n : ℕ) (p q : Prog Var Val) (st : TState Var Val) :
+    runAllT (n + 1) (.seq p q) st = (runAllT n p st).flatMap (runAllT n q) := rfl
+
+@[simp] theorem runAllT_cond (n : ℕ) (b : Spec.State Var Val → Bool) (p q : Prog Var Val)
+    (st : TState Var Val) :
+    runAllT (n + 1) (.cond b p q) st = if b st.mem then runAllT n p st else runAllT n q st :=
+  rfl
+
+@[simp] theorem runAllT_whileDo (n : ℕ) (b : Spec.State Var Val → Bool) (p : Prog Var Val)
+    (st : TState Var Val) :
+    runAllT (n + 1) (.whileDo b p) st =
+      if b st.mem then (runAllT n p st).flatMap (runAllT n (.whileDo b p)) else [st] := rfl
+
+@[simp] theorem runAllT_newLocal (n : ℕ) (x : Var) (e : Spec.State Var Val → Val)
+    (p : Prog Var Val) (st : TState Var Val) :
+    runAllT (n + 1) (.newLocal x e p) st =
+      (runAllT n p ⟨Function.update st.mem x (e st.mem), st.t⟩).map
+        fun u => ⟨Function.update u.mem x (st.mem x), u.t⟩ := rfl
+
+@[simp] theorem runAllT_assignAt (n : ℕ) (x : Spec.State Var Val → Var)
+    (e : Spec.State Var Val → Val) (st : TState Var Val) :
+    runAllT (n + 1) (.assignAt x e) st =
+      [⟨Function.update st.mem (x st.mem) (e st.mem), st.t⟩] := rfl
+
+@[simp] theorem runAllT_ensure (n : ℕ) (b : Spec.State Var Val → Bool) (st : TState Var Val) :
+    runAllT (n + 1) (.ensure b) st = if b st.mem then [st] else [] := rfl
+
+@[simp] theorem runAllT_or (n : ℕ) (p q : Prog Var Val) (st : TState Var Val) :
+    runAllT (n + 1) (.or p q) st = runAllT n p st ++ runAllT n q st := rfl
+
+@[simp] theorem runAllT_tick (n : ℕ) (st : TState Var Val) :
+    runAllT (n + 1) (Prog.tick : Prog Var Val) st = [⟨st.mem, st.t + 1⟩] := rfl
+
+@[simp] theorem runAllT_assert (n : ℕ) (b : Spec.State Var Val → Bool) (st : TState Var Val) :
+    runAllT (n + 1) (.assert b) st = if b st.mem then [st] else [⟨st.mem, ⊤⟩] := rfl
+
+/-- More fuel never loses a result of the timed search. -/
+theorem runAllT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
+    st' ∈ runAllT f p st → f ≤ g → st' ∈ runAllT g p st := by
+  intro f
+  induction f with
+  | zero => intro g p st st' h _; simp at h
+  | succ n ih =>
+    intro g p st st' h hle
+    obtain ⟨m, rfl⟩ : ∃ m, g = m + 1 := ⟨g - 1, by omega⟩
+    have hnm : n ≤ m := by omega
+    cases p with
+    | ok => simpa using h
+    | assign x e => simpa using h
+    | seq p q =>
+      simp only [runAllT_seq, List.mem_flatMap] at h ⊢
+      obtain ⟨u, hu, hq⟩ := h
+      exact ⟨u, ih hu hnm, ih hq hnm⟩
+    | cond b p q =>
+      simp only [runAllT_cond] at h ⊢
+      split_ifs at h ⊢ with hb
+      · exact ih h hnm
+      · exact ih h hnm
+    | whileDo b p =>
+      simp only [runAllT_whileDo] at h ⊢
+      split_ifs at h ⊢ with hb
+      · simp only [List.mem_flatMap] at h ⊢
+        obtain ⟨u, hu, hw⟩ := h
+        exact ⟨u, ih hu hnm, ih hw hnm⟩
+      · exact h
+    | newLocal x e p =>
+      simp only [runAllT_newLocal, List.mem_map] at h ⊢
+      obtain ⟨u, hu, hst⟩ := h
+      exact ⟨u, ih hu hnm, hst⟩
+    | assignAt x e => simpa using h
+    | ensure b =>
+      simp only [runAllT_ensure] at h ⊢
+      split_ifs at h ⊢ with hb
+      · exact h
+      · simp at h
+    | or p q =>
+      simp only [runAllT_or, List.mem_append] at h ⊢
+      exact h.imp (fun hp => ih hp hnm) fun hq => ih hq hnm
+    | tick => simpa using h
+    | assert b =>
+      simp only [runAllT_assert] at h ⊢
+      split_ifs at h ⊢ with hb <;> exact h
+
+/-- **Soundness of the timed search**: every timed state it finds is an
+execution. -/
+theorem evalT_of_mem_runAllT : ∀ {f : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
+    st' ∈ runAllT f p st → EvalT p st st' := by
+  intro f
+  induction f with
+  | zero => intro p st st' h; simp at h
+  | succ n ih =>
+    intro p st st' h
+    cases p with
+    | ok =>
+      simp only [runAllT_ok, List.mem_singleton] at h
+      subst h; exact .ok
+    | assign x e =>
+      simp only [runAllT_assign, List.mem_singleton] at h
+      subst h; exact .assign
+    | seq p q =>
+      simp only [runAllT_seq, List.mem_flatMap] at h
+      obtain ⟨u, hu, hq⟩ := h
+      exact .seq (ih hu) (ih hq)
+    | cond b p q =>
+      simp only [runAllT_cond] at h
+      split_ifs at h with hb
+      · exact .condTrue hb (ih h)
+      · exact .condFalse (by simpa using hb) (ih h)
+    | whileDo b p =>
+      simp only [runAllT_whileDo] at h
+      split_ifs at h with hb
+      · simp only [List.mem_flatMap] at h
+        obtain ⟨u, hu, hw⟩ := h
+        exact .whileTrue hb (ih hu) (ih hw)
+      · simp only [List.mem_singleton] at h
+        subst h; exact .whileFalse (by simpa using hb)
+    | newLocal x e p =>
+      simp only [runAllT_newLocal, List.mem_map] at h
+      obtain ⟨u, hu, hst⟩ := h
+      subst hst
+      exact .newLocal (ih hu)
+    | assignAt x e =>
+      simp only [runAllT_assignAt, List.mem_singleton] at h
+      subst h; exact .assignAt
+    | ensure b =>
+      simp only [runAllT_ensure] at h
+      split_ifs at h with hb
+      · simp only [List.mem_singleton] at h
+        subst h; exact .ensure hb
+      · simp at h
+    | or p q =>
+      simp only [runAllT_or, List.mem_append] at h
+      exact h.elim (fun hp => .orLeft (ih hp)) fun hq => .orRight (ih hq)
+    | tick =>
+      simp only [runAllT_tick, List.mem_singleton] at h
+      subst h; exact .tick
+    | assert b =>
+      simp only [runAllT_assert] at h
+      split_ifs at h with hb
+      · simp only [List.mem_singleton] at h
+        subst h; exact .assertTrue hb
+      · simp only [List.mem_singleton] at h
+        subst h; exact .assertFalse (by simpa using hb)
+
+/-- **Completeness of the timed search**, for the whole language: every timed
+execution is found with enough fuel. -/
+theorem exists_mem_runAllT_of_evalT : ∀ {p : Prog Var Val} {st st' : TState Var Val},
+    EvalT p st st' → ∃ f, st' ∈ runAllT f p st := by
+  intro p st st' h
+  induction h with
+  | ok => exact ⟨1, by simp⟩
+  | assign => exact ⟨1, by simp⟩
+  | @seq p q st u st' _ _ ihp ihq =>
+    obtain ⟨f₁, h₁⟩ := ihp
+    obtain ⟨f₂, h₂⟩ := ihq
+    refine ⟨max f₁ f₂ + 1, ?_⟩
+    simp only [runAllT_seq, List.mem_flatMap]
+    exact ⟨u, runAllT_le h₁ (le_max_left _ _), runAllT_le h₂ (le_max_right _ _)⟩
+  | condTrue hb _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    exact ⟨f + 1, by simpa [hb] using hf⟩
+  | condFalse hb _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    exact ⟨f + 1, by simpa [hb] using hf⟩
+  | @whileTrue b p st u st' hb _ _ ihp ihw =>
+    obtain ⟨f₁, h₁⟩ := ihp
+    obtain ⟨f₂, h₂⟩ := ihw
+    refine ⟨max f₁ f₂ + 1, ?_⟩
+    have hmem : st' ∈ (runAllT (max f₁ f₂) p st).flatMap
+        (runAllT (max f₁ f₂) (.whileDo b p)) := by
+      simp only [List.mem_flatMap]
+      exact ⟨u, runAllT_le h₁ (le_max_left _ _), runAllT_le h₂ (le_max_right _ _)⟩
+    simpa [hb] using hmem
+  | whileFalse hb => exact ⟨1, by simp [hb]⟩
+  | @newLocal x e p st u _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    refine ⟨f + 1, ?_⟩
+    simp only [runAllT_newLocal, List.mem_map]
+    exact ⟨u, hf, rfl⟩
+  | assignAt => exact ⟨1, by simp⟩
+  | ensure hb => exact ⟨1, by simp [hb]⟩
+  | orLeft _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    exact ⟨f + 1, by simp only [runAllT_or, List.mem_append]; exact Or.inl hf⟩
+  | orRight _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    exact ⟨f + 1, by simp only [runAllT_or, List.mem_append]; exact Or.inr hf⟩
+  | tick => exact ⟨1, by simp⟩
+  | assertTrue hb => exact ⟨1, by simp [hb]⟩
+  | assertFalse hb => exact ⟨1, by simp [hb]⟩
+
+/-- The timed search computes exactly the timed specification, for every program
+— the choice is searched, not resolved, so no `Det` hypothesis is needed. -/
+theorem mem_runAllT_iff_denoteT {p : Prog Var Val} {st st' : TState Var Val} :
+    (∃ f, st' ∈ runAllT f p st) ↔ denoteT p st st' :=
+  ⟨fun ⟨_, h⟩ => evalT_iff_denoteT.mp (evalT_of_mem_runAllT h),
+    fun h => exists_mem_runAllT_of_evalT (evalT_iff_denoteT.mpr h)⟩
+
 /-! ### The untimed interpreter is what a finite-time observer sees -/
 
 /-- **The projection theorem.** From a state at finite time, the behaviours the
@@ -767,6 +1003,21 @@ theorem assert_ne_ensure :
     runT 10 (.assert failing) ⟨start 3, 0⟩ ≠ runT 10 (.ensure failing) ⟨start 3, 0⟩ := by
   rw [assert_false_run, ensure_false_run]
   simp
+
+/-- The backtracking example `s:= 0 or s:= 1. ensure s=1` on the clock: the
+timed search finds its one poststate, at the time it started, where `runT`
+takes the left branch and finds none. -/
+theorem backtrack_runAllT :
+    (runAllT 10 backtrack ⟨start 3, 0⟩).map (fun st => (st.mem Vr.s, st.t)) = [(1, 0)] := rfl
+
+theorem backtrack_runT : runT 10 backtrack ⟨start 3, 0⟩ = none := rfl
+
+/-- `tick or (tick. tick)`: a choice between a quick and a slow branch, which
+the timed search reports with both of their times. -/
+def quickOrSlow : P := .or .tick (.seq .tick .tick)
+
+theorem quickOrSlow_runAllT :
+    (runAllT 10 quickOrSlow ⟨start 0, 0⟩).map TState.t = [1, 2] := rfl
 
 end Demonstration
 

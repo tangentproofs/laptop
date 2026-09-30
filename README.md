@@ -43,13 +43,15 @@ lake exe interp --selftest             # the sources parse to the proved program
 echo 'i:= 0. s:= 0. while i != n do i:= i+1. s:= s+i od' | lake exe interp --n=20
 echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --all   # backtracking
 echo 'while i != n do i:= i+1. tick od' | lake exe interp --n=7 --timed
+echo '(s:= 1 or s:= 2). assert s = 1' | lake exe interp --timed --all
 ```
 
 The state is the three integer variables `n`, `i`, `s`. `--all` searches for
 every poststate (`runAll`) instead of running the deterministic interpreter
 once, which is what a choice needs. `--timed` adds a clock: `tick` advances it,
 and a false `assert` waits until `∞` where a false `ensure` has no poststate at
-all. Exit status is 1 for a parse error and 2
+all. `--timed --all` searches on the clock (`runAllT`), so a choice and a
+clock combine. Exit status is 1 for a parse error and 2
 when there is no poststate. Building the executable links the whole import
 chain, so it is a separate target: plain `lake build` and the Blueprint site do
 not build it.
