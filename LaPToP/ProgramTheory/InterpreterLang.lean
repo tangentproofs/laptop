@@ -1,5 +1,6 @@
 import LaPToP.ProgramTheory.InterpreterTime
 import LaPToP.ProgramTheory.InterpreterProb
+import LaPToP.ProgramTheory.InterpreterFast
 
 /-!
 # The interpreter's language: names, values, and the book's operators
@@ -359,6 +360,25 @@ def Program.runAll (prog : Program) (fuel : ℕ) (s : St) : List St :=
 def Program.runT (prog : Program) (fuel : ℕ) (st : Timed.TState ℕ Value) :
     Option (Timed.TState ℕ Value) :=
   letI := prog.env; Timed.runT fuel prog.main st
+
+/-- Run a program once, on a state kept in an array: what the command line runs. -/
+def Program.runFast (prog : Program) (fuel : ℕ) (a : Array Value) : Option (Array Value) :=
+  letI := prog.env; Interpreter.runFast fuel prog.main a
+
+/-- It computes what `Program.run` computes. -/
+theorem Program.runFast_eq (prog : Program) (fuel : ℕ) (a : Array Value) :
+    (prog.runFast fuel a).map toFun = prog.run fuel (toFun a) :=
+  letI := prog.env; Interpreter.runFast_eq fuel prog.main a
+
+/-- Run a program once on the clock, on a state kept in an array. -/
+def Program.runTFast (prog : Program) (fuel : ℕ) (st : Array Value × ℕ∞) :
+    Option (Array Value × ℕ∞) :=
+  letI := prog.env; Timed.runTFast fuel prog.main st
+
+/-- It computes what `Program.runT` computes. -/
+theorem Program.runTFast_eq (prog : Program) (fuel : ℕ) (st : Array Value × ℕ∞) :
+    (prog.runTFast fuel st).map Timed.toTState = prog.runT fuel (Timed.toTState st) :=
+  letI := prog.env; Timed.runTFast_eq fuel prog.main st
 
 /-- The distribution of a program's final states (Section 5.7). -/
 def Program.runDist (prog : Program) (fuel : ℕ) (s : St) : List (St × ℚ) :=

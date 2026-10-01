@@ -271,10 +271,13 @@ def runProgram (o : Options) (names : List String) (st : St) (prog : Program) : 
     for r in results do
       IO.println s!"{shown r.mem}, t = {renderTime r.t}"
     return 0
+  -- The deterministic runs use the array interpreters, which compute what `run`
+  -- and `runT` compute (`Program.runFast_eq`, `Program.runTFast_eq`).
+  let arr : Array Value := Array.ofFn (n := names.length) fun i => st i.1
   if o.timed then
-    match prog.runT o.fuel ⟨st, 0⟩ with
-    | some r =>
-      IO.println s!"{shown r.mem}, t = {renderTime r.t}"
+    match prog.runTFast o.fuel (arr, 0) with
+    | some (r, t) =>
+      IO.println s!"{shown (toFun r)}, t = {renderTime t}"
       return 0
     | none =>
       IO.eprintln
@@ -290,9 +293,9 @@ def runProgram (o : Options) (names : List String) (st : St) (prog : Program) : 
       IO.println (shown r)
     return 0
   else
-    match prog.run o.fuel st with
+    match prog.runFast o.fuel arr with
     | some r =>
-      IO.println (shown r)
+      IO.println (shown (toFun r))
       return 0
     | none =>
       IO.eprintln

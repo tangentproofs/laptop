@@ -98,7 +98,10 @@ deterministic interpreter once, which is what a choice needs. `--timed` adds a
 clock: `tick` advances it, and a false `assert` waits until `∞` where a false
 `ensure` has no poststate at all. `--timed --all` searches on the clock
 (`runAllT`), so a choice and a clock combine. Exit status is 1 for a parse error
-and 2 when there is no poststate. Building the executable links the whole import
+and 2 when there is no poststate. `--fuel` bounds the depth of the execution, so a
+loop of `n` iterations needs at least `n`; a deterministic run keeps its state in
+an array, proved to compute what the interpreter computes, and a million loop
+iterations take well under a second. Building the executable links the whole import
 chain, so it is a separate target: plain `lake build` and the Blueprint site do
 not build it.
 

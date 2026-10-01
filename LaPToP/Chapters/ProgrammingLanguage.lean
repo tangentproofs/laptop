@@ -23,6 +23,7 @@ import LaPToP.ProgramTheory.InterpreterSyntax
 import LaPToP.ProgramTheory.InterpreterTime
 import LaPToP.ProgramTheory.InterpreterLangSyntax
 import LaPToP.ProgramTheory.InterpreterProb
+import LaPToP.ProgramTheory.InterpreterFast
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1536,4 +1537,32 @@ inner masses, which are at most $`1`, so the total does not grow. The
 probabilistic $`\mathbf{if}`'s two branches have masses at most $`r` and $`1-r`. The
 demonstrations are decided by kernel reduction of the parser and the
 interpreter on rationals.
+:::
+
+:::theorem "interpreter_fast" (parent := "programming_language_core") (tags := "programs, interpreter, implementation") (effort := "small") (lean := "LaPToP.ProgramTheory.Interpreter.toFun, LaPToP.ProgramTheory.Interpreter.store, LaPToP.ProgramTheory.Interpreter.toFun_store, LaPToP.ProgramTheory.Interpreter.mergeArr, LaPToP.ProgramTheory.Interpreter.toFun_mergeArr, LaPToP.ProgramTheory.Interpreter.runFast, LaPToP.ProgramTheory.Interpreter.runFast_eq, LaPToP.ProgramTheory.Interpreter.Timed.runTFast, LaPToP.ProgramTheory.Interpreter.Timed.toTState, LaPToP.ProgramTheory.Interpreter.Timed.runTFast_eq, LaPToP.ProgramTheory.Interpreter.Lang.Program.runFast, LaPToP.ProgramTheory.Interpreter.Lang.Program.runFast_eq, LaPToP.ProgramTheory.Interpreter.Lang.Program.runTFast, LaPToP.ProgramTheory.Interpreter.Lang.Program.runTFast_eq")
+A faster interpreter that computes the same thing. The interpreters keep the
+state as a function, and each assignment wraps it in one more update, so reading
+a variable after $`k` assignments takes $`k` steps and a loop runs in time
+quadratic in its iterations. That is an implementation detail, so the
+deterministic interpreter and its timed version are given again on a state kept
+in an array, where a variable is read in constant time. Each is proved to reach
+a state exactly when the interpreter of {uses "interpreter_soundness"}[], or its
+timed version in {uses "interpreter_time"}[], does, and the same state.
+
+The command line runs these, so what it prints for a deterministic run is still,
+by those theorems, what the proved interpreter computes. A summation loop of a
+million iterations takes a fraction of a second, where eight thousand took two.
+
+Honest scope. The searching interpreters and the distribution interpreter still
+use the function-based state. The conversion of the command line's initial
+values into an array is not itself proved, though the state it builds has the
+default value past the variables the program names, as the array does.
+:::
+
+:::proof "interpreter_fast"
+Storing into the array, growing it with default values when the variable is past
+its end, is assignment, by extensionality item by item. Merging two arrays is
+merging two states, likewise. Each interpreter is then the other with the state
+converted, by induction on the fuel, each case unfolding one step of both and
+using those two facts.
 :::
