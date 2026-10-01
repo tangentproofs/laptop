@@ -1,5 +1,6 @@
 import LaPToP.ProgramTheory.InterpreterTime
 import Mathlib.Logic.Relation
+import Mathlib.Algebra.Order.BigOperators.Group.Finset
 
 /-!
 # Communicating processes
@@ -38,12 +39,21 @@ channel has at most one writer and at most one reader (`Net.WF`).
 
 ## What is proved
 
-* `normal_unique` — **determinacy**: from a start, the machine reaches at most
-  one final configuration, whatever the order in which the processes take
-  their turns (it is confluent: `mstep_diamond`).
+* `normal_unique` — **determinacy** (Kahn): from a start, the machine reaches at
+  most one configuration in which no step is possible, whatever the order in
+  which the processes take their turns (it is confluent: `mstep_diamond`).
 * `netSpec_of_reach` — **soundness**: a run of the machine in which every
   process finishes is a behaviour of the book's semantics, with the scripts the
   machine wrote.
+* `reach_of_netSpec` — **completeness**: a behaviour of the book's semantics in
+  which every process finishes at a finite time is the machine's. The argument
+  is the book's own reason that communication is well defined: a process waits
+  only for a message sent earlier (`blocked_descent`).
+* `netSpec_unique` — so the book's semantics has at most one behaviour with
+  finite times, and `deadlock_top` — if the machine stops with a process
+  unfinished, every behaviour of the book's semantics has a process at `∞`.
+* `runNet_correct` — the executable round-robin runner `runNet` computes that
+  behaviour.
 
 ## Honest scope
 
@@ -559,5 +569,675 @@ theorem netSpec_of_reach {net : Net Var Val} (hwf : net.WF) {s : Spec.State Var 
   refine ⟨?_, hc.w hpr hpc⟩
   rw [← hpc']
   exact hc.path c.L (fun _ => List.prefix_rfl) hpr hpc
+
+/-! ### Running a network -/
+
+/-- `Det`, as a test. -/
+def detB : Prog Var Val → Bool
+  | .seq p q => detB p && detB q
+  | .cond _ p q => detB p && detB q
+  | .whileDo _ p => detB p
+  | .newLocal _ _ p => detB p
+  | .or _ _ => false
+  | .par _ p q => detB p && detB q
+  | .prob _ _ _ => false
+  | _ => true
+
+omit [DecidableEq Var] [Defs Var Val] in
+/-- The test is right. -/
+theorem det_of_detB : ∀ {p : Prog Var Val}, detB p = true → Det p := by
+  intro p h
+  induction p with
+  | seq _ _ ihp ihq => simp only [detB, Bool.and_eq_true] at h; exact ⟨ihp h.1, ihq h.2⟩
+  | cond _ _ _ ihp ihq => simp only [detB, Bool.and_eq_true] at h; exact ⟨ihp h.1, ihq h.2⟩
+  | whileDo _ _ ih => exact ih h
+  | newLocal _ _ _ ih => exact ih h
+  | or => simp [detB] at h
+  | par _ _ _ ihp ihq => simp only [detB, Bool.and_eq_true] at h; exact ⟨ihp h.1, ihq h.2⟩
+  | prob => simp [detB] at h
+  | _ => trivial
+
+/-- Process `i` takes a step, if it can; a chunk is run with fuel `f`. -/
+def stepAt (net : Net Var Val) (f : ℕ) (c : MCfg Var Val) (i : ℕ) : Option (MCfg Var Val) :=
+  match c.ps[i]? with
+  | some ⟨.act p :: k, st⟩ =>
+      if detB p then (runT f p ⟨st.mem, st.t⟩).map fun u =>
+        ⟨c.ps.set i ⟨k, { st with mem := u.mem, t := u.t }⟩, c.L⟩ else none
+  | some ⟨.seq p q :: k, st⟩ => some ⟨c.ps.set i ⟨p :: q :: k, st⟩, c.L⟩
+  | some ⟨.cond b p q :: k, st⟩ =>
+      some ⟨c.ps.set i ⟨(if b st.mem then p else q) :: k, st⟩, c.L⟩
+  | some ⟨.loop b p :: k, st⟩ =>
+      some ⟨c.ps.set i ⟨if b st.mem then p :: .loop b p :: k else k, st⟩, c.L⟩
+  | some ⟨.call n :: k, st⟩ => some ⟨c.ps.set i ⟨net.defs n :: k, st⟩, c.L⟩
+  | some ⟨.send ch e :: k, st⟩ =>
+      match net.procs[i]? with
+      | some pr =>
+        if ch ∈ pr.outs then
+          some ⟨c.ps.set i ⟨k, st.sent ch⟩, Function.update c.L ch (c.L ch ++ [(e st.mem, st.t)])⟩
+        else none
+      | none => none
+  | some ⟨.recv ch x :: k, st⟩ =>
+      match net.procs[i]? with
+      | some pr =>
+        if ch ∈ pr.ins then
+          ((c.L ch)[st.r ch]?).map fun m => ⟨c.ps.set i ⟨k, st.received ch x m⟩, c.L⟩
+        else none
+      | none => none
+  | _ => none
+
+/-- A step the runner takes is a step of the machine. -/
+theorem mstep_of_stepAt {net : Net Var Val} {f : ℕ} {c c' : MCfg Var Val} {i : ℕ}
+    (h : stepAt net f c i = some c') : MStep net c c' := by
+  unfold stepAt at h
+  split at h
+  · rename_i p k st hps
+    split_ifs at h with hd
+    obtain ⟨u, hu, rfl⟩ := Option.map_eq_some_iff.mp h
+    exact .mk hps (.loc (.act (det_of_detB hd) (evalT_iff_denoteT.mpr (denoteT_of_runT hu))))
+  · rename_i hps; cases h; exact .mk hps (.loc .seq)
+  · rename_i b p q k st hps
+    cases h
+    cases hb : b st.mem
+    · simpa [hb] using MStep.mk (net := net) hps (.loc (.condF hb))
+    · simpa [hb] using MStep.mk (net := net) hps (.loc (.condT hb))
+  · rename_i b p k st hps
+    cases h
+    cases hb : b st.mem
+    · simpa [hb] using MStep.mk (net := net) hps (.loc (.loopF hb))
+    · simpa [hb] using MStep.mk (net := net) hps (.loc (.loopT hb))
+  · rename_i hps; cases h; exact .mk hps (.loc .call)
+  · rename_i ch e k st hps
+    split at h
+    · rename_i pr hpr
+      split_ifs at h with hch
+      cases h
+      exact .mk hps (.send hpr hch rfl)
+    · cases h
+  · rename_i ch x k st hps
+    split at h
+    · rename_i pr hpr
+      split_ifs at h with hch
+      obtain ⟨m, hm, rfl⟩ := Option.map_eq_some_iff.mp h
+      exact .mk hps (.recv hpr hch hm)
+    · cases h
+  · cases h
+
+/-- One round: each process in turn takes a step if it can. Also says whether
+any did. -/
+def sweep (net : Net Var Val) (f : ℕ) (c : MCfg Var Val) : MCfg Var Val × Bool :=
+  (List.range c.ps.length).foldl
+    (fun acc i => match stepAt net f acc.1 i with
+      | some c' => (c', true)
+      | none => acc) (c, false)
+
+/-- A round is a run of the machine. -/
+theorem reach_sweep (net : Net Var Val) (f : ℕ) (c : MCfg Var Val) :
+    ReflTransGen (MStep net) c (sweep net f c).1 := by
+  unfold sweep
+  generalize List.range c.ps.length = l
+  suffices ∀ acc : MCfg Var Val × Bool, ReflTransGen (MStep net) c acc.1 →
+      ReflTransGen (MStep net) c (l.foldl (fun acc i => match stepAt net f acc.1 i with
+        | some c' => (c', true)
+        | none => acc) acc).1 from this _ .refl
+  induction l with
+  | nil => exact fun _ h => h
+  | cons i l ih =>
+    intro acc hacc
+    apply ih
+    dsimp only
+    split
+    · rename_i c' h; exact hacc.tail (mstep_of_stepAt h)
+    · exact hacc
+
+/-- Run a network for at most `n` rounds, round robin, stopping early when no
+process can move. Fuel `f` is for each chunk. -/
+def runNet (net : Net Var Val) (f : ℕ) : ℕ → MCfg Var Val → MCfg Var Val
+  | 0, c => c
+  | n + 1, c => if (sweep net f c).2 then runNet net f n (sweep net f c).1 else c
+
+/-- The runner's result is reached by the machine. -/
+theorem reach_runNet (net : Net Var Val) (f : ℕ) :
+    ∀ (n : ℕ) (c : MCfg Var Val), ReflTransGen (MStep net) c (runNet net f n c)
+  | 0, _ => .refl
+  | n + 1, c => by
+    unfold runNet
+    split_ifs
+    · exact (reach_sweep net f c).trans (reach_runNet net f n _)
+    · exact .refl
+
+/-- Every process has finished, as a test. -/
+def MCfg.done (c : MCfg Var Val) : Bool := c.ps.all fun pc => pc.k.isEmpty
+
+omit [DecidableEq Var] [Defs Var Val] in
+/-- The test is right. -/
+theorem MCfg.Done.of_done {c : MCfg Var Val} (h : c.done = true) : c.Done := by
+  intro pc hpc
+  simpa using List.all_eq_true.mp h pc hpc
+
+/-- **The runner computes the network**: when it ends with every process
+finished, what it computed is a behaviour of the book's semantics, and it is the
+only configuration without a next step that the machine can reach, under any
+schedule. -/
+theorem runNet_correct [DetDefs Var Val] {net : Net Var Val} (hwf : net.WF) (f n : ℕ)
+    (s : Spec.State Var Val) (t : ℕ∞) (hd : (runNet net f n (net.init s t)).done = true) :
+    NetSpec net s t ((runNet net f n (net.init s t)).ps.map (·.st))
+        (runNet net f n (net.init s t)).L ∧
+      ∀ c, ReflTransGen (MStep net) (net.init s t) c → Normal net c →
+        c = runNet net f n (net.init s t) := by
+  have hr := reach_runNet net f n (net.init s t)
+  have hD := MCfg.Done.of_done hd
+  exact ⟨netSpec_of_reach hwf hr hD, fun c hc hn => normal_unique hwf hc hn hr (normal_of_done hD)⟩
+
+/-! ### Completeness -/
+
+/-- `n` steps of `r`. -/
+inductive Path {α : Type*} (r : α → α → Prop) : ℕ → α → α → Prop
+  | refl {a : α} : Path r 0 a a
+  | head {n : ℕ} {a b c : α} : r a b → Path r n b c → Path r (n + 1) a c
+
+omit [DecidableEq Var] [Defs Var Val] in
+/-- A run has a length. -/
+theorem exists_path {α : Type*} {r : α → α → Prop} {a b : α} (h : ReflTransGen r a b) :
+    ∃ n, Path r n a b := by
+  induction h using ReflTransGen.head_induction_on with
+  | refl => exact ⟨0, .refl⟩
+  | head hab _ ih => obtain ⟨n, hn⟩ := ih; exact ⟨n + 1, .head hab hn⟩
+
+/-- The book's step is determined too: given the scripts, a process has one
+history. -/
+theorem pstep_det [DetDefs Var Val] {defs : ℕ → NProc Var Val} {pr : Proc Var Val}
+    {S : Scripts Val} {a b b' : PCfg Var Val} (h : PStep defs pr S a b)
+    (h' : PStep defs pr S a b') : b = b' := by
+  cases h with
+  | loc hl =>
+    cases h' with
+    | loc hl' => exact lstep_det hl hl'
+    | send => cases hl
+    | recv => cases hl
+    | never => cases hl
+  | send =>
+    cases h' with
+    | loc hl => cases hl
+    | send => rfl
+  | recv _ hm =>
+    cases h' with
+    | loc hl => cases hl
+    | recv _ hm' => rw [hm] at hm'; cases hm'; rfl
+    | never _ hm' => rw [hm] at hm'; cases hm'
+  | never _ hm =>
+    cases h' with
+    | loc hl => cases hl
+    | recv _ hm' => rw [hm] at hm'; cases hm'
+    | never => rfl
+
+/-- A finished process takes no step. -/
+theorem pstep_nil {defs : ℕ → NProc Var Val} {pr : Proc Var Val} {S : Scripts Val}
+    {st : PSt Var Val} {b : PCfg Var Val} (h : PStep defs pr S ⟨[], st⟩ b) : False := by
+  cases h with | loc hl => cases hl
+
+/-- A finished process is where its history ends. -/
+theorem path_nil {defs : ℕ → NProc Var Val} {pr : Proc Var Val} {S : Scripts Val} {n : ℕ}
+    {a : PCfg Var Val} {f : PSt Var Val} (ha : a.k = [])
+    (h : Path (PStep defs pr S) n a ⟨[], f⟩) : a.st = f := by
+  cases h with
+  | refl => rfl
+  | head hs _ =>
+    obtain ⟨k, st⟩ := a
+    dsimp only at ha
+    subst ha
+    exact (pstep_nil hs).elim
+
+/-- A step along a history leaves the rest of it. -/
+theorem path_tail [DetDefs Var Val] {defs : ℕ → NProc Var Val} {pr : Proc Var Val}
+    {S : Scripts Val} {n : ℕ} {a b : PCfg Var Val} {f : PSt Var Val}
+    (h : Path (PStep defs pr S) n a ⟨[], f⟩) (hs : PStep defs pr S a b) :
+    ∃ m, n = m + 1 ∧ Path (PStep defs pr S) m b ⟨[], f⟩ := by
+  cases h with
+  | refl => exact (pstep_nil hs).elim
+  | head hs' hp => rw [pstep_det hs hs']; exact ⟨_, rfl, hp⟩
+
+/-- Time does not go backward. -/
+theorem PStep.t_le {defs : ℕ → NProc Var Val} {pr : Proc Var Val} {S : Scripts Val}
+    {a b : PCfg Var Val} (h : PStep defs pr S a b) : a.st.t ≤ b.st.t := by
+  cases h with
+  | loc hl =>
+    cases hl with
+    | act _ he => exact time_le_of_evalT he
+    | _ => exact le_rfl
+  | send => exact le_rfl
+  | recv => exact le_max_left _ _
+  | never => exact le_top
+
+/-- Time does not go backward. -/
+theorem Path.t_le {defs : ℕ → NProc Var Val} {pr : Proc Var Val} {S : Scripts Val} {n : ℕ}
+    {a b : PCfg Var Val} (h : Path (PStep defs pr S) n a b) : a.st.t ≤ b.st.t := by
+  induction h with
+  | refl => exact le_rfl
+  | head hs _ ih => exact hs.t_le.trans ih
+
+/-- **A message is stamped with a time between now and the end**: a message a
+process will write is in the script, sent no earlier than the process's time now
+and no later than its time at the end. -/
+theorem Path.stamp {defs : ℕ → NProc Var Val} {pr : Proc Var Val} {S : Scripts Val} {n : ℕ}
+    {a z : PCfg Var Val} (h : Path (PStep defs pr S) n a z) {ch idx : ℕ}
+    (h₁ : a.st.w ch ≤ idx) (h₂ : idx < z.st.w ch) :
+    ∃ m, (S ch)[idx]? = some m ∧ a.st.t ≤ m.2 ∧ m.2 ≤ z.st.t := by
+  induction h with
+  | refl => omega
+  | head hs hp ih =>
+    have ht := hs.t_le
+    cases hs with
+    | loc hl =>
+      obtain ⟨m, hm, h₃, h₄⟩ := ih (by rw [hl.w_eq]; exact h₁) h₂
+      exact ⟨m, hm, ht.trans h₃, h₄⟩
+    | @send ch' e k st hch hS =>
+      by_cases hc : ch' = ch ∧ st.w ch = idx
+      · obtain ⟨rfl, rfl⟩ := hc
+        exact ⟨_, hS, le_rfl, hp.t_le⟩
+      · obtain ⟨m, hm, h₃, h₄⟩ := ih (by
+          by_cases hcc : ch' = ch
+          · subst hcc
+            dsimp only at h₁
+            simp only [PSt.sent, Function.update_self]
+            have : st.w ch' ≠ idx := fun h => hc ⟨rfl, h⟩
+            omega
+          · simpa [PSt.sent, Function.update_of_ne (Ne.symm hcc)] using h₁) h₂
+        exact ⟨m, hm, ht.trans h₃, h₄⟩
+    | recv =>
+      obtain ⟨m, hm, h₃, h₄⟩ := ih h₁ h₂
+      exact ⟨m, hm, ht.trans h₃, h₄⟩
+    | never =>
+      obtain ⟨m, hm, h₃, h₄⟩ := ih h₁ h₂
+      exact ⟨m, hm, ht.trans h₃, h₄⟩
+
+omit [DecidableEq Var] [Defs Var Val] in
+/-- A message added at the end of a prefix, as the script goes on. -/
+theorem prefix_snoc {α : Type*} {l s : List α} {x : α} (h : l <+: s) (hx : s[l.length]? = some x) :
+    l ++ [x] <+: s := by
+  obtain ⟨u, rfl⟩ := h
+  cases u with
+  | nil => simp at hx
+  | cons y u =>
+    simp at hx
+    subst hx
+    exact ⟨u, by simp⟩
+
+/-- A machine action that is the book's step keeps the scripts written a prefix
+of the book's. -/
+theorem Act.pre {net : Net Var Val} {i : ℕ} {L L' : Scripts Val} {a b : PCfg Var Val}
+    (h : Act net i L a b L') {pr : Proc Var Val} (hpr : net.procs[i]? = some pr)
+    (hw : ∀ c ∈ pr.outs, a.st.w c = (L c).length) {S : Scripts Val}
+    (hs : PStep net.defs pr S a b) (hpre : ∀ c, L c <+: S c) : ∀ c, L' c <+: S c := by
+  cases h with
+  | loc => exact hpre
+  | @send _ pr' ch e k st hpr' hch hL =>
+    rw [hpr] at hpr'; cases hpr'
+    subst hL
+    cases hs with
+    | loc hl => cases hl
+    | send _ hS =>
+      intro c
+      by_cases hc : c = ch
+      · subst hc
+        rw [Function.update_self]
+        exact prefix_snoc (hpre c) (by rw [← hw c hch]; exact hS)
+      · rw [Function.update_of_ne hc]; exact hpre c
+  | recv => exact hpre
+
+/-- Process `i` waits at an input whose message — in the scripts `S` — has not
+been written yet; it was sent at time `τ`. -/
+def Blocked (net : Net Var Val) (S : Scripts Val) (c : MCfg Var Val) (i : ℕ) (τ : ℕ∞) : Prop :=
+  ∃ (pr : Proc Var Val) (ch : ℕ) (x : Var) (k : List (NProc Var Val)) (st : PSt Var Val)
+    (m : Msg Val), net.procs[i]? = some pr ∧ c.ps[i]? = some ⟨.recv ch x :: k, st⟩ ∧
+    ch ∈ pr.ins ∧ (S ch)[st.r ch]? = some m ∧ m.2 = τ ∧ (c.L ch)[st.r ch]? = none
+
+section Complete
+
+variable [DetDefs Var Val] {net : Net Var Val} {s : Spec.State Var Val} {t : ℕ∞}
+  {fin : List (PSt Var Val)} {S : Scripts Val} {c : MCfg Var Val}
+
+/-- The machine is following the book's histories. -/
+def Follows (net : Net Var Val) (fin : List (PSt Var Val)) (S : Scripts Val) (c : MCfg Var Val)
+    (len : ℕ → ℕ) : Prop :=
+  ∀ {i : ℕ} {pr : Proc Var Val} {pc : PCfg Var Val} {f : PSt Var Val}, net.procs[i]? = some pr →
+    c.ps[i]? = some pc → fin[i]? = some f → Path (PStep net.defs pr S) (len i) pc ⟨[], f⟩
+
+omit [DetDefs Var Val] in
+/-- Each process's configuration belongs to a process. -/
+theorem exists_proc (hc : Inv net s t c) {i : ℕ} {pc : PCfg Var Val} (hi : c.ps[i]? = some pc) :
+    ∃ pr, net.procs[i]? = some pr := by
+  have := (List.getElem?_eq_some_iff.mp hi).1
+  exact ⟨net.procs[i]'(hc.length ▸ this), List.getElem?_eq_getElem _⟩
+
+omit [DetDefs Var Val] in
+/-- Each process has a configuration. -/
+theorem exists_pcfg (hc : Inv net s t c) {i : ℕ} {pr : Proc Var Val}
+    (hi : net.procs[i]? = some pr) : ∃ pc, c.ps[i]? = some pc := by
+  have := (List.getElem?_eq_some_iff.mp hi).1
+  exact ⟨c.ps[i]'(hc.length ▸ this), List.getElem?_eq_getElem _⟩
+
+omit [DetDefs Var Val] in
+/-- Each process has a final state. -/
+theorem exists_fin (hspec : NetSpec net s t fin S) {i : ℕ} {pr : Proc Var Val}
+    (hi : net.procs[i]? = some pr) : ∃ f, fin[i]? = some f := by
+  have := (List.getElem?_eq_some_iff.mp hi).1
+  exact ⟨fin[i]'(hspec.1 ▸ this), List.getElem?_eq_getElem _⟩
+
+omit [DetDefs Var Val] in
+/-- A process that has not finished can take the book's next step on the
+machine, or is blocked. -/
+theorem step_or_blocked (hspec : NetSpec net s t fin S) (hfin : ∀ f ∈ fin, f.t ≠ ⊤)
+    (hc : Inv net s t c) (hpre : ∀ ch, c.L ch <+: S ch) {len : ℕ → ℕ}
+    (hpath : Follows net fin S c len) {i : ℕ} {pc : PCfg Var Val} (hi : c.ps[i]? = some pc)
+    (hk : pc.k ≠ []) :
+    (∃ b L', Act net i c.L pc b L' ∧ ∀ pr, net.procs[i]? = some pr → PStep net.defs pr S pc b) ∨
+      ∃ τ, Blocked net S c i τ := by
+  obtain ⟨pr, hpr⟩ := exists_proc hc hi
+  obtain ⟨f, hf⟩ := exists_fin hspec hpr
+  have hp := hpath hpr hi hf
+  generalize len i = n at hp
+  cases hp with
+  | refl => exact (hk rfl).elim
+  | head hs hrest =>
+    have same : ∀ {pr'}, net.procs[i]? = some pr' → pr' = pr := fun h => by
+      rw [hpr] at h; exact (Option.some.inj h).symm
+    cases hs with
+    | loc hl => exact .inl ⟨_, _, .loc hl, fun _ _ => .loc hl⟩
+    | send hch hS =>
+      exact .inl ⟨_, _, .send hpr hch rfl, fun _ h => by rw [same h]; exact .send hch hS⟩
+    | @recv ch x k st m hch hm =>
+      cases hL : (c.L ch)[st.r ch]? with
+      | none => exact .inr ⟨_, pr, ch, x, k, st, m, hpr, hi, hch, hm, rfl, hL⟩
+      | some m' =>
+        have := getElem?_of_prefix (hpre ch) hL
+        rw [hm] at this; cases this
+        exact .inl ⟨_, _, .recv hpr hch hL, fun _ h => by rw [same h]; exact .recv hch hm⟩
+    | never =>
+      have := hrest.t_le
+      exact (hfin f (List.mem_of_getElem? hf) (top_le_iff.mp this)).elim
+
+/-- **The time-ordering argument.** If every unfinished process is blocked, the
+writer of the message a blocked process waits for is itself blocked, waiting for
+a message sent strictly earlier: it receives that message before it sends the
+one awaited, and a message is received one unit after it is sent. -/
+theorem blocked_descent (hspec : NetSpec net s t fin S)
+    (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (hc : Inv net s t c)
+    {len : ℕ → ℕ} (hpath : Follows net fin S c len)
+    (hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ τ, Blocked net S c j τ)
+    {i : ℕ} {τ : ℕ∞} (hb : Blocked net S c i τ) : ∃ j τ', Blocked net S c j τ' ∧ τ' < τ := by
+  obtain ⟨pr, ch, x, k, st, m, hpr, hi, hch, hm, rfl, hL⟩ := hb
+  by_cases hw : ∃ (j : ℕ) (prj : Proc Var Val), net.procs[j]? = some prj ∧ ch ∈ prj.outs
+  swap
+  · push Not at hw
+    have h₁ := hc.input ch hw
+    have h₂ := hspec.2.2 ch hw
+    rw [h₁, ← h₂, hm] at hL
+    cases hL
+  obtain ⟨j, prj, hprj, hchj⟩ := hw
+  obtain ⟨pcj, hpcj⟩ := exists_pcfg hc hprj
+  obtain ⟨fj, hfj⟩ := exists_fin hspec hprj
+  have hwj := hc.w hprj hpcj ch hchj
+  have hr : (c.L ch).length ≤ st.r ch := List.getElem?_eq_none_iff.mp hL
+  have hfw := (hspec.2.1 j prj fj hprj hfj).2 ch hchj
+  have hrS : st.r ch < (S ch).length := (List.getElem?_eq_some_iff.mp hm).1
+  have hp := hpath hprj hpcj hfj
+  by_cases hkj : pcj.k = []
+  · have := path_nil hkj hp
+    rw [this] at hwj
+    omega
+  obtain ⟨τ', hbj⟩ := hall j pcj hpcj hkj
+  obtain ⟨prj', ch', x', k', st', m', hprj', hpcj', hch', hm', rfl, hL'⟩ := hbj
+  rw [hprj] at hprj'; cases hprj'
+  rw [hpcj] at hpcj'; cases hpcj'
+  obtain ⟨n', _, hp'⟩ := path_tail hp (.recv hch' hm')
+  dsimp only at hwj
+  obtain ⟨m₂, hm₂, h₁, h₂⟩ := hp'.stamp (ch := ch) (idx := st.r ch)
+    (by simp only [PSt.received]; omega) (by dsimp only; omega)
+  rw [hm] at hm₂; cases hm₂
+  refine ⟨j, m'.2, ⟨prj, ch', x', k', st', m', hprj, hpcj, hch', hm', rfl, hL'⟩, ?_⟩
+  have hfj' : fj.t ≠ ⊤ := hfin fj (List.mem_of_getElem? hfj)
+  have h₃ : m'.2 + 1 ≤ m.2 := le_trans (le_max_right _ _) h₁
+  have h₄ : m.2 ≠ ⊤ := ne_top_of_le_ne_top hfj' h₂
+  have h₅ : m'.2 ≠ ⊤ := fun h => h₄ (top_le_iff.mp (by simpa [h] using h₃))
+  exact (ENat.add_one_le_iff h₅).mp h₃
+
+/-- No process is blocked, if every unfinished one is. -/
+theorem not_blocked (hspec : NetSpec net s t fin S)
+    (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (hc : Inv net s t c)
+    {len : ℕ → ℕ} (hpath : Follows net fin S c len)
+    (hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ τ, Blocked net S c j τ) (τ : ℕ∞) :
+    ∀ i, ¬ Blocked net S c i τ := by
+  refine WellFoundedLT.induction (motive := fun τ => ∀ i, ¬ Blocked net S c i τ) τ ?_
+  intro τ ih i hb
+  obtain ⟨j, τ', hb', hlt⟩ := blocked_descent hspec hfin hc hpath hall hb
+  exact ih τ' hlt j hb'
+
+/-- **Progress**: while some process has not finished, the machine can take the
+book's next step for one of them. -/
+theorem progress (hspec : NetSpec net s t fin S)
+    (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (hc : Inv net s t c) (hpre : ∀ ch, c.L ch <+: S ch)
+    {len : ℕ → ℕ} (hpath : Follows net fin S c len)
+    (hnd : ∃ (i : ℕ) (pc : PCfg Var Val), c.ps[i]? = some pc ∧ pc.k ≠ []) :
+    ∃ i pc b L', c.ps[i]? = some pc ∧ Act net i c.L pc b L' ∧
+      ∀ pr, net.procs[i]? = some pr → PStep net.defs pr S pc b := by
+  by_cases hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ τ, Blocked net S c j τ
+  · obtain ⟨i, pc, hi, hk⟩ := hnd
+    obtain ⟨τ, hb⟩ := hall i pc hi hk
+    exact (not_blocked hspec hfin hc hpath hall τ i hb).elim
+  · push Not at hall
+    obtain ⟨j, pc, hj, hk, hnb⟩ := hall
+    rcases step_or_blocked hspec hfin hc hpre hpath hj hk with ⟨b, L', ha, hps⟩ | ⟨τ, hb⟩
+    · exact ⟨j, pc, b, L', hj, ha, hps⟩
+    · exact (hnb τ hb).elim
+
+/-- One round of the completeness argument: the machine has finished, as the
+book says it does, or it takes a step and the histories left get shorter. -/
+theorem complete_step (hwf : net.WF) (hspec : NetSpec net s t fin S)
+    (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (hr : ReflTransGen (MStep net) (net.init s t) c)
+    (hpre : ∀ ch, c.L ch <+: S ch) {len : ℕ → ℕ} (hpath : Follows net fin S c len) :
+    (c.Done ∧ c.ps.map (·.st) = fin ∧ c.L = S) ∨
+      ∃ c' len', ReflTransGen (MStep net) (net.init s t) c' ∧ (∀ ch, c'.L ch <+: S ch) ∧
+        Follows net fin S c' len' ∧
+        ∑ i ∈ Finset.range net.procs.length, len' i < ∑ i ∈ Finset.range net.procs.length, len i := by
+  have hc := inv_of_reach hwf hr
+  by_cases hnd : ∃ (i : ℕ) (pc : PCfg Var Val), c.ps[i]? = some pc ∧ pc.k ≠ []
+  · right
+    obtain ⟨i, pc, b, L', hi, ha, hps⟩ := progress hspec hfin hc hpre hpath hnd
+    obtain ⟨pr, hpr⟩ := exists_proc hc hi
+    obtain ⟨f, hf⟩ := exists_fin hspec hpr
+    obtain ⟨m, hm, hp⟩ := path_tail (hpath hpr hi hf) (hps pr hpr)
+    have hilt : i < c.ps.length := (List.getElem?_eq_some_iff.mp hi).1
+    refine ⟨⟨c.ps.set i b, L'⟩, Function.update len i m, hr.tail (.mk hi ha),
+      ha.pre hpr (hc.w hpr hi) (hps pr hpr) hpre, ?_, ?_⟩
+    · intro j prj pcj fj hprj hpcj hfj
+      by_cases hij : i = j
+      · subst hij
+        simp only [List.getElem?_set_self hilt, Option.some.injEq] at hpcj
+        subst hpcj
+        rw [hpr] at hprj; cases hprj
+        rw [hf] at hfj; cases hfj
+        simpa using hp
+      · rw [List.getElem?_set_ne hij] at hpcj
+        rw [Function.update_of_ne (Ne.symm hij)]
+        exact hpath hprj hpcj hfj
+    · apply Finset.sum_lt_sum
+      · intro j _
+        by_cases hij : j = i
+        · subst hij; simp [hm]
+        · simp [Function.update_of_ne hij]
+      · refine ⟨i, Finset.mem_range.mpr (hc.length ▸ hilt), ?_⟩
+        simp [hm]
+  · left
+    push Not at hnd
+    have hfinal : ∀ {i : ℕ} {pr : Proc Var Val} {pc : PCfg Var Val} {f : PSt Var Val},
+        net.procs[i]? = some pr → c.ps[i]? = some pc → fin[i]? = some f →
+        pc.st = f := fun hpr hi hf => path_nil (hnd _ _ hi) (hpath hpr hi hf)
+    refine ⟨fun pc hpc => ?_, ?_, ?_⟩
+    · obtain ⟨i, hi⟩ := List.mem_iff_getElem?.mp hpc
+      exact hnd i pc hi
+    · apply List.ext_getElem?
+      intro i
+      rw [List.getElem?_map]
+      cases hi : c.ps[i]? with
+      | none =>
+        have h₁ := List.getElem?_eq_none_iff.mp hi
+        have h₂ : fin.length ≤ i := by rw [hspec.1, ← hc.length]; exact h₁
+        exact (List.getElem?_eq_none_iff.mpr h₂).symm
+      | some pc =>
+        obtain ⟨pr, hpr⟩ := exists_proc hc hi
+        obtain ⟨f, hf⟩ := exists_fin hspec hpr
+        rw [hf, Option.map_some, hfinal hpr hi hf]
+    · funext ch
+      by_cases hw : ∃ (j : ℕ) (prj : Proc Var Val), net.procs[j]? = some prj ∧ ch ∈ prj.outs
+      · obtain ⟨j, prj, hprj, hchj⟩ := hw
+        obtain ⟨pcj, hpcj⟩ := exists_pcfg hc hprj
+        obtain ⟨fj, hfj⟩ := exists_fin hspec hprj
+        have hwj := hc.w hprj hpcj ch hchj
+        rw [hfinal hprj hpcj hfj, (hspec.2.1 j prj fj hprj hfj).2 ch hchj] at hwj
+        exact (hpre ch).eq_of_length hwj.symm
+      · push Not at hw
+        rw [hc.input ch hw, hspec.2.2 ch hw]
+
+/-- Completeness, by induction on the length of the histories left. -/
+theorem complete_aux (hwf : net.WF) (hspec : NetSpec net s t fin S)
+    (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (N : ℕ) :
+    ∀ (c : MCfg Var Val) (len : ℕ → ℕ), ReflTransGen (MStep net) (net.init s t) c →
+      (∀ ch, c.L ch <+: S ch) → Follows net fin S c len →
+      ∑ i ∈ Finset.range net.procs.length, len i ≤ N →
+      ∃ c', ReflTransGen (MStep net) (net.init s t) c' ∧ c'.Done ∧ c'.ps.map (·.st) = fin ∧
+        c'.L = S := by
+  induction N with
+  | zero =>
+    intro c len hr hpre hpath hN
+    rcases complete_step hwf hspec hfin hr hpre hpath with h | ⟨_, _, _, _, _, hlt⟩
+    · exact ⟨c, hr, h⟩
+    · omega
+  | succ N ih =>
+    intro c len hr hpre hpath hN
+    rcases complete_step hwf hspec hfin hr hpre hpath with h | ⟨c', len', hr', hpre', hpath', hlt⟩
+    · exact ⟨c, hr, h⟩
+    · exact ih c' len' hr' hpre' hpath' (by omega)
+
+/-- **Completeness**: a behaviour of the book's semantics in which every process
+finishes at a finite time is computed by the machine — it reaches a
+configuration where every process has finished in its final state, having
+written exactly the book's scripts. -/
+theorem reach_of_netSpec (hwf : net.WF) (hspec : NetSpec net s t fin S)
+    (hfin : ∀ f ∈ fin, f.t ≠ ⊤) :
+    ∃ c, ReflTransGen (MStep net) (net.init s t) c ∧ c.Done ∧ c.ps.map (·.st) = fin ∧
+      c.L = S := by
+  have : ∀ i : ℕ, ∃ n, ∀ {pr : Proc Var Val} {pc : PCfg Var Val} {f : PSt Var Val},
+      net.procs[i]? = some pr → (net.init s t).ps[i]? = some pc → fin[i]? = some f →
+      Path (PStep net.defs pr S) n pc ⟨[], f⟩ := by
+    intro i
+    rcases hpr : net.procs[i]? with _ | pr
+    · exact ⟨0, fun h => by cases h⟩
+    rcases hf : fin[i]? with _ | f
+    · exact ⟨0, fun _ _ h => by cases h⟩
+    obtain ⟨n, hn⟩ := exists_path (hspec.2.1 i pr f hpr hf).1
+    refine ⟨n, fun h₁ h₂ h₃ => ?_⟩
+    cases h₁; cases h₃
+    simp only [Net.init, List.getElem?_map, hpr, Option.map_some, Option.some.injEq] at h₂
+    subst h₂
+    exact hn
+  choose len hlen using this
+  refine complete_aux hwf hspec hfin _ (net.init s t) len .refl ?_ (fun h₁ h₂ h₃ => hlen _ h₁ h₂ h₃)
+    le_rfl
+  intro ch
+  by_cases hw : ∃ (j : ℕ) (prj : Proc Var Val), net.procs[j]? = some prj ∧ ch ∈ prj.outs
+  · obtain ⟨j, prj, hprj, hchj⟩ := hw
+    simp [Net.init, hwf.input hprj hchj]
+  · push Not at hw
+    simp [Net.init, hspec.2.2 ch hw]
+
+/-- **The book's semantics has one behaviour with finite times**, and it is the
+machine's. -/
+theorem netSpec_unique (hwf : net.WF) {fin₁ fin₂ : List (PSt Var Val)} {S₁ S₂ : Scripts Val}
+    (h₁ : NetSpec net s t fin₁ S₁) (hf₁ : ∀ f ∈ fin₁, f.t ≠ ⊤)
+    (h₂ : NetSpec net s t fin₂ S₂) (hf₂ : ∀ f ∈ fin₂, f.t ≠ ⊤) : fin₁ = fin₂ ∧ S₁ = S₂ := by
+  obtain ⟨c₁, r₁, d₁, e₁, l₁⟩ := reach_of_netSpec hwf h₁ hf₁
+  obtain ⟨c₂, r₂, d₂, e₂, l₂⟩ := reach_of_netSpec hwf h₂ hf₂
+  have := normal_unique hwf r₁ (normal_of_done d₁) r₂ (normal_of_done d₂)
+  subst this
+  exact ⟨e₁.symm.trans e₂, l₁.symm.trans l₂⟩
+
+/-- **Deadlock** (§9.1.8): if the machine stops with a process unfinished, then
+in every behaviour of the book's semantics some process ends at time `∞`. -/
+theorem deadlock_top (hwf : net.WF) (hr : ReflTransGen (MStep net) (net.init s t) c)
+    (hn : Normal net c) (hnd : ¬ c.Done) (hspec : NetSpec net s t fin S) :
+    ∃ f ∈ fin, f.t = ⊤ := by
+  by_contra h
+  push Not at h
+  obtain ⟨c', r', d', _⟩ := reach_of_netSpec hwf hspec h
+  have := normal_unique hwf hr hn r' (normal_of_done d')
+  subst this
+  exact hnd d'
+
+end Complete
+
+/-! ### Demonstrations -/
+
+namespace Demonstration
+
+/-- Processes over numbered variables holding integers. -/
+abbrev NP := NProc ℕ ℤ
+
+/-- All variables `0`. -/
+def zero : Spec.State ℕ ℤ := fun _ => 0
+
+/-- No named processes. -/
+def noDefs : ℕ → NP := fun _ => .act .ok
+
+/-- What a run shows: each process's variables `0` and `1`, and its clock. -/
+def show2 (c : MCfg ℕ ℤ) : List (ℤ × ℤ × ℕ∞) := c.ps.map fun pc => (pc.st.mem 0, pc.st.mem 1, pc.st.t)
+
+/-- `c! 2 || (c?. x:= c)`, channel `0`, `x` variable `0`. -/
+def sendRecv : Net ℕ ℤ :=
+  ⟨noDefs, [⟨.send 0 fun _ => 2, [0], []⟩, ⟨.recv 0 0, [], [0]⟩], fun _ => []⟩
+
+/-- The message arrives, one unit of time after it was sent. -/
+theorem sendRecv_run :
+    show2 (runNet sendRecv 10 10 (sendRecv.init zero 0)) = [(0, 0, 0), (2, 0, 1)] := by
+  decide +kernel
+
+/-- The book's buffer (§9.1.2 example): `c! 3. t:= t+1. c! 4 || (c?. c?. x:= c)`
+— the reader waits for the second message, sent at time 1, so it has it at
+time 2. -/
+def buffer : Net ℕ ℤ :=
+  ⟨noDefs,
+    [⟨.seq (.send 0 fun _ => 3) (.seq (.act .tick) (.send 0 fun _ => 4)), [0], []⟩,
+     ⟨.seq (.recv 0 1) (.recv 0 0), [], [0]⟩], fun _ => []⟩
+
+theorem buffer_run :
+    show2 (runNet buffer 10 10 (buffer.init zero 0)) = [(0, 0, 1), (4, 3, 2)] ∧
+      (runNet buffer 10 10 (buffer.init zero 0)).L 0 = [(3, 0), (4, 1)] := by
+  decide +kernel
+
+/-- The book's deadlock (§9.1.8): each process waits for the other.
+`(c?. d! 2) || (d?. c! 1)`. -/
+def deadlock : Net ℕ ℤ :=
+  ⟨noDefs,
+    [⟨.seq (.recv 0 0) (.send 1 fun _ => 2), [1], [0]⟩,
+     ⟨.seq (.recv 1 0) (.send 0 fun _ => 1), [0], [1]⟩], fun _ => []⟩
+
+/-- Neither moves past its input. -/
+theorem deadlock_run :
+    (runNet deadlock 10 10 (deadlock.init zero 0)).done = false ∧
+      (runNet deadlock 10 10 (deadlock.init zero 0)).ps.map (·.k.length) = [2, 2] := by
+  decide +kernel
+
+/-- The doubler, `S ⇐ c?. d! 2×c. S`, reading what the environment supplies on
+`c` (channel `0`) and writing `d` (channel `1`); named process `0` is `S`. -/
+def doubler : Net ℕ ℤ :=
+  ⟨fun _ => .seq (.recv 0 0) (.seq (.send 1 fun s => 2 * s 0) (.call 0)),
+    [⟨.call 0, [1], [0]⟩], fun c => if c = 0 then [(1, 0), (2, 0), (5, 3)] else []⟩
+
+/-- It doubles what it is given, each output one unit after its input arrived,
+and then waits for more. -/
+theorem doubler_run :
+    (runNet doubler 10 50 (doubler.init zero 0)).L 1 = [(2, 1), (4, 1), (10, 4)] := by
+  decide +kernel
+
+end Demonstration
 
 end LaPToP.ProgramTheory.Interpreter.Network
