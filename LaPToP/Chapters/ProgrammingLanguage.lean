@@ -1441,3 +1441,45 @@ directly and the three facts about the script are list lemmas. The input
 demonstrations are decided in the kernel, the timed one through the timed
 interpreter.
 :::
+
+:::theorem "interpreter_concurrency" (parent := "programming_language_core") (tags := "programs, interpreter, concurrency, hehner-8.0") (effort := "medium") (lean := "LaPToP.ProgramTheory.Spec.merge, LaPToP.ProgramTheory.Spec.parOwn, LaPToP.ProgramTheory.Interpreter.run_par, LaPToP.ProgramTheory.Interpreter.denote_par, LaPToP.ProgramTheory.Interpreter.runAll_par, LaPToP.ProgramTheory.Interpreter.writes_par, LaPToP.ProgramTheory.Interpreter.denote_par_iff, LaPToP.ProgramTheory.Interpreter.Timed.mergeT, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_par, LaPToP.ProgramTheory.Interpreter.Timed.runT_par, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_par, LaPToP.ProgramTheory.Interpreter.Lang.parsePar, LaPToP.ProgramTheory.Interpreter.Lang.assigned, LaPToP.ProgramTheory.Interpreter.Lang.procWrites, LaPToP.ProgramTheory.Interpreter.Lang.resolvePar, LaPToP.ProgramTheory.Interpreter.Lang.resolveProgram, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parSwap_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.seqPar_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parTime_runT")
+Concurrent composition. {uses "concurrent_composition"}[] requires that "$`P`
+and $`Q` have completely different state variables", lets each process mention
+the other's "only as constants", their initial values, and concludes that
+"if we ignore time and space, concurrent composition is conjunction:
+$`P \| Q = P \land Q`". With time, the composition finishes when both
+processes have: $`t' = t_P \uparrow t_Q`.
+
+The core syntax gains $`p \| q` with the variables partitioned between the two
+processes. Both run from the prestate, so each sees the other's variables only
+at their initial values, and the poststate has each process's own variables
+from that process's run. That is proved to be the book's conjunction: a
+poststate of $`p \| q` is one in which $`p`'s variables are as a run of $`p` leaves
+them and $`q`'s as a run of $`q` leaves them. On the clock the composition ends at
+the later of the two times. Soundness and completeness of every interpreter, the
+recursion theorems and the projection theorem extend to it. A process writes
+only its own variables of those it writes, so the frame check covers it.
+
+In the language $`P \| Q` binds tighter than sequential composition and looser
+than a choice. Each process owns the variables it may assign, the calls it makes
+being followed through the definitions to their least solution, and two
+processes that may assign the same variable are rejected. The demonstrations
+run the book's examples:
+- $`x := y \| y := x` exchanges the values;
+- in $`(x := x+1.\ x := x-1) \| y := x`, $`y` sees only the initial $`x`;
+- a process that ticks twice beside one that ticks once ends at $`t = 2`.
+
+Honest scope. The processes cannot communicate: both start from the prestate
+and neither reads what the other writes, so the communicating processes of
+Chapter 9, where one inputs what the other outputs, are not executed. Which
+process owns a variable is decided by what it may assign, which is the book's
+partition when every variable is assigned by at most one process.
+:::
+
+:::proof "interpreter_concurrency"
+The conjunction theorem compares the merged poststate with each run on its own
+variables, pointwise. The interpreters run both processes and merge, and each
+proof's new case pairs the two runs, with the larger of the two fuels where one
+is needed. The timed finite-time projection needs the finishing time of the
+composition finite exactly when both processes' are, which holds of a maximum.
+:::

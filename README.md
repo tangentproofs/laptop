@@ -72,6 +72,10 @@ variable of its name, so input is supplied on the command line:
 echo 'keyboard?. a:= keyboard. keyboard?. screen! a + keyboard' | lake exe interp --keyboard='[3;4]'
 # => keyboard = [3; 4], screen = [7], a = 3
 ```
+
+`P || Q` is concurrent composition (Section 8.0): each process owns the
+variables it assigns and sees the other's only at their initial values, so
+`x:= y || y:= x` swaps; on the clock it finishes when both processes have.
 `do ... exit when b ... od` is the exit-loop (`exit n when b` leaves `n` loops) and
 `for i:= m;..n do P od` the for-loop; both are compiled to the refinements the
 book defines them by.

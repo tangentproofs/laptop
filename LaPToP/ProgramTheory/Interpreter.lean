@@ -270,6 +270,25 @@ theorem whileRel_invariant {I : σ → Prop} (hI : ∀ s t, I s → b s → R s 
   | exit hb => exact fun hs => ⟨hs, hb⟩
   | step hb hR _ ih => exact fun hs => ih (hI _ _ hs hb hR)
 
+/-! ### Concurrent composition on a flat state -/
+
+section Merge
+
+variable {Var : Type u} {Val : Type v}
+
+/-- The state after two processes that ran concurrently: the variables `own`
+picks out are the first process's, the others the second's. -/
+def merge (own : Var → Bool) (s₁ s₂ : State Var Val) : State Var Val :=
+  fun x => if own x then s₁ x else s₂ x
+
+/-- `P||Q` with the variables partitioned by `own` (Section 8.0): both processes
+start from the same prestate, so each sees only the initial values of the
+other's variables, and the poststate has each process's own variables. -/
+def parOwn (own : Var → Bool) (P Q : Spec (State Var Val)) : Spec (State Var Val) :=
+  fun s s' => ∃ s₁ s₂, P s s₁ ∧ Q s s₂ ∧ s' = merge own s₁ s₂
+
+end Merge
+
 end Spec
 
 namespace Interpreter
@@ -310,6 +329,9 @@ inductive Prog (Var : Type u) (Val : Type v) : Type (max u v) where
   /-- A call of the `k`-th named specification: the `P` on the right of a
   refinement `P ⇐ ... P ...` (Section 4.1.1). What it runs is `Defs.body k`. -/
   | call (k : ℕ) : Prog Var Val
+  /-- `p || q`, the concurrent composition of Section 8.0: the variables `own`
+  picks out belong to `p`, the others to `q`. -/
+  | par (own : Var → Bool) (p q : Prog Var Val) : Prog Var Val
 
 /-- Programs without loops: the four notations of Section 4.0.3 that are
 programs outright. -/
@@ -340,6 +362,7 @@ def Det : Prog Var Val → Prop
   | .tick => True
   | .assert _ => True
   | .call _ => True
+  | .par _ p q => Det p ∧ Det q
 
 /-- The named specifications a program can call, each with the program that
 refines it: `call k` runs `body k`. A program is always interpreted relative to
@@ -385,6 +408,8 @@ def run [DecidableEq Var] :
   | _ + 1, .tick, s => some s
   | _ + 1, .assert b, s => if b s then some s else none
   | n + 1, .call k, s => run n (Defs.body k) s
+  | n + 1, .par own p q, s =>
+      (run n p s).bind fun s₁ => (run n q s).map fun s₂ => Spec.merge own s₁ s₂
 
 variable [DecidableEq Var]
 
@@ -432,6 +457,10 @@ variable [DecidableEq Var]
 
 @[simp] theorem run_call (n k : ℕ) (s : Spec.State Var Val) :
     run (n + 1) (.call k) s = run n (Defs.body k) s := rfl
+
+@[simp] theorem run_par (n : ℕ) (own : Var → Bool) (p q : Prog Var Val) (s : Spec.State Var Val) :
+    run (n + 1) (.par own p q) s =
+      (run n p s).bind fun s₁ => (run n q s).map fun s₂ => Spec.merge own s₁ s₂ := rfl
 
 /-- More fuel never spoils a successful run. -/
 theorem run_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
@@ -490,6 +519,17 @@ theorem run_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
     | call k =>
       simp only [run_call] at h ⊢
       exact ih h hnm
+    | par own p q =>
+      simp only [run_par] at h ⊢
+      cases hp : run n p s with
+      | none => simp [hp] at h
+      | some s₁ =>
+        cases hq : run n q s with
+        | none => simp [hp, hq] at h
+        | some s₂ =>
+          simp only [hp, hq, Option.bind_some, Option.map_some] at h
+          rw [ih hp hnm, ih hq hnm]
+          exact h
 
 /-! ### Execution without fuel
 
@@ -551,6 +591,10 @@ inductive Eval : Prog Var Val → Spec.State Var Val → Spec.State Var Val → 
   /-- A call terminates as the body of what it names does. -/
   | call {k : ℕ} {s s' : Spec.State Var Val} :
       Eval (Defs.body k) s s' → Eval (.call k) s s'
+  /-- `p || q` runs both processes from the prestate, each keeping its own
+  variables. -/
+  | par {own : Var → Bool} {p q : Prog Var Val} {s s₁ s₂ : Spec.State Var Val} :
+      Eval p s s₁ → Eval q s s₂ → Eval (.par own p q) s (Spec.merge own s₁ s₂)
 
 /-- A fuelled run is an execution: the budget only restricts which derivations
 are reachable, not what they mean. -/
@@ -621,6 +665,17 @@ theorem eval_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Va
     | call k =>
       simp only [run_call] at h
       exact .call (ih h)
+    | par own p q =>
+      simp only [run_par] at h
+      cases hp : run n p s with
+      | none => simp [hp] at h
+      | some s₁ =>
+        cases hq : run n q s with
+        | none => simp [hp, hq] at h
+        | some s₂ =>
+          simp only [hp, hq, Option.bind_some, Option.map_some, Option.some.injEq] at h
+          subst h
+          exact .par (ih hp) (ih hq)
 
 /-! ### Denotation into the theory of Chapter 4 -/
 
@@ -639,6 +694,7 @@ def denote : Prog Var Val → Spec (Spec.State Var Val)
   | .tick => Spec.ok
   | .assert b => Spec.ensure fun s => b s = true
   | .call k => fun s s' => Eval (.call k) s s'
+  | .par own p q => Spec.parOwn own (denote p) (denote q)
 
 @[simp] theorem denote_ok : denote (Var := Var) (Val := Val) .ok = Spec.ok := rfl
 
@@ -676,6 +732,9 @@ recursive refinement — the strongest solution of `P ⇐ body` — is
 `refines_denote_call` below. -/
 theorem denote_call (k : ℕ) : denote (.call k : Prog Var Val) = fun s s' => Eval (.call k) s s' :=
   rfl
+
+@[simp] theorem denote_par (own : Var → Bool) (p q : Prog Var Val) :
+    denote (.par own p q) = Spec.parOwn own (denote p) (denote q) := rfl
 
 /-- A loop-free program denotes a program in the sense of Section 4.0.3. -/
 theorem isProgram_denote {p : Prog Var Val} (h : LoopFree p) : Spec.IsProgram (denote p) := by
@@ -753,6 +812,16 @@ theorem denote_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var 
       simp only [Option.some.injEq] at h
       exact ⟨hb, h.symm⟩
     | call k => exact eval_of_run h
+    | par own p q =>
+      simp only [run_par] at h
+      cases hp : run n p s with
+      | none => simp [hp] at h
+      | some s₁ =>
+        cases hq : run n q s with
+        | none => simp [hp, hq] at h
+        | some s₂ =>
+          simp only [hp, hq, Option.bind_some, Option.map_some, Option.some.injEq] at h
+          exact ⟨s₁, s₂, ih hp, ih hq, h.symm⟩
 
 /-- The bridge from a Chapter 4 development to an execution: if `W ⇐ denote p`
 has been proved, then every successful run of `p` satisfies `W`. -/
@@ -809,6 +878,7 @@ theorem denote_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
   | tick => rfl
   | assert hb => exact ⟨hb, rfl⟩
   | call h _ => exact .call h
+  | par _ _ ihp ihq => exact ⟨_, _, ihp, ihq, rfl⟩
 
 /-- **Completeness**: every behaviour the denotation allows is a terminating
 execution. Together with `denote_of_eval`, execution and denotation are the same
@@ -861,6 +931,10 @@ theorem eval_of_denote : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
     subst hok
     exact .assert hb
   | call k => intro s s' h; exact h
+  | par own p q ihp ihq =>
+    intro s s' h
+    obtain ⟨s₁, s₂, h₁, h₂, rfl⟩ := h
+    exact .par (ihp h₁) (ihq h₂)
 
 /-- Execution *is* the denotation: the fuel-free operational semantics and the
 Chapter 4 specification of a program are one relation. -/
@@ -909,6 +983,12 @@ theorem exists_run_of_eval [DetDefs Var Val] {p : Prog Var Val} (hp : Det p)
   | call _ ih =>
     obtain ⟨f, hf⟩ := ih (DetDefs.det _)
     exact ⟨f + 1, by rw [run_call]; exact hf⟩
+  | par _ _ ihp ihq =>
+    obtain ⟨f₁, h₁⟩ := ihp hp.1
+    obtain ⟨f₂, h₂⟩ := ihq hp.2
+    refine ⟨max f₁ f₂ + 1, ?_⟩
+    rw [run_par, run_le h₁ (le_max_left f₁ f₂), run_le h₂ (le_max_right f₁ f₂)]
+    rfl
 
 /-- **Completeness on the deterministic fragment**, for the denotation: every
 behaviour allowed by the denotation of a program without a choice is achieved by
@@ -1057,6 +1137,8 @@ def runAll : ℕ → Prog Var Val → Spec.State Var Val → List (Spec.State Va
   | _ + 1, .tick, s => [s]
   | _ + 1, .assert b, s => if b s then [s] else []
   | n + 1, .call k, s => runAll n (Defs.body k) s
+  | n + 1, .par own p q, s =>
+      (runAll n p s).flatMap fun s₁ => (runAll n q s).map fun s₂ => Spec.merge own s₁ s₂
 
 @[simp] theorem runAll_zero (p : Prog Var Val) (s : Spec.State Var Val) :
     runAll 0 p s = [] := by cases p <;> rfl
@@ -1102,6 +1184,11 @@ def runAll : ℕ → Prog Var Val → Spec.State Var Val → List (Spec.State Va
 
 @[simp] theorem runAll_call (n k : ℕ) (s : Spec.State Var Val) :
     runAll (n + 1) (.call k) s = runAll n (Defs.body k) s := rfl
+
+@[simp] theorem runAll_par (n : ℕ) (own : Var → Bool) (p q : Prog Var Val)
+    (s : Spec.State Var Val) :
+    runAll (n + 1) (.par own p q) s =
+      (runAll n p s).flatMap fun s₁ => (runAll n q s).map fun s₂ => Spec.merge own s₁ s₂ := rfl
 
 /-- More fuel never loses a result of the search. -/
 theorem runAll_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
@@ -1154,6 +1241,10 @@ theorem runAll_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Va
     | call k =>
       simp only [runAll_call] at h ⊢
       exact ih h hnm
+    | par own p q =>
+      simp only [runAll_par, List.mem_flatMap, List.mem_map] at h ⊢
+      obtain ⟨s₁, h₁, s₂, h₂, rfl⟩ := h
+      exact ⟨s₁, ih h₁ hnm, s₂, ih h₂ hnm, rfl⟩
 
 /-- **Soundness of the search**: every state it finds is an execution. -/
 theorem eval_of_mem_runAll : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
@@ -1216,6 +1307,10 @@ theorem eval_of_mem_runAll : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State
     | call k =>
       simp only [runAll_call] at h
       exact .call (ih h)
+    | par own p q =>
+      simp only [runAll_par, List.mem_flatMap, List.mem_map] at h
+      obtain ⟨s₁, h₁, s₂, h₂, rfl⟩ := h
+      exact .par (ih h₁) (ih h₂)
 
 /-- **Completeness of the search**, for the whole language, the choice included:
 every execution is found with enough fuel. -/
@@ -1264,6 +1359,12 @@ theorem exists_mem_runAll_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Va
   | call _ ih =>
     obtain ⟨f, hf⟩ := ih
     exact ⟨f + 1, by simpa using hf⟩
+  | @par own p q s s₁ s₂ _ _ ihp ihq =>
+    obtain ⟨f₁, h₁⟩ := ihp
+    obtain ⟨f₂, h₂⟩ := ihq
+    refine ⟨max f₁ f₂ + 1, ?_⟩
+    simp only [runAll_par, List.mem_flatMap, List.mem_map]
+    exact ⟨s₁, runAll_le h₁ (le_max_left _ _), s₂, runAll_le h₂ (le_max_right _ _), rfl⟩
 
 /-- The searching interpreter computes exactly the executions — and so, by
 `eval_eq_denote`, exactly the denotation. Unlike `run`, it needs no hypothesis:
@@ -1308,6 +1409,7 @@ def denoteWith (C : ℕ → Spec (Spec.State Var Val)) : Prog Var Val → Spec (
   | .tick => Spec.ok
   | .assert b => Spec.ensure fun s => b s = true
   | .call k => C k
+  | .par own p q => Spec.parOwn own (denoteWith C p) (denoteWith C q)
 
 /-- A program's denotation is the one with each call read as that call's own
 denotation. -/
@@ -1327,6 +1429,7 @@ theorem denote_eq_denoteWith : ∀ p : Prog Var Val,
   | tick => rfl
   | assert => rfl
   | call => rfl
+  | par own p q ihp ihq => rw [denote_par, ihp, ihq]; rfl
 
 /-- **The calls solve their refinements**, with equality: the specification a
 call names is its body, with every call in the body read as the specification
@@ -1363,6 +1466,7 @@ theorem refines_denote_call {S : ℕ → Spec (Spec.State Var Val)}
     | tick => rfl
     | assert hb => exact ⟨hb, rfl⟩
     | call _ ih => exact hS _ _ _ ih
+    | par _ _ ihp ihq => exact ⟨_, _, ihp, ihq, rfl⟩
   exact fun s s' h => key (show Eval (.call k) s s' from h)
 
 /-- Every terminating run of a call satisfies whatever a refinement development
@@ -1380,6 +1484,7 @@ def CallFree : Prog Var Val → Prop
   | .newLocal _ _ p => CallFree p
   | .or p q => CallFree p ∧ CallFree q
   | .call _ => False
+  | .par _ p q => CallFree p ∧ CallFree q
   | _ => True
 
 /-- A program with no calls means the same whatever its calls are read as. -/
@@ -1399,6 +1504,7 @@ theorem denoteWith_callFree (C : ℕ → Spec (Spec.State Var Val)) :
   | tick => rfl
   | assert => rfl
   | call => exact hp.elim
+  | par own p q ihp ihq => rw [denote_par, ← ihp hp.1, ← ihq hp.2]; rfl
 
 /-- **The exit-loop, executed.** Section 5.2.1 makes `L ⇐ do A. exit when b. C od`
 "an alternative notation for `L ⇐ A. if b then ok else C. L`". A loop whose
@@ -1425,6 +1531,35 @@ theorem refines_exitLoop {k : ℕ} {A C : Prog Var Val} {b : Spec.State Var Val 
       simp only [S, hj, ite_false]
   have := refines_denote_call hS k
   simpa only [S, ite_true] using this
+
+/-! ### Concurrent composition
+
+Section 8.0: "`P||Q` is satisfied by a computer that behaves according to `P`
+and, at the same time, concurrently, according to `Q`. ... we require that `P`
+and `Q` have completely different state variables ... If we ignore time and
+space, concurrent composition is conjunction: `P||Q = P∧Q`", where a process may
+mention the other's variables "but only as constants": their initial values.
+`Prog.par own p q` partitions the variables by `own` and runs both processes
+from the prestate; `denote_par_iff` is the book's `P||Q = P∧Q`, each conjunct
+about its own process's variables.
+-/
+
+/-- **Concurrent composition is conjunction**: a poststate of `p || q` is one in
+which `p`'s variables are as some run of `p` leaves them and `q`'s as some run of
+`q` leaves them, both from the prestate. -/
+theorem denote_par_iff (own : Var → Bool) (p q : Prog Var Val) (s s' : Spec.State Var Val) :
+    denote (.par own p q) s s' ↔
+      (∃ s₁, denote p s s₁ ∧ ∀ x, own x = true → s' x = s₁ x) ∧
+        (∃ s₂, denote q s s₂ ∧ ∀ x, own x = false → s' x = s₂ x) := by
+  constructor
+  · rintro ⟨s₁, s₂, h₁, h₂, rfl⟩
+    exact ⟨⟨s₁, h₁, fun x hx => by simp [Spec.merge, hx]⟩,
+      ⟨s₂, h₂, fun x hx => by simp [Spec.merge, hx]⟩⟩
+  · rintro ⟨⟨s₁, h₁, e₁⟩, ⟨s₂, h₂, e₂⟩⟩
+    refine ⟨s₁, s₂, h₁, h₂, funext fun x => ?_⟩
+    cases hx : own x
+    · simp [Spec.merge, hx, e₂ x hx]
+    · simp [Spec.merge, hx, e₁ x hx]
 
 /-! ### Frames and local declarations
 
@@ -1466,6 +1601,7 @@ def writes : Prog Var Val → Set Var
   | .tick => ∅
   | .assert _ => ∅
   | .call _ => Set.univ
+  | .par own p q => {x | own x = true ∧ x ∈ writes p} ∪ {x | own x = false ∧ x ∈ writes q}
 
 omit [DecidableEq Var] [Defs Var Val] in
 @[simp] theorem writes_ok : writes (Prog.ok : Prog Var Val) = ∅ := rfl
@@ -1511,6 +1647,13 @@ omit [DecidableEq Var] [Defs Var Val] in
 /-- A call may write anything: its write set is not read off the syntax of the
 call, so the frame check makes no claim for it. -/
 @[simp] theorem writes_call (k : ℕ) : writes (.call k : Prog Var Val) = Set.univ := rfl
+
+omit [DecidableEq Var] [Defs Var Val] in
+/-- Each process of a concurrent composition writes only its own variables of
+what it writes. -/
+@[simp] theorem writes_par (own : Var → Bool) (p q : Prog Var Val) :
+    writes (.par own p q) =
+      {x | own x = true ∧ x ∈ writes p} ∪ {x | own x = false ∧ x ∈ writes q} := rfl
 
 /-- A terminating execution changes no variable outside the program's write set.
 This is the frame condition of Section 5.0.1, established once and for all from
@@ -1564,6 +1707,13 @@ theorem unchanged_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
   | tick => intro _ _; rfl
   | assert => intro _ _; rfl
   | call => intro v hv; exact absurd (Set.mem_univ v) hv
+  | @par own p q s s₁ s₂ _ _ ihp ihq =>
+    intro v hv
+    simp only [writes_par, Set.mem_union, Set.mem_ofPred_eq, not_or, not_and] at hv
+    show (if own v then s₁ v else s₂ v) = s v
+    cases hown : own v
+    · simp only [Bool.false_eq_true, ite_false]; exact ihq v (hv.2 hown)
+    · simp only [ite_true]; exact ihp v (hv.1 hown)
 
 /-- **The frame of a program**: for a program whose writes lie inside `xs`, the
 framed specification and the denotation are the same relation,

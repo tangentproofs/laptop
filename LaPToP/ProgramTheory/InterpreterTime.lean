@@ -72,6 +72,13 @@ structure TState (Var : Type u) (Val : Type v) where
   /-- The time. -/
   t : ℕ∞
 
+/-- The timed state after two processes that ran concurrently: each process's own
+variables, and the later of the two finishing times — "execution of the
+composition `P||Q` finishes when both `P` and `Q` are finished", `t′ = tP↑tQ`
+(Section 8.0). -/
+def mergeT (own : Var → Bool) (a b : TState Var Val) : TState Var Val :=
+  ⟨Spec.merge own a.mem b.mem, max a.t b.t⟩
+
 variable [DecidableEq Var] [Defs Var Val]
 
 /-! ### Fuel-free timed execution -/
@@ -130,6 +137,9 @@ inductive EvalT : Prog Var Val → TState Var Val → TState Var Val → Prop
   /-- A call runs the body of what it names, on the clock. -/
   | call {k : ℕ} {st st' : TState Var Val} :
       EvalT (Defs.body k) st st' → EvalT (.call k) st st'
+  /-- `p || q` runs both processes from the prestate and finishes when both have. -/
+  | par {own : Var → Bool} {p q : Prog Var Val} {st st₁ st₂ : TState Var Val} :
+      EvalT p st st₁ → EvalT q st st₂ → EvalT (.par own p q) st (mergeT own st₁ st₂)
 
 /-! ### The timed denotation -/
 
@@ -151,6 +161,8 @@ def denoteT : Prog Var Val → Spec (TState Var Val)
   | .assert b =>
       Spec.cond (fun st => b st.mem = true) Spec.ok fun st st' => st' = ⟨st.mem, ⊤⟩
   | .call k => fun st st' => EvalT (.call k) st st'
+  | .par own p q => fun st st' =>
+      ∃ st₁ st₂, denoteT p st st₁ ∧ denoteT q st st₂ ∧ st' = mergeT own st₁ st₂
 
 @[simp] theorem denoteT_ok : denoteT (Prog.ok : Prog Var Val) = Spec.ok := rfl
 
@@ -191,6 +203,12 @@ def denoteT : Prog Var Val → Spec (TState Var Val)
 theorem denoteT_call (k : ℕ) :
     denoteT (.call k : Prog Var Val) = fun st st' => EvalT (.call k) st st' := rfl
 
+/-- `P||Q = ∃tP, tQ· ⟨t′· P⟩ tP ∧ ⟨t′· Q⟩ tQ ∧ t′ = tP↑tQ` (Section 8.0), each
+process on its own variables. -/
+@[simp] theorem denoteT_par (own : Var → Bool) (p q : Prog Var Val) :
+    denoteT (.par own p q) = fun st st' =>
+      ∃ st₁ st₂, denoteT p st st₁ ∧ denoteT q st st₂ ∧ st' = mergeT own st₁ st₂ := rfl
+
 /-- Fuel-free timed execution is the timed specification. -/
 theorem evalT_iff_denoteT {p : Prog Var Val} {st st' : TState Var Val} :
     EvalT p st st' ↔ denoteT p st st' := by
@@ -213,6 +231,7 @@ theorem evalT_iff_denoteT {p : Prog Var Val} {st st' : TState Var Val} :
     | assertTrue hb => exact Or.inl ⟨hb, rfl⟩
     | assertFalse hb => exact Or.inr ⟨by simp [hb], rfl⟩
     | call h _ => exact .call h
+    | par _ _ ihp ihq => exact ⟨_, _, ihp, ihq, rfl⟩
   · revert st st'
     induction p with
     | ok => intro st st' h; exact (show st' = st from h) ▸ .ok
@@ -257,6 +276,10 @@ theorem evalT_iff_denoteT {p : Prog Var Val} {st st' : TState Var Val} :
       · rw [show st' = st from hok]; exact .assertTrue hb
       · exact hst ▸ .assertFalse (by simpa using hb)
     | call k => intro st st' h; exact h
+    | par own p q ihp ihq =>
+      intro st st' h
+      obtain ⟨st₁, st₂, h₁, h₂, rfl⟩ := h
+      exact .par (ihp h₁) (ihq h₂)
 
 /-! ### Time does not decrease -/
 
@@ -280,6 +303,7 @@ theorem time_le_of_evalT {p : Prog Var Val} {st st' : TState Var Val} (h : EvalT
   | assertTrue => exact le_rfl
   | assertFalse => exact le_top
   | call _ ih => exact ih
+  | par _ _ ihp _ => exact le_trans ihp (le_max_left _ _)
 
 /-- Time does not decrease: `t′ ≥ t` for every behaviour of every program. This
 is the first of the three axioms of Section 6.1.1, holding here of the whole
@@ -319,6 +343,8 @@ def runT : ℕ → Prog Var Val → TState Var Val → Option (TState Var Val)
   | _ + 1, .tick, st => some ⟨st.mem, st.t + 1⟩
   | _ + 1, .assert b, st => if b st.mem then some st else some ⟨st.mem, ⊤⟩
   | n + 1, .call k, st => runT n (Defs.body k) st
+  | n + 1, .par own p q, st =>
+      (runT n p st).bind fun a => (runT n q st).map fun b => mergeT own a b
 
 @[simp] theorem runT_zero (p : Prog Var Val) (st : TState Var Val) : runT 0 p st = none := by
   cases p <;> rfl
@@ -366,6 +392,10 @@ def runT : ℕ → Prog Var Val → TState Var Val → Option (TState Var Val)
 
 @[simp] theorem runT_call (n k : ℕ) (st : TState Var Val) :
     runT (n + 1) (.call k) st = runT n (Defs.body k) st := rfl
+
+@[simp] theorem runT_par (n : ℕ) (own : Var → Bool) (p q : Prog Var Val) (st : TState Var Val) :
+    runT (n + 1) (.par own p q) st =
+      (runT n p st).bind fun a => (runT n q st).map fun b => mergeT own a b := rfl
 
 /-- More fuel never spoils a successful timed run. -/
 theorem runT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
@@ -423,6 +453,17 @@ theorem runT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
     | call k =>
       simp only [runT_call] at h ⊢
       exact ih h hnm
+    | par own p q =>
+      simp only [runT_par] at h ⊢
+      cases hp : runT n p st with
+      | none => simp [hp] at h
+      | some a =>
+        cases hq : runT n q st with
+        | none => simp [hp, hq] at h
+        | some b =>
+          simp only [hp, hq, Option.bind_some, Option.map_some] at h
+          rw [ih hp hnm, ih hq hnm]
+          exact h
 
 /-- **Soundness**: a successful timed run satisfies the timed specification. -/
 theorem denoteT_of_runT : ∀ {f : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
@@ -486,6 +527,16 @@ theorem denoteT_of_runT : ∀ {f : ℕ} {p : Prog Var Val} {st st' : TState Var 
     | call k =>
       simp only [runT_call] at h
       exact .call (evalT_iff_denoteT.mpr (ih h))
+    | par own p q =>
+      simp only [runT_par] at h
+      cases hp : runT n p st with
+      | none => simp [hp] at h
+      | some a =>
+        cases hq : runT n q st with
+        | none => simp [hp, hq] at h
+        | some b =>
+          simp only [hp, hq, Option.bind_some, Option.map_some, Option.some.injEq] at h
+          exact ⟨a, b, ih hp, ih hq, h.symm⟩
 
 /-- **Completeness on the deterministic fragment**: every timed execution of a
 program without a choice is a run with enough fuel. -/
@@ -526,6 +577,12 @@ theorem exists_runT_of_evalT [DetDefs Var Val] {p : Prog Var Val} (hp : Det p)
   | call _ ih =>
     obtain ⟨f, hf⟩ := ih (DetDefs.det _)
     exact ⟨f + 1, by rw [runT_call]; exact hf⟩
+  | par _ _ ihp ihq =>
+    obtain ⟨f₁, h₁⟩ := ihp hp.1
+    obtain ⟨f₂, h₂⟩ := ihq hp.2
+    refine ⟨max f₁ f₂ + 1, ?_⟩
+    rw [runT_par, runT_le h₁ (le_max_left f₁ f₂), runT_le h₂ (le_max_right f₁ f₂)]
+    rfl
 
 /-- The same, for the timed denotation. -/
 theorem exists_runT_of_denoteT [DetDefs Var Val] {p : Prog Var Val} (hp : Det p)
@@ -557,6 +614,8 @@ def runAllT : ℕ → Prog Var Val → TState Var Val → List (TState Var Val)
   | _ + 1, .tick, st => [⟨st.mem, st.t + 1⟩]
   | _ + 1, .assert b, st => if b st.mem then [st] else [⟨st.mem, ⊤⟩]
   | n + 1, .call k, st => runAllT n (Defs.body k) st
+  | n + 1, .par own p q, st =>
+      (runAllT n p st).flatMap fun a => (runAllT n q st).map fun b => mergeT own a b
 
 @[simp] theorem runAllT_zero (p : Prog Var Val) (st : TState Var Val) :
     runAllT 0 p st = [] := by cases p <;> rfl
@@ -607,6 +666,11 @@ def runAllT : ℕ → Prog Var Val → TState Var Val → List (TState Var Val)
 @[simp] theorem runAllT_call (n k : ℕ) (st : TState Var Val) :
     runAllT (n + 1) (.call k) st = runAllT n (Defs.body k) st := rfl
 
+@[simp] theorem runAllT_par (n : ℕ) (own : Var → Bool) (p q : Prog Var Val)
+    (st : TState Var Val) :
+    runAllT (n + 1) (.par own p q) st =
+      (runAllT n p st).flatMap fun a => (runAllT n q st).map fun b => mergeT own a b := rfl
+
 /-- More fuel never loses a result of the timed search. -/
 theorem runAllT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
     st' ∈ runAllT f p st → f ≤ g → st' ∈ runAllT g p st := by
@@ -656,6 +720,10 @@ theorem runAllT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val
     | call k =>
       simp only [runAllT_call] at h ⊢
       exact ih h hnm
+    | par own p q =>
+      simp only [runAllT_par, List.mem_flatMap, List.mem_map] at h ⊢
+      obtain ⟨a, ha, b, hb, rfl⟩ := h
+      exact ⟨a, ih ha hnm, b, ih hb hnm, rfl⟩
 
 /-- **Soundness of the timed search**: every timed state it finds is an
 execution. -/
@@ -720,6 +788,10 @@ theorem evalT_of_mem_runAllT : ∀ {f : ℕ} {p : Prog Var Val} {st st' : TState
     | call k =>
       simp only [runAllT_call] at h
       exact .call (ih h)
+    | par own p q =>
+      simp only [runAllT_par, List.mem_flatMap, List.mem_map] at h
+      obtain ⟨a, ha, b, hb, rfl⟩ := h
+      exact .par (ih ha) (ih hb)
 
 /-- **Completeness of the timed search**, for the whole language: every timed
 execution is found with enough fuel. -/
@@ -770,6 +842,12 @@ theorem exists_mem_runAllT_of_evalT : ∀ {p : Prog Var Val} {st st' : TState Va
   | call _ ih =>
     obtain ⟨f, hf⟩ := ih
     exact ⟨f + 1, by simpa using hf⟩
+  | @par own p q st a b _ _ ihp ihq =>
+    obtain ⟨f₁, h₁⟩ := ihp
+    obtain ⟨f₂, h₂⟩ := ihq
+    refine ⟨max f₁ f₂ + 1, ?_⟩
+    simp only [runAllT_par, List.mem_flatMap, List.mem_map]
+    exact ⟨a, runAllT_le h₁ (le_max_left _ _), b, runAllT_le h₂ (le_max_right _ _), rfl⟩
 
 /-- The timed search computes exactly the timed specification, for every program
 — the choice is searched, not resolved, so no `Det` hypothesis is needed. -/
@@ -826,6 +904,12 @@ theorem evalT_of_eval {p : Prog Var Val} {s s' : Spec.State Var Val} (h : Eval p
     intro t ht
     obtain ⟨t', ht', h⟩ := ih t ht
     exact ⟨t', ht', .call h⟩
+  | par _ _ ihp ihq =>
+    intro t ht
+    obtain ⟨t₁, ht₁, h₁⟩ := ihp t ht
+    obtain ⟨t₂, ht₂, h₂⟩ := ihq t ht
+    exact ⟨max t₁ t₂, (max_lt (lt_top_iff_ne_top.mpr ht₁) (lt_top_iff_ne_top.mpr ht₂)).ne,
+      EvalT.par (st₁ := ⟨_, t₁⟩) (st₂ := ⟨_, t₂⟩) h₁ h₂⟩
 
 /-- A timed execution that starts and ends at finite times is an untimed one. -/
 theorem eval_of_evalT {p : Prog Var Val} {st st' : TState Var Val} (h : EvalT p st st') :
@@ -853,6 +937,11 @@ theorem eval_of_evalT {p : Prog Var Val} {st st' : TState Var Val} (h : EvalT p 
   | assertTrue hb => exact fun _ _ => .assert hb
   | assertFalse _ => exact fun _ hs' => absurd rfl hs'
   | call _ ih => exact fun hs hs' => .call (ih hs hs')
+  | @par own p q st a b _ _ ihp ihq =>
+    intro hs hs'
+    have ha : a.t ≠ ⊤ := fun h => hs' (by simp [mergeT, h])
+    have hb : b.t ≠ ⊤ := fun h => hs' (by simp [mergeT, h])
+    exact .par (ihp hs ha) (ihq hs hb)
 
 /-- **The projection theorem.** From a state at finite time, the behaviours the
 untimed interpreter has are exactly the timed behaviours that end in finite

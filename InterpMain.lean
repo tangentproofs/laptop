@@ -49,7 +49,7 @@ usage: interp [options] [file]
   file               read the program from this file (default: standard input)
   --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
                      listSum, exitLoop, deepExit, forLoop, gcd, swap, even,
-                     channel
+                     channel, parSwap, seqPar, parTime
   --NAME=EXP         the initial value of variable NAME, an expression such as
                      --n=10 or --L=[3;1;2] (every other variable starts at 0)
   --fuel=K           execution fuel (default 1000)
@@ -68,7 +68,8 @@ exit status: 0 success, 1 bad usage or parse error, 2 no poststate,
 def grammarText : String :=
 "file      := (name params? '⇐' program | program)*
 params    := '(' name (',' name)* ')'
-program   := choice ('.' choice)* '.'?
+program   := par ('.' par)* '.'?
+par       := choice ('||' choice)*
 choice    := statement ('or' statement)*
 statement := 'ok' | 'tick'
            | name atom* ':=' exp
@@ -108,6 +109,10 @@ a refinement is a call, and may be recursive. 'do ... od' is the exit-loop:
 'exit n when b' leaves n loops. 'for i:= m;..n do P od' runs i from m to n-1.
 A specification with parameters, P(x, y) ⇐ ..., is called as P(e, f); the
 arguments are computed first and bound as locals, which the body may not assign.
+P || Q is concurrent composition: it binds tighter than '.' and looser than
+'or'; each process owns the variables it may assign, may not assign the
+other's, and sees the other's only at their initial values. On the clock it
+finishes when both have.
 A name written c! e or c? is a channel: c! e outputs, c? inputs (waiting for a
 message), c is the last message input and √c says one is waiting. The channel's
 script is the list variable c: --keyboard=[3;4] supplies input, and a channel
@@ -172,6 +177,9 @@ def demoSrc : String → Option String
   | "swap" => some Lang.Demo.swapSrc
   | "even" => some Lang.Demo.evenSrc
   | "channel" => some Lang.Demo.channelSrc
+  | "parSwap" => some Lang.Demo.parSwapSrc
+  | "seqPar" => some Lang.Demo.seqParSrc
+  | "parTime" => some Lang.Demo.parTimeSrc
   | _ => none
 
 /-- Read the program text. -/
@@ -279,7 +287,7 @@ def main (args : List String) : IO UInt32 := do
       | some name =>
         match demoSrc name with
         | some src => pure (Except.ok src)
-        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd, swap, even or channel)")
+        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd, swap, even, channel, parSwap, seqPar or parTime)")
       | none => readSource o
     for (w, _) in o.sets do
       if !validName w then

@@ -15,7 +15,8 @@ with its definitions, and means its `denote`.
 ```
 file      := (name params? '⇐' program | program)*
 params    := '(' name (',' name)* ')'
-program   := choice ('.' choice)* '.'?
+program   := par ('.' par)* '.'?
+par       := choice ('||' choice)*
 choice    := statement ('or' statement)*
 statement := 'ok' | 'tick'
            | name atom* ':=' exp
@@ -70,6 +71,12 @@ A specification may have parameters, `P(x, y) ⇐ ...`, and is then called as
 arguments all computed before any parameter is bound and the body forbidden to
 assign a parameter. `x, y:= e, f` likewise computes both values before assigning
 either.
+
+`P || Q` is concurrent composition (Section 8.0). It binds tighter than `.` and
+looser than `or`, so `x:= x+1. x:= x-1 || y:= x` needs parentheses around the
+sequence, as the book writes it. Each process owns the variables it may assign,
+through the specifications it calls, and two processes may not assign the same
+one; each sees the other's variables only at their initial values.
 
 A name written `c! e` or `c?` anywhere is a channel (Section 9.1.1): `c! e`
 outputs `e`, `c?` inputs, `c` in an expression is the last message input and
@@ -146,6 +153,7 @@ def tokenize : ℕ → List Char → Except String Toks
       match c, cs with
       | '-', '-' :: rest => tokenize f (rest.dropWhile (· != '\n'))
       | ':', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym ":=" :: ts)
+      | '|', '|' :: rest => do let ts ← tokenize f rest; .ok (.sym "||" :: ts)
       | '<', '=' :: '=' :: rest => do let ts ← tokenize f rest; .ok (.sym "<==" :: ts)
       | '<', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym "<=" :: ts)
       | ';', '.' :: '.' :: rest => do let ts ← tokenize f rest; .ok (.sym ";.." :: ts)
@@ -620,13 +628,28 @@ def parseProg (fuel : ℕ) (st : PS) : Except String (P × PS) :=
   match fuel with
   | 0 => .error "program too long or too deeply nested"
   | f + 1 => do
-    let (p, st) ← parseChoice f st
+    let (p, st) ← parsePar f st
     match st.toks with
     | .sym "." :: ts₁ =>
       if endsBlock ts₁ then .ok (p, st.at ts₁)
       else do
         let (q, st) ← parseProg f (st.at ts₁)
         .ok (.seq p q, st)
+    | _ => .ok (p, st)
+termination_by structural fuel
+
+/-- `par := choice ('||' choice)*`: concurrent composition, which binds tighter
+than `.` and looser than `or`. Which variables belong to which process is
+settled when the whole file has been read (`resolvePar`). -/
+def parsePar (fuel : ℕ) (st : PS) : Except String (P × PS) :=
+  match fuel with
+  | 0 => .error "program too long or too deeply nested"
+  | f + 1 => do
+    let (p, st) ← parseChoice f st
+    match st.toks with
+    | .sym "||" :: ts₁ => do
+      let (q, st) ← parsePar f (st.at ts₁)
+      .ok (.par (fun _ => false) p q, st)
     | _ => .ok (p, st)
 termination_by structural fuel
 
@@ -704,7 +727,7 @@ def parseItem (fuel : ℕ) (st : PS) : Except String (Raw × PS) :=
       let st ← expectWord "od" st
       .ok (.loop b, st)
     | _ => do
-      let (p, st) ← parseChoice f st
+      let (p, st) ← parsePar f st
       .ok (.stmt p, st)
 termination_by structural fuel
 
@@ -853,6 +876,60 @@ def parseFile (fuel : ℕ) (main : Option P) (st : PS) : Except String (Option P
         parseFile f (some p) st
 termination_by structural fuel
 
+/-! ### Who owns what in a concurrent composition -/
+
+/-- The variables a program may assign, given those each specification may. A
+local declaration hides its own variable. -/
+def assigned (procW : ℕ → List ℕ) : P → List ℕ
+  | .assign x _ => [x]
+  | .seq p q => assigned procW p ++ assigned procW q
+  | .cond _ p q => assigned procW p ++ assigned procW q
+  | .or p q => assigned procW p ++ assigned procW q
+  | .par _ p q => assigned procW p ++ assigned procW q
+  | .whileDo _ p => assigned procW p
+  | .newLocal x _ p => (assigned procW p).filter (· != x)
+  | .call k => procW k
+  | _ => []
+
+/-- What each specification may assign, through the calls it makes: the least
+solution, by iteration from nothing. -/
+def procWrites (bodies : List (ℕ × P)) : ℕ → List (ℕ × List ℕ) → List (ℕ × List ℕ)
+  | 0, w => w
+  | f + 1, w =>
+    let look := fun k => (w.lookup k).getD []
+    let w' := bodies.map fun (k, b) => (k, (assigned look b).eraseDups)
+    if w' == w then w else procWrites bodies f w'
+
+/-- Settle each `||`: a process owns the variables it may assign, and the two
+processes may not both assign one. -/
+def resolvePar (procW : ℕ → List ℕ) (names : List String) : P → Except String P
+  | .par _ p q => do
+    let p ← resolvePar procW names p
+    let q ← resolvePar procW names q
+    let a := assigned procW p
+    let b := assigned procW q
+    match a.find? b.contains with
+    | some x =>
+      let w := names.getD x "?"
+      if w.startsWith "#" && w.endsWith ".read" then
+        .error s!"both processes of a || input from channel {(w.drop 1).dropEnd 5}"
+      else .error s!"both processes of a || assign {w}"
+    | none => .ok (.par (fun x => a.contains x) p q)
+  | .seq p q => do .ok (.seq (← resolvePar procW names p) (← resolvePar procW names q))
+  | .cond c p q => do .ok (.cond c (← resolvePar procW names p) (← resolvePar procW names q))
+  | .or p q => do .ok (.or (← resolvePar procW names p) (← resolvePar procW names q))
+  | .whileDo c p => do .ok (.whileDo c (← resolvePar procW names p))
+  | .newLocal x e p => do .ok (.newLocal x e (← resolvePar procW names p))
+  | p => .ok p
+
+/-- Settle every `||` of a parsed file. -/
+def resolveProgram (prog : Program) : Except String Program := do
+  let w := procWrites prog.defs (prog.defs.length * (prog.names.length + 1) + 1) []
+  let look := fun k => (w.lookup k).getD []
+  let main ← resolvePar look prog.names prog.main
+  let defs ← prog.defs.mapM fun (k, b) => do .ok (k, ← resolvePar look prog.names b)
+  .ok ⟨main, defs, prog.names, prog.procs⟩
+
 /-- The parameters of the definitions, interned as variables. -/
 def internParams : List (String × List String) → List String → List String × List (List ℕ)
   | [], names => (names, [])
@@ -894,11 +971,11 @@ def parseToksWith (names : List String) (ts : Toks) : Except String Program :=
   | none, none, none =>
     match parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params, chans⟩ with
     | .error e => .error e
-    | .ok (some p, st) => .ok ⟨p, st.bodies, st.names, st.procs⟩
+    | .ok (some p, st) => resolveProgram ⟨p, st.bodies, st.names, st.procs⟩
     | .ok (none, st) =>
       match procs with
       | [] => .error "the program is empty"
-      | _ :: _ => .ok ⟨.call 0, st.bodies, st.names, st.procs⟩
+      | _ :: _ => resolveProgram ⟨.call 0, st.bodies, st.names, st.procs⟩
 
 /-- Parse a whole token list with no names in use. -/
 def parseToks (ts : Toks) : Except String Program := parseToksWith [] ts
@@ -1151,6 +1228,49 @@ theorem channel_run :
       prog.run 100 (initWith [(0, .list [.int 5, .int 6, .int 7])])).map (fun s => s 2) =
       some (.list [.int 18]) := by decide +kernel
 
+/-! #### Concurrent composition, Section 8.0 -/
+
+/-- `x:= y || y:= x`: each process sees the other's variable at its initial
+value, so the two exchange values (`Composition.swap_par`). -/
+def parSwapSrc : String := "x:= y || y:= x"
+
+def parSwapToks : Toks :=
+  [.word "x", .sym ":=", .word "y", .sym "||", .word "y", .sym ":=", .word "x"]
+
+theorem parSwap_run :
+    ((parseToksWith ["x", "y"] parSwapToks).toOption.bind fun prog =>
+      prog.run 10 (initWith [(0, .int 1), (1, .int 2)])).map (fun s => (s 0, s 1)) =
+      some (.int 2, .int 1) := by decide +kernel
+
+/-- `(x:= x+1. x:= x–1) || y:= x`: "if one process is a sequential composition,
+the other cannot see its intermediate values" (`Composition.seq_par`), so `y`
+ends with the initial `x`. -/
+def seqParSrc : String := "(x:= x+1. x:= x-1) || y:= x"
+
+def seqParToks : Toks :=
+  [.sym "(", .word "x", .sym ":=", .word "x", .sym "+", .num 1, .sym ".", .word "x",
+   .sym ":=", .word "x", .sym "-", .num 1, .sym ")", .sym "||", .word "y", .sym ":=",
+   .word "x"]
+
+theorem seqPar_run :
+    ((parseToksWith ["x"] seqParToks).toOption.bind fun prog =>
+      prog.run 10 (initWith [(0, .int 5)])).map (fun s => (s 0, s 1)) =
+      some (.int 5, .int 5) := by decide +kernel
+
+/-- With a clock, the composition finishes when both processes have: the one that
+ticks twice decides the time. -/
+def parTimeSrc : String := "(tick. tick. a:= 1) || (tick. b:= 2)"
+
+def parTimeToks : Toks :=
+  [.sym "(", .word "tick", .sym ".", .word "tick", .sym ".", .word "a", .sym ":=", .num 1,
+   .sym ")", .sym "||", .sym "(", .word "tick", .sym ".", .word "b", .sym ":=", .num 2,
+   .sym ")"]
+
+theorem parTime_runT :
+    ((parseToks parTimeToks).toOption.bind fun prog =>
+      (prog.runT 10 ⟨init, 0⟩).map fun st => (st.mem 0, st.mem 1, st.t)) =
+      some (.int 1, .int 2, 2) := by decide +kernel
+
 /-- The self-test the binary runs: each demonstration's name, source, and the
 tokens the theorems above are stated of. -/
 def selfTests : List (String × String × Toks) :=
@@ -1158,7 +1278,9 @@ def selfTests : List (String × String × Toks) :=
    ("arrays", arraysSrc, arraysToks), ("listSum", listSumSrc, listSumToks),
    ("exitLoop", exitLoopSrc, exitLoopToks), ("deepExit", deepExitSrc, deepExitToks),
    ("forLoop", forLoopSrc, forLoopToks), ("gcd", gcdSrc, gcdToks), ("swap", swapSrc, swapToks),
-   ("even", evenSrc, evenToks), ("channel", channelSrc, channelToks)]
+   ("even", evenSrc, evenToks), ("channel", channelSrc, channelToks),
+   ("parSwap", parSwapSrc, parSwapToks), ("seqPar", seqParSrc, seqParToks),
+   ("parTime", parTimeSrc, parTimeToks)]
 
 end Demo
 
