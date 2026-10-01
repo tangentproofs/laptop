@@ -40,6 +40,8 @@ interpreter is interpreting *this* theory and no other:
 | `.ensure b`       | `Spec.ensure`                              |
 | `.or p q`         | `Spec.or`                                  |
 | `.call k`         | its executions (see below)                 |
+| `.par own p q`    | `Spec.parOwn` (Section 8.0)                |
+| `.prob r p q`     | its support (Section 5.7; see `runDist`)   |
 
 For the loop we need a specification where the book has only a refinement
 notation. `Spec.whileRel b R` is the inductively defined relation of the
@@ -187,10 +189,11 @@ whole language (`mem_runAll_iff_eval`, `mem_runAll_iff_denote`).
 * The completeness theorems for `run` assume the definitions in scope are
   deterministic too (`DetDefs`); the write set of a call is not read off its
   syntax, so the frame check claims nothing for a program with calls.
-* Out of scope here, and not claimed anywhere below: concurrency (`||`) and
-  channels and interaction. The time variable is `InterpreterTime`, and the
-  surface syntax and the command line are `InterpreterLang` and
-  `InterpreterLangSyntax`.
+* Concurrent composition runs both processes from the prestate, so processes do
+  not communicate; a probabilistic choice is read here by its support, and its
+  probabilities by `InterpreterProb.runDist`. The time variable is
+  `InterpreterTime`, and the surface syntax and the command line are
+  `InterpreterLang` and `InterpreterLangSyntax`.
 -/
 
 namespace LaPToP.ProgramTheory
@@ -332,6 +335,10 @@ inductive Prog (Var : Type u) (Val : Type v) : Type (max u v) where
   /-- `p || q`, the concurrent composition of Section 8.0: the variables `own`
   picks out belong to `p`, the others to `q`. -/
   | par (own : Var → Bool) (p q : Prog Var Val) : Prog Var Val
+  /-- `if r then p else q` with `r` a probability (Section 5.7): `p` with
+  probability `r`, `q` with probability `1 – r`. Without probabilities it is a
+  choice between the branches whose probability is not `0`. -/
+  | prob (r : Spec.State Var Val → ℚ) (p q : Prog Var Val) : Prog Var Val
 
 /-- Programs without loops: the four notations of Section 4.0.3 that are
 programs outright. -/
@@ -363,6 +370,7 @@ def Det : Prog Var Val → Prop
   | .assert _ => True
   | .call _ => True
   | .par _ p q => Det p ∧ Det q
+  | .prob _ _ _ => False
 
 /-- The named specifications a program can call, each with the program that
 refines it: `call k` runs `body k`. A program is always interpreted relative to
@@ -410,6 +418,7 @@ def run [DecidableEq Var] :
   | n + 1, .call k, s => run n (Defs.body k) s
   | n + 1, .par own p q, s =>
       (run n p s).bind fun s₁ => (run n q s).map fun s₂ => Spec.merge own s₁ s₂
+  | n + 1, .prob r p q, s => if 0 < r s then run n p s else run n q s
 
 variable [DecidableEq Var]
 
@@ -461,6 +470,10 @@ variable [DecidableEq Var]
 @[simp] theorem run_par (n : ℕ) (own : Var → Bool) (p q : Prog Var Val) (s : Spec.State Var Val) :
     run (n + 1) (.par own p q) s =
       (run n p s).bind fun s₁ => (run n q s).map fun s₂ => Spec.merge own s₁ s₂ := rfl
+
+@[simp] theorem run_prob (n : ℕ) (r : Spec.State Var Val → ℚ) (p q : Prog Var Val)
+    (s : Spec.State Var Val) :
+    run (n + 1) (.prob r p q) s = if 0 < r s then run n p s else run n q s := rfl
 
 /-- More fuel never spoils a successful run. -/
 theorem run_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
@@ -530,6 +543,11 @@ theorem run_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
           simp only [hp, hq, Option.bind_some, Option.map_some] at h
           rw [ih hp hnm, ih hq hnm]
           exact h
+    | prob r p q =>
+      simp only [run_prob] at h ⊢
+      split_ifs at h ⊢ with hr
+      · exact ih h hnm
+      · exact ih h hnm
 
 /-! ### Execution without fuel
 
@@ -595,6 +613,12 @@ inductive Eval : Prog Var Val → Spec.State Var Val → Spec.State Var Val → 
   variables. -/
   | par {own : Var → Bool} {p q : Prog Var Val} {s s₁ s₂ : Spec.State Var Val} :
       Eval p s s₁ → Eval q s s₂ → Eval (.par own p q) s (Spec.merge own s₁ s₂)
+  /-- A probabilistic choice can take its first branch if that has a chance. -/
+  | probLeft {r : Spec.State Var Val → ℚ} {p q : Prog Var Val} {s s' : Spec.State Var Val}
+      (hr : 0 < r s) : Eval p s s' → Eval (.prob r p q) s s'
+  /-- ... and its second branch if that has one. -/
+  | probRight {r : Spec.State Var Val → ℚ} {p q : Prog Var Val} {s s' : Spec.State Var Val}
+      (hr : r s < 1) : Eval q s s' → Eval (.prob r p q) s s'
 
 /-- A fuelled run is an execution: the budget only restricts which derivations
 are reachable, not what they mean. -/
@@ -676,6 +700,11 @@ theorem eval_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Va
           simp only [hp, hq, Option.bind_some, Option.map_some, Option.some.injEq] at h
           subst h
           exact .par (ih hp) (ih hq)
+    | prob r p q =>
+      simp only [run_prob] at h
+      split_ifs at h with hr
+      · exact .probLeft hr (ih h)
+      · exact .probRight (lt_of_le_of_lt (not_lt.mp hr) zero_lt_one) (ih h)
 
 /-! ### Denotation into the theory of Chapter 4 -/
 
@@ -695,6 +724,7 @@ def denote : Prog Var Val → Spec (Spec.State Var Val)
   | .assert b => Spec.ensure fun s => b s = true
   | .call k => fun s s' => Eval (.call k) s s'
   | .par own p q => Spec.parOwn own (denote p) (denote q)
+  | .prob r p q => fun s s' => (0 < r s ∧ denote p s s') ∨ (r s < 1 ∧ denote q s s')
 
 @[simp] theorem denote_ok : denote (Var := Var) (Val := Val) .ok = Spec.ok := rfl
 
@@ -735,6 +765,12 @@ theorem denote_call (k : ℕ) : denote (.call k : Prog Var Val) = fun s s' => Ev
 
 @[simp] theorem denote_par (own : Var → Bool) (p q : Prog Var Val) :
     denote (.par own p q) = Spec.parOwn own (denote p) (denote q) := rfl
+
+/-- Without probabilities, a probabilistic choice is the choice between the
+branches that have a chance: its support. -/
+@[simp] theorem denote_prob (r : Spec.State Var Val → ℚ) (p q : Prog Var Val) :
+    denote (.prob r p q) = fun s s' => (0 < r s ∧ denote p s s') ∨ (r s < 1 ∧ denote q s s') :=
+  rfl
 
 /-- A loop-free program denotes a program in the sense of Section 4.0.3. -/
 theorem isProgram_denote {p : Prog Var Val} (h : LoopFree p) : Spec.IsProgram (denote p) := by
@@ -822,6 +858,11 @@ theorem denote_of_run : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var 
         | some s₂ =>
           simp only [hp, hq, Option.bind_some, Option.map_some, Option.some.injEq] at h
           exact ⟨s₁, s₂, ih hp, ih hq, h.symm⟩
+    | prob r p q =>
+      simp only [run_prob] at h
+      split_ifs at h with hr
+      · exact Or.inl ⟨hr, ih h⟩
+      · exact Or.inr ⟨lt_of_le_of_lt (not_lt.mp hr) zero_lt_one, ih h⟩
 
 /-- The bridge from a Chapter 4 development to an execution: if `W ⇐ denote p`
 has been proved, then every successful run of `p` satisfies `W`. -/
@@ -879,6 +920,8 @@ theorem denote_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
   | assert hb => exact ⟨hb, rfl⟩
   | call h _ => exact .call h
   | par _ _ ihp ihq => exact ⟨_, _, ihp, ihq, rfl⟩
+  | probLeft hr _ ih => exact Or.inl ⟨hr, ih⟩
+  | probRight hr _ ih => exact Or.inr ⟨hr, ih⟩
 
 /-- **Completeness**: every behaviour the denotation allows is a terminating
 execution. Together with `denote_of_eval`, execution and denotation are the same
@@ -935,6 +978,11 @@ theorem eval_of_denote : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
     intro s s' h
     obtain ⟨s₁, s₂, h₁, h₂, rfl⟩ := h
     exact .par (ihp h₁) (ihq h₂)
+  | prob r p q ihp ihq =>
+    intro s s' h
+    rcases h with ⟨hr, h⟩ | ⟨hr, h⟩
+    · exact .probLeft hr (ihp h)
+    · exact .probRight hr (ihq h)
 
 /-- Execution *is* the denotation: the fuel-free operational semantics and the
 Chapter 4 specification of a program are one relation. -/
@@ -989,6 +1037,8 @@ theorem exists_run_of_eval [DetDefs Var Val] {p : Prog Var Val} (hp : Det p)
     refine ⟨max f₁ f₂ + 1, ?_⟩
     rw [run_par, run_le h₁ (le_max_left f₁ f₂), run_le h₂ (le_max_right f₁ f₂)]
     rfl
+  | probLeft => exact hp.elim
+  | probRight => exact hp.elim
 
 /-- **Completeness on the deterministic fragment**, for the denotation: every
 behaviour allowed by the denotation of a program without a choice is achieved by
@@ -1139,6 +1189,8 @@ def runAll : ℕ → Prog Var Val → Spec.State Var Val → List (Spec.State Va
   | n + 1, .call k, s => runAll n (Defs.body k) s
   | n + 1, .par own p q, s =>
       (runAll n p s).flatMap fun s₁ => (runAll n q s).map fun s₂ => Spec.merge own s₁ s₂
+  | n + 1, .prob r p q, s =>
+      (if 0 < r s then runAll n p s else []) ++ (if r s < 1 then runAll n q s else [])
 
 @[simp] theorem runAll_zero (p : Prog Var Val) (s : Spec.State Var Val) :
     runAll 0 p s = [] := by cases p <;> rfl
@@ -1189,6 +1241,11 @@ def runAll : ℕ → Prog Var Val → Spec.State Var Val → List (Spec.State Va
     (s : Spec.State Var Val) :
     runAll (n + 1) (.par own p q) s =
       (runAll n p s).flatMap fun s₁ => (runAll n q s).map fun s₂ => Spec.merge own s₁ s₂ := rfl
+
+@[simp] theorem runAll_prob (n : ℕ) (r : Spec.State Var Val → ℚ) (p q : Prog Var Val)
+    (s : Spec.State Var Val) :
+    runAll (n + 1) (.prob r p q) s =
+      (if 0 < r s then runAll n p s else []) ++ (if r s < 1 then runAll n q s else []) := rfl
 
 /-- More fuel never loses a result of the search. -/
 theorem runAll_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
@@ -1245,6 +1302,15 @@ theorem runAll_le : ∀ {f g : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Va
       simp only [runAll_par, List.mem_flatMap, List.mem_map] at h ⊢
       obtain ⟨s₁, h₁, s₂, h₂, rfl⟩ := h
       exact ⟨s₁, ih h₁ hnm, s₂, ih h₂ hnm, rfl⟩
+    | prob r p q =>
+      simp only [runAll_prob, List.mem_append] at h ⊢
+      rcases h with h | h
+      · left; split_ifs at h ⊢ with hr
+        · exact ih h hnm
+        · simp at h
+      · right; split_ifs at h ⊢ with hr
+        · exact ih h hnm
+        · simp at h
 
 /-- **Soundness of the search**: every state it finds is an execution. -/
 theorem eval_of_mem_runAll : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State Var Val},
@@ -1311,6 +1377,15 @@ theorem eval_of_mem_runAll : ∀ {f : ℕ} {p : Prog Var Val} {s s' : Spec.State
       simp only [runAll_par, List.mem_flatMap, List.mem_map] at h
       obtain ⟨s₁, h₁, s₂, h₂, rfl⟩ := h
       exact .par (ih h₁) (ih h₂)
+    | prob r p q =>
+      simp only [runAll_prob, List.mem_append] at h
+      rcases h with h | h
+      · split_ifs at h with hr
+        · exact .probLeft hr (ih h)
+        · simp at h
+      · split_ifs at h with hr
+        · exact .probRight hr (ih h)
+        · simp at h
 
 /-- **Completeness of the search**, for the whole language, the choice included:
 every execution is found with enough fuel. -/
@@ -1365,6 +1440,12 @@ theorem exists_mem_runAll_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Va
     refine ⟨max f₁ f₂ + 1, ?_⟩
     simp only [runAll_par, List.mem_flatMap, List.mem_map]
     exact ⟨s₁, runAll_le h₁ (le_max_left _ _), s₂, runAll_le h₂ (le_max_right _ _), rfl⟩
+  | probLeft hr _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    exact ⟨f + 1, by simp only [runAll_prob, List.mem_append, ite_eq_left hr]; exact Or.inl hf⟩
+  | probRight hr _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    exact ⟨f + 1, by simp only [runAll_prob, List.mem_append, ite_eq_left hr]; exact Or.inr hf⟩
 
 /-- The searching interpreter computes exactly the executions — and so, by
 `eval_eq_denote`, exactly the denotation. Unlike `run`, it needs no hypothesis:
@@ -1410,6 +1491,8 @@ def denoteWith (C : ℕ → Spec (Spec.State Var Val)) : Prog Var Val → Spec (
   | .assert b => Spec.ensure fun s => b s = true
   | .call k => C k
   | .par own p q => Spec.parOwn own (denoteWith C p) (denoteWith C q)
+  | .prob r p q => fun s s' =>
+      (0 < r s ∧ denoteWith C p s s') ∨ (r s < 1 ∧ denoteWith C q s s')
 
 /-- A program's denotation is the one with each call read as that call's own
 denotation. -/
@@ -1430,6 +1513,7 @@ theorem denote_eq_denoteWith : ∀ p : Prog Var Val,
   | assert => rfl
   | call => rfl
   | par own p q ihp ihq => rw [denote_par, ihp, ihq]; rfl
+  | prob r p q ihp ihq => rw [denote_prob, ihp, ihq]; rfl
 
 /-- **The calls solve their refinements**, with equality: the specification a
 call names is its body, with every call in the body read as the specification
@@ -1467,6 +1551,8 @@ theorem refines_denote_call {S : ℕ → Spec (Spec.State Var Val)}
     | assert hb => exact ⟨hb, rfl⟩
     | call _ ih => exact hS _ _ _ ih
     | par _ _ ihp ihq => exact ⟨_, _, ihp, ihq, rfl⟩
+    | probLeft hr _ ih => exact Or.inl ⟨hr, ih⟩
+    | probRight hr _ ih => exact Or.inr ⟨hr, ih⟩
   exact fun s s' h => key (show Eval (.call k) s s' from h)
 
 /-- Every terminating run of a call satisfies whatever a refinement development
@@ -1485,6 +1571,7 @@ def CallFree : Prog Var Val → Prop
   | .or p q => CallFree p ∧ CallFree q
   | .call _ => False
   | .par _ p q => CallFree p ∧ CallFree q
+  | .prob _ p q => CallFree p ∧ CallFree q
   | _ => True
 
 /-- A program with no calls means the same whatever its calls are read as. -/
@@ -1505,6 +1592,7 @@ theorem denoteWith_callFree (C : ℕ → Spec (Spec.State Var Val)) :
   | assert => rfl
   | call => exact hp.elim
   | par own p q ihp ihq => rw [denote_par, ← ihp hp.1, ← ihq hp.2]; rfl
+  | prob r p q ihp ihq => rw [denote_prob, ← ihp hp.1, ← ihq hp.2]; rfl
 
 /-- **The exit-loop, executed.** Section 5.2.1 makes `L ⇐ do A. exit when b. C od`
 "an alternative notation for `L ⇐ A. if b then ok else C. L`". A loop whose
@@ -1602,6 +1690,7 @@ def writes : Prog Var Val → Set Var
   | .assert _ => ∅
   | .call _ => Set.univ
   | .par own p q => {x | own x = true ∧ x ∈ writes p} ∪ {x | own x = false ∧ x ∈ writes q}
+  | .prob _ p q => writes p ∪ writes q
 
 omit [DecidableEq Var] [Defs Var Val] in
 @[simp] theorem writes_ok : writes (Prog.ok : Prog Var Val) = ∅ := rfl
@@ -1654,6 +1743,10 @@ what it writes. -/
 @[simp] theorem writes_par (own : Var → Bool) (p q : Prog Var Val) :
     writes (.par own p q) =
       {x | own x = true ∧ x ∈ writes p} ∪ {x | own x = false ∧ x ∈ writes q} := rfl
+
+omit [DecidableEq Var] [Defs Var Val] in
+@[simp] theorem writes_prob (r : Spec.State Var Val → ℚ) (p q : Prog Var Val) :
+    writes (.prob r p q) = writes p ∪ writes q := rfl
 
 /-- A terminating execution changes no variable outside the program's write set.
 This is the frame condition of Section 5.0.1, established once and for all from
@@ -1714,6 +1807,14 @@ theorem unchanged_of_eval : ∀ {p : Prog Var Val} {s s' : Spec.State Var Val},
     cases hown : own v
     · simp only [Bool.false_eq_true, ite_false]; exact ihq v (hv.2 hown)
     · simp only [ite_true]; exact ihp v (hv.1 hown)
+  | probLeft _ _ ih =>
+    intro v hv
+    simp only [writes_prob, Set.mem_union, not_or] at hv
+    exact ih v hv.1
+  | probRight _ _ ih =>
+    intro v hv
+    simp only [writes_prob, Set.mem_union, not_or] at hv
+    exact ih v hv.2
 
 /-- **The frame of a program**: for a program whose writes lie inside `xs`, the
 framed specification and the denotation are the same relation,

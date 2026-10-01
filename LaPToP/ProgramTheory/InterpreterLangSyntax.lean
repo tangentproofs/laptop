@@ -23,7 +23,8 @@ statement := 'ok' | 'tick'
            | name (',' name)* ':=' exp (',' exp)*   -- simultaneous
            | name ('(' exp (',' exp)* ')')?         -- a call
            | name '!' exp | name '?'                -- output, input
-           | 'if' exp 'then' program ('else' program)? 'fi'
+           | 'if' exp ('/' exp)? 'then' program ('else' program)? 'fi'
+           | name ':=' 'rand' atom
            | 'while' exp 'do' program 'od'
            | 'do' body 'od'
            | 'for' name ':=' exp ';..' exp 'do' program 'od'
@@ -78,6 +79,12 @@ sequence, as the book writes it. Each process owns the variables it may assign,
 through the specifications it calls, and two processes may not assign the same
 one; each sees the other's variables only at their initial values.
 
+`if a/b then P else Q fi` is the probabilistic `if` of Section 5.7: `P` with
+probability `a/b`, `Q` otherwise; a `/` at the top of a condition can only be a
+probability, since integer division is `div`. `x:= rand n` gives `x` each value
+`0,..n` with probability `1/n`. `interp --dist` computes the distribution of the
+final states.
+
 A name written `c! e` or `c?` anywhere is a channel (Section 9.1.1): `c! e`
 outputs `e`, `c?` inputs, `c` in an expression is the last message input and
 `√c` says whether one is waiting. The channel's script so far is the list
@@ -110,7 +117,7 @@ private def isWordChar (c : Char) : Bool := isWordStart c || isDigitChar c
 private def isSymChar (c : Char) : Bool :=
   c == '+' || c == '-' || c == '*' || c == '(' || c == ')' || c == '=' || c == '.' ||
   c == '<' || c == '>' || c == '[' || c == ']' || c == ';' || c == ',' || c == '#' || c == '^' ||
-  c == '!' || c == '?'
+  c == '!' || c == '?' || c == '/'
 
 /-- The book's symbols, each as the token of its ASCII spelling. -/
 private def unicodeTok : Char → Option Tok
@@ -176,7 +183,7 @@ def tokenize : ℕ → List Char → Except String Toks
 def keywords : List String :=
   ["ok", "tick", "ensure", "assert", "if", "then", "else", "fi", "while", "do", "od",
    "new", "in", "end", "or", "and", "not", "true", "false", "div", "mod",
-   "exit", "when", "for", "var", "proc", "print"]
+   "exit", "when", "for", "var", "proc", "print", "rand"]
 
 /-- Whether a word is a keyword. -/
 def isKeyword (w : String) : Bool := keywords.contains w
@@ -484,6 +491,9 @@ def parseAtom (fuel : ℕ) (st : PS) : Except String (Exp × PS) :=
       let (b, st) ← parseExp f st
       let st ← expectWord "fi" st
       .ok (.cond c a b, st)
+    | .word "rand" :: _ =>
+      .error "rand may be used only as x:= rand n; for rand inside an expression, \
+        assign it to a fresh variable first, as Section 5.7 does"
     | .sym "√" :: .word c :: ts =>
       match st.chans.find? (·.1 == c) with
       | some (_, M, r) => .ok (check M r, st.at ts)
@@ -711,17 +721,24 @@ def parseItem (fuel : ℕ) (st : PS) : Except String (Raw × PS) :=
         .ok (.exit n c, st)
       | ts => .ok (.exit n (.lit (.bool true)), st.at ts)
     | .word "if" :: ts => do
+      let st₀ := st
       let (c, st) ← parseExp f (st.at ts)
-      let st ← expectWord "then" st
-      let (t, st) ← parseBody f st
       match st.toks with
-      | .word "else" :: ts => do
-        let (e, st) ← parseBody f (st.at ts)
-        let st ← expectWord "fi" st
-        .ok (.ifr ((t ++ e).any Raw.jumps) c t e, st)
+      | .sym "/" :: _ => do
+        -- a probabilistic `if`, which may not exit: read it as a statement
+        let (p, st) ← parseStmt f st₀
+        .ok (.stmt p, st)
       | _ => do
-        let st ← expectWord "fi" st
-        .ok (.ifr (t.any Raw.jumps) c t [.stmt .ok], st)
+        let st ← expectWord "then" st
+        let (t, st) ← parseBody f st
+        match st.toks with
+        | .word "else" :: ts => do
+          let (e, st) ← parseBody f (st.at ts)
+          let st ← expectWord "fi" st
+          .ok (.ifr ((t ++ e).any Raw.jumps) c t e, st)
+        | _ => do
+          let st ← expectWord "fi" st
+          .ok (.ifr (t.any Raw.jumps) c t [.stmt .ok], st)
     | .word "do" :: ts => do
       let (b, st) ← parseBody f (st.at ts)
       let st ← expectWord "od" st
@@ -747,16 +764,24 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
       .ok (assert c, st)
     | .word "if" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
+      let (d, st) ← match st.toks with
+        | .sym "/" :: ts => do
+          let (d, st) ← parseExp f (st.at ts)
+          .ok (some d, st)
+        | _ => .ok (none, st)
       let st ← expectWord "then" st
       let (p, st) ← parseProg f st
-      match st.toks with
-      | .word "else" :: ts => do
-        let (q, st) ← parseProg f (st.at ts)
-        let st ← expectWord "fi" st
-        .ok (ifThen c p q, st)
-      | _ => do
-        let st ← expectWord "fi" st
-        .ok (ifThen c p .ok, st)
+      let (q, st) ← match st.toks with
+        | .word "else" :: ts => do
+          let (q, st) ← parseProg f (st.at ts)
+          let st ← expectWord "fi" st
+          .ok (q, st)
+        | _ => do
+          let st ← expectWord "fi" st
+          .ok (.ok, st)
+      match d with
+      | some d => .ok (probIf c d p q, st)
+      | none => .ok (ifThen c p q, st)
     | .word "while" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
       let st ← expectWord "do" st
@@ -831,6 +856,12 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
             .error s!"{plural xs.length "variable"} cannot be assigned {plural es.length "value"}"
           else if !xs.Nodup then .error "a variable is assigned twice at once"
           else .ok (assignAll xs es st)
+        | .sym ":=" :: .word "rand" :: ts => do
+          let (e, st) ← parseAtom f (st.at ts)
+          let (hn, st) := newHidden st
+          let (hi, st) := newHidden st
+          let (k, st) := newProc "rand" st
+          .ok (declare hn e (declare hi (.lit (.int 0)) (.call k)), st.define k (randBody k x hn hi))
         | _ => do
           let (idx, st) ← parseTarget f st
           let (e, st) ← parseExp f st
@@ -1271,6 +1302,65 @@ theorem parTime_runT :
       (prog.runT 10 ⟨init, 0⟩).map fun st => (st.mem 0, st.mem 1, st.t)) =
       some (.int 1, .int 2, 2) := by decide +kernel
 
+/-! #### Probabilistic programs, Section 5.7 -/
+
+/-- `if 1/3 then x:= 0 else x:= 1 fi`, the book's first example. -/
+def probEx1Src : String := "if 1/3 then x:= 0 else x:= 1 fi"
+
+def probEx1Toks : Toks :=
+  [.word "if", .num 1, .sym "/", .num 3, .word "then", .word "x", .sym ":=", .num 0,
+   .word "else", .word "x", .sym ":=", .num 1, .word "fi"]
+
+/-- `x` is `0` with probability `1/3` and `1` with probability `2/3`, as
+`Probabilistic.ex₁_zero` and `Probabilistic.ex₁_one` say. -/
+theorem probEx1_dist :
+    ((parseToks probEx1Toks).toOption.map fun prog =>
+      (prog.runDist 10 init).map fun (s, w) => (s 0, w)) =
+      some [(.int 0, 1 / 3), (.int 1, 2 / 3)] := by decide +kernel
+
+/-- The book's "slightly more elaborate example": the first, then
+`if x=0 then if 1/2 then x:= x+2 else x:= x+3 else if 1/4 then x:= x+4 else x:= x+5`. -/
+def probEx2Src : String := "if 1/3 then x:= 0 else x:= 1 fi. if x = 0 then if 1/2 then x:= x+2 else x:= x+3 fi else if 1/4 then x:= x+4 else x:= x+5 fi fi"
+
+def probEx2Toks : Toks :=
+  [.word "if", .num 1, .sym "/", .num 3, .word "then", .word "x", .sym ":=", .num 0,
+   .word "else", .word "x", .sym ":=", .num 1, .word "fi", .sym ".", .word "if", .word "x",
+   .sym "=", .num 0, .word "then", .word "if", .num 1, .sym "/", .num 2, .word "then",
+   .word "x", .sym ":=", .word "x", .sym "+", .num 2, .word "else", .word "x", .sym ":=",
+   .word "x", .sym "+", .num 3, .word "fi", .word "else", .word "if", .num 1, .sym "/",
+   .num 4, .word "then", .word "x", .sym ":=", .word "x", .sym "+", .num 4, .word "else",
+   .word "x", .sym ":=", .word "x", .sym "+", .num 5, .word "fi", .word "fi"]
+
+/-- Its distribution is the book's `(x′=2)/6 + (x′=3)/6 + (x′=5)/6 + (x′=6)/2`
+(`Probabilistic.ex₂_eq`). -/
+theorem probEx2_dist :
+    ((parseToks probEx2Toks).toOption.map fun prog =>
+      (prog.runDist 20 init).map fun (s, w) => (s 0, w)) =
+      some [(.int 2, 1 / 6), (.int 3, 1 / 6), (.int 5, 1 / 6), (.int 6, 1 / 2)] := by
+  decide +kernel
+
+/-- "After execution of `P`, the average value of `e` is `(P. e)`": the average of
+`x` is `4 + 2/3`, as `Probabilistic.avg_ex₂_x` proves. -/
+theorem probEx2_average :
+    ((parseToks probEx2Toks).toOption.map fun prog =>
+      ((prog.runDist 20 init).map fun (s, w) => w * (s 0).toInt).sum) = some (4 + 2 / 3) := by
+  decide +kernel
+
+/-- `x:= rand 2. x:= x + rand 3`, with the book's fresh variable for the second
+`rand` (Section 5.7, `RandomNumbers`). -/
+def randSrc : String := "x:= rand 2. r:= rand 3. x:= x + r"
+
+def randToks : Toks :=
+  [.word "x", .sym ":=", .word "rand", .num 2, .sym ".", .word "r", .sym ":=",
+   .word "rand", .num 3, .sym ".", .word "x", .sym ":=", .word "x", .sym "+", .word "r"]
+
+/-- The probability that `x` ends as `1` is `1/3`, as in the book's
+`(x′=0)/6 + (x′=1)/3 + (x′=2)/3 + (x′=3)/6`. -/
+theorem rand_one :
+    ((parseToks randToks).toOption.map fun prog =>
+      (((prog.runDist 50 init).filter fun (s, _) => s 0 == .int 1).map (·.2)).sum) =
+      some (1 / 3) := by decide +kernel
+
 /-- The self-test the binary runs: each demonstration's name, source, and the
 tokens the theorems above are stated of. -/
 def selfTests : List (String × String × Toks) :=
@@ -1280,7 +1370,8 @@ def selfTests : List (String × String × Toks) :=
    ("forLoop", forLoopSrc, forLoopToks), ("gcd", gcdSrc, gcdToks), ("swap", swapSrc, swapToks),
    ("even", evenSrc, evenToks), ("channel", channelSrc, channelToks),
    ("parSwap", parSwapSrc, parSwapToks), ("seqPar", seqParSrc, seqParToks),
-   ("parTime", parTimeSrc, parTimeToks)]
+   ("parTime", parTimeSrc, parTimeToks), ("probEx1", probEx1Src, probEx1Toks),
+   ("probEx2", probEx2Src, probEx2Toks), ("rand", randSrc, randToks)]
 
 end Demo
 

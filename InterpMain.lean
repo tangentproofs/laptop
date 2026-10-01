@@ -33,6 +33,8 @@ structure Options where
   all : Bool := false
   /-- Run on a state with a clock, and print the time. -/
   timed : Bool := false
+  /-- Compute the distribution of the final states. -/
+  dist : Bool := false
   /-- Check the tokenizer against the token lists the parser theorems use. -/
   selftest : Bool := false
   /-- Print the grammar. -/
@@ -49,7 +51,7 @@ usage: interp [options] [file]
   file               read the program from this file (default: standard input)
   --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
                      listSum, exitLoop, deepExit, forLoop, gcd, swap, even,
-                     channel, parSwap, seqPar, parTime
+                     channel, parSwap, seqPar, parTime, probEx1, probEx2, rand
   --NAME=EXP         the initial value of variable NAME, an expression such as
                      --n=10 or --L=[3;1;2] (every other variable starts at 0)
   --fuel=K           execution fuel (default 1000)
@@ -57,6 +59,8 @@ usage: interp [options] [file]
   --timed            run on a state with a clock and print the final time;
                      `tick` advances it and a false `assert` waits until \u221e;
                      with --all, search on the clock (runAllT)
+  --dist             compute the distribution of the final states (Section 5.7):
+                     each with its probability, and the probability of none
   --selftest         check the tokenizer against the proved token lists
   --grammar          print the grammar of the concrete syntax
   --help             print this message
@@ -76,7 +80,8 @@ statement := 'ok' | 'tick'
            | name (',' name)* ':=' exp (',' exp)*   -- simultaneous
            | name ('(' exp (',' exp)* ')')?         -- a call
            | name '!' exp | name '?'                -- output, input
-           | 'if' exp 'then' program ('else' program)? 'fi'
+           | 'if' exp ('/' exp)? 'then' program ('else' program)? 'fi'
+           | name ':=' 'rand' atom
            | 'while' exp 'do' program 'od'
            | 'do' body 'od'
            | 'for' name ':=' exp ';..' exp 'do' program 'od'
@@ -113,6 +118,9 @@ P || Q is concurrent composition: it binds tighter than '.' and looser than
 'or'; each process owns the variables it may assign, may not assign the
 other's, and sees the other's only at their initial values. On the clock it
 finishes when both have.
+'if a/b then P else Q fi' is probabilistic (Section 5.7): P with probability a/b.
+'x:= rand n' gives x each of 0,..n with probability 1/n. --dist prints the
+distribution of the final states.
 A name written c! e or c? is a channel: c! e outputs, c? inputs (waiting for a
 message), c is the last message input and √c says one is waiting. The channel's
 script is the list variable c: --keyboard=[3;4] supplies input, and a channel
@@ -143,6 +151,7 @@ def parseArgs : List String → Options → Except String Options
     if a == "--help" || a == "-h" then parseArgs rest { o with help := true }
     else if a == "--all" then parseArgs rest { o with all := true }
     else if a == "--timed" then parseArgs rest { o with timed := true }
+    else if a == "--dist" then parseArgs rest { o with dist := true }
     else if a == "--selftest" then parseArgs rest { o with selftest := true }
     else if a == "--grammar" then parseArgs rest { o with grammar := true }
     else if a.startsWith "--demo=" then parseArgs rest { o with demo := some (optValue a 7) }
@@ -180,6 +189,9 @@ def demoSrc : String → Option String
   | "parSwap" => some Lang.Demo.parSwapSrc
   | "seqPar" => some Lang.Demo.seqParSrc
   | "parTime" => some Lang.Demo.parTimeSrc
+  | "probEx1" => some Lang.Demo.probEx1Src
+  | "probEx2" => some Lang.Demo.probEx2Src
+  | "rand" => some Lang.Demo.randSrc
   | _ => none
 
 /-- Read the program text. -/
@@ -228,9 +240,29 @@ def initialState (names : List String) (sets : List (String × String)) :
     s := Function.update s x (e.eval s)
   return (names, s)
 
+/-- Collect equal states of a distribution, comparing them on the variables
+the program has. -/
+def collect (n : ℕ) (d : List (St × ℚ)) : List (St × ℚ) :=
+  d.foldl (fun acc (s, w) =>
+    let key := (List.range n).map s
+    match acc.findIdx? fun (t, _) => (List.range n).map t == key with
+    | some i => acc.modify i fun (t, v) => (t, v + w)
+    | none => acc ++ [(s, w)]) []
+
 /-- Run a program and print what it reaches. -/
 def runProgram (o : Options) (names : List String) (st : St) (prog : Program) : IO UInt32 := do
   let shown (s : St) : String := renderState names s
+  if o.dist then
+    if o.timed || o.all then
+      IO.eprintln "interp: --dist cannot be combined with --timed or --all"
+      return 1
+    let d := collect names.length (prog.runDist o.fuel st)
+    for (s, w) in d do
+      IO.println s!"{w}: {shown s}"
+    let lost := 1 - mass d
+    if lost != 0 then
+      IO.println s!"{lost}: no final state (no termination within the fuel, or a failed ensure)"
+    return (if d.isEmpty then 2 else 0)
   if o.timed && o.all then
     let results := prog.runAllT o.fuel ⟨st, 0⟩
     if results.isEmpty then
@@ -287,7 +319,7 @@ def main (args : List String) : IO UInt32 := do
       | some name =>
         match demoSrc name with
         | some src => pure (Except.ok src)
-        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd, swap, even, channel, parSwap, seqPar or parTime)")
+        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd, swap, even, channel, parSwap, seqPar, parTime, probEx1, probEx2 or rand)")
       | none => readSource o
     for (w, _) in o.sets do
       if !validName w then

@@ -76,6 +76,14 @@ echo 'keyboard?. a:= keyboard. keyboard?. screen! a + keyboard' | lake exe inter
 `P || Q` is concurrent composition (Section 8.0): each process owns the
 variables it assigns and sees the other's only at their initial values, so
 `x:= y || y:= x` swaps; on the clock it finishes when both processes have.
+
+Probabilistic programs are the book's (Section 5.7): `if 1/3 then x:= 0 else x:= 1 fi`
+and `x:= rand n`, and `--dist` prints the exact distribution of the final states:
+
+```bash
+echo 'x:= rand 6. y:= rand 6. ensure x + y = 7' | lake exe interp --dist
+# => 1/36: x = 2, y = 5   (and three more)   8/9: no final state ...
+```
 `do ... exit when b ... od` is the exit-loop (`exit n when b` leaves `n` loops) and
 `for i:= m;..n do P od` the for-loop; both are compiled to the refinements the
 book defines them by.

@@ -1,4 +1,5 @@
 import LaPToP.ProgramTheory.InterpreterTime
+import LaPToP.ProgramTheory.InterpreterProb
 
 /-!
 # The interpreter's language: names, values, and the book's operators
@@ -307,6 +308,23 @@ theorem denote_output {M : ℕ} {e : Exp} {s s' : St} (h : denote (output M e) s
   subst hs
   refine ⟨by simp, by simp, by simp, fun y hy => Function.update_of_ne hy _ _⟩
 
+/-! ### Probabilistic choice, Section 5.7 -/
+
+/-- The probability `a/b` read off two integer expressions; `0` when `b` is. -/
+def ratio (a b : Exp) (s : St) : ℚ := ((a.eval s).toInt : ℚ) / ((b.eval s).toInt : ℚ)
+
+/-- `if a/b then p else q`: `p` with probability `a/b`, `q` otherwise. -/
+def probIf (a b : Exp) (p q : P) : P := .prob (ratio a b) p q
+
+/-- The body of `x:= rand n` (Section 5.7, "`rand n` has value `r` with
+probability `(r: 0,..n) / n`"): with the bound in `hn` and a counter in `hi`
+starting at `0`, take the counter's value with probability `1/(n – i)`, and
+otherwise count on. Each value below `n` is taken with probability `1/n`. -/
+def randBody (k x hn hi : ℕ) : P :=
+  ifThen (.bin .ge (.var hi) (.bin .sub (.var hn) (.lit (.int 1)))) (assign x (.var hi))
+    (probIf (.lit (.int 1)) (.bin .sub (.var hn) (.var hi)) (assign x (.var hi))
+      (.seq (assign hi (.bin .add (.var hi) (.lit (.int 1)))) (.call k)))
+
 /-! ### Whole programs -/
 
 /-- A program as the command line runs it: named specifications, each with the
@@ -341,6 +359,10 @@ def Program.runAll (prog : Program) (fuel : ℕ) (s : St) : List St :=
 def Program.runT (prog : Program) (fuel : ℕ) (st : Timed.TState ℕ Value) :
     Option (Timed.TState ℕ Value) :=
   letI := prog.env; Timed.runT fuel prog.main st
+
+/-- The distribution of a program's final states (Section 5.7). -/
+def Program.runDist (prog : Program) (fuel : ℕ) (s : St) : List (St × ℚ) :=
+  letI := prog.env; Interpreter.runDist fuel prog.main s
 
 /-- Every timed poststate of a program within the fuel. -/
 def Program.runAllT (prog : Program) (fuel : ℕ) (st : Timed.TState ℕ Value) :

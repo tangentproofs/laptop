@@ -140,6 +140,12 @@ inductive EvalT : Prog Var Val → TState Var Val → TState Var Val → Prop
   /-- `p || q` runs both processes from the prestate and finishes when both have. -/
   | par {own : Var → Bool} {p q : Prog Var Val} {st st₁ st₂ : TState Var Val} :
       EvalT p st st₁ → EvalT q st st₂ → EvalT (.par own p q) st (mergeT own st₁ st₂)
+  /-- A probabilistic choice takes a branch that has a chance. -/
+  | probLeft {r : Spec.State Var Val → ℚ} {p q : Prog Var Val} {st st' : TState Var Val}
+      (hr : 0 < r st.mem) : EvalT p st st' → EvalT (.prob r p q) st st'
+  /-- ... either branch. -/
+  | probRight {r : Spec.State Var Val → ℚ} {p q : Prog Var Val} {st st' : TState Var Val}
+      (hr : r st.mem < 1) : EvalT q st st' → EvalT (.prob r p q) st st'
 
 /-! ### The timed denotation -/
 
@@ -163,6 +169,8 @@ def denoteT : Prog Var Val → Spec (TState Var Val)
   | .call k => fun st st' => EvalT (.call k) st st'
   | .par own p q => fun st st' =>
       ∃ st₁ st₂, denoteT p st st₁ ∧ denoteT q st st₂ ∧ st' = mergeT own st₁ st₂
+  | .prob r p q => fun st st' =>
+      (0 < r st.mem ∧ denoteT p st st') ∨ (r st.mem < 1 ∧ denoteT q st st')
 
 @[simp] theorem denoteT_ok : denoteT (Prog.ok : Prog Var Val) = Spec.ok := rfl
 
@@ -232,6 +240,8 @@ theorem evalT_iff_denoteT {p : Prog Var Val} {st st' : TState Var Val} :
     | assertFalse hb => exact Or.inr ⟨by simp [hb], rfl⟩
     | call h _ => exact .call h
     | par _ _ ihp ihq => exact ⟨_, _, ihp, ihq, rfl⟩
+    | probLeft hr _ ih => exact Or.inl ⟨hr, ih⟩
+    | probRight hr _ ih => exact Or.inr ⟨hr, ih⟩
   · revert st st'
     induction p with
     | ok => intro st st' h; exact (show st' = st from h) ▸ .ok
@@ -280,6 +290,11 @@ theorem evalT_iff_denoteT {p : Prog Var Val} {st st' : TState Var Val} :
       intro st st' h
       obtain ⟨st₁, st₂, h₁, h₂, rfl⟩ := h
       exact .par (ihp h₁) (ihq h₂)
+    | prob r p q ihp ihq =>
+      intro st st' h
+      rcases h with ⟨hr, h⟩ | ⟨hr, h⟩
+      · exact .probLeft hr (ihp h)
+      · exact .probRight hr (ihq h)
 
 /-! ### Time does not decrease -/
 
@@ -304,6 +319,8 @@ theorem time_le_of_evalT {p : Prog Var Val} {st st' : TState Var Val} (h : EvalT
   | assertFalse => exact le_top
   | call _ ih => exact ih
   | par _ _ ihp _ => exact le_trans ihp (le_max_left _ _)
+  | probLeft _ _ ih => exact ih
+  | probRight _ _ ih => exact ih
 
 /-- Time does not decrease: `t′ ≥ t` for every behaviour of every program. This
 is the first of the three axioms of Section 6.1.1, holding here of the whole
@@ -345,6 +362,7 @@ def runT : ℕ → Prog Var Val → TState Var Val → Option (TState Var Val)
   | n + 1, .call k, st => runT n (Defs.body k) st
   | n + 1, .par own p q, st =>
       (runT n p st).bind fun a => (runT n q st).map fun b => mergeT own a b
+  | n + 1, .prob r p q, st => if 0 < r st.mem then runT n p st else runT n q st
 
 @[simp] theorem runT_zero (p : Prog Var Val) (st : TState Var Val) : runT 0 p st = none := by
   cases p <;> rfl
@@ -396,6 +414,10 @@ def runT : ℕ → Prog Var Val → TState Var Val → Option (TState Var Val)
 @[simp] theorem runT_par (n : ℕ) (own : Var → Bool) (p q : Prog Var Val) (st : TState Var Val) :
     runT (n + 1) (.par own p q) st =
       (runT n p st).bind fun a => (runT n q st).map fun b => mergeT own a b := rfl
+
+@[simp] theorem runT_prob (n : ℕ) (r : Spec.State Var Val → ℚ) (p q : Prog Var Val)
+    (st : TState Var Val) :
+    runT (n + 1) (.prob r p q) st = if 0 < r st.mem then runT n p st else runT n q st := rfl
 
 /-- More fuel never spoils a successful timed run. -/
 theorem runT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
@@ -464,6 +486,11 @@ theorem runT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
           simp only [hp, hq, Option.bind_some, Option.map_some] at h
           rw [ih hp hnm, ih hq hnm]
           exact h
+    | prob r p q =>
+      simp only [runT_prob] at h ⊢
+      split_ifs at h ⊢ with hr
+      · exact ih h hnm
+      · exact ih h hnm
 
 /-- **Soundness**: a successful timed run satisfies the timed specification. -/
 theorem denoteT_of_runT : ∀ {f : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
@@ -537,6 +564,11 @@ theorem denoteT_of_runT : ∀ {f : ℕ} {p : Prog Var Val} {st st' : TState Var 
         | some b =>
           simp only [hp, hq, Option.bind_some, Option.map_some, Option.some.injEq] at h
           exact ⟨a, b, ih hp, ih hq, h.symm⟩
+    | prob r p q =>
+      simp only [runT_prob] at h
+      split_ifs at h with hr
+      · exact Or.inl ⟨hr, ih h⟩
+      · exact Or.inr ⟨lt_of_le_of_lt (not_lt.mp hr) zero_lt_one, ih h⟩
 
 /-- **Completeness on the deterministic fragment**: every timed execution of a
 program without a choice is a run with enough fuel. -/
@@ -583,6 +615,8 @@ theorem exists_runT_of_evalT [DetDefs Var Val] {p : Prog Var Val} (hp : Det p)
     refine ⟨max f₁ f₂ + 1, ?_⟩
     rw [runT_par, runT_le h₁ (le_max_left f₁ f₂), runT_le h₂ (le_max_right f₁ f₂)]
     rfl
+  | probLeft => exact hp.elim
+  | probRight => exact hp.elim
 
 /-- The same, for the timed denotation. -/
 theorem exists_runT_of_denoteT [DetDefs Var Val] {p : Prog Var Val} (hp : Det p)
@@ -616,6 +650,9 @@ def runAllT : ℕ → Prog Var Val → TState Var Val → List (TState Var Val)
   | n + 1, .call k, st => runAllT n (Defs.body k) st
   | n + 1, .par own p q, st =>
       (runAllT n p st).flatMap fun a => (runAllT n q st).map fun b => mergeT own a b
+  | n + 1, .prob r p q, st =>
+      (if 0 < r st.mem then runAllT n p st else []) ++
+        (if r st.mem < 1 then runAllT n q st else [])
 
 @[simp] theorem runAllT_zero (p : Prog Var Val) (st : TState Var Val) :
     runAllT 0 p st = [] := by cases p <;> rfl
@@ -671,6 +708,12 @@ def runAllT : ℕ → Prog Var Val → TState Var Val → List (TState Var Val)
     runAllT (n + 1) (.par own p q) st =
       (runAllT n p st).flatMap fun a => (runAllT n q st).map fun b => mergeT own a b := rfl
 
+@[simp] theorem runAllT_prob (n : ℕ) (r : Spec.State Var Val → ℚ) (p q : Prog Var Val)
+    (st : TState Var Val) :
+    runAllT (n + 1) (.prob r p q) st =
+      (if 0 < r st.mem then runAllT n p st else []) ++
+        (if r st.mem < 1 then runAllT n q st else []) := rfl
+
 /-- More fuel never loses a result of the timed search. -/
 theorem runAllT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val},
     st' ∈ runAllT f p st → f ≤ g → st' ∈ runAllT g p st := by
@@ -724,6 +767,15 @@ theorem runAllT_le : ∀ {f g : ℕ} {p : Prog Var Val} {st st' : TState Var Val
       simp only [runAllT_par, List.mem_flatMap, List.mem_map] at h ⊢
       obtain ⟨a, ha, b, hb, rfl⟩ := h
       exact ⟨a, ih ha hnm, b, ih hb hnm, rfl⟩
+    | prob r p q =>
+      simp only [runAllT_prob, List.mem_append] at h ⊢
+      rcases h with h | h
+      · left; split_ifs at h ⊢ with hr
+        · exact ih h hnm
+        · simp at h
+      · right; split_ifs at h ⊢ with hr
+        · exact ih h hnm
+        · simp at h
 
 /-- **Soundness of the timed search**: every timed state it finds is an
 execution. -/
@@ -792,6 +844,15 @@ theorem evalT_of_mem_runAllT : ∀ {f : ℕ} {p : Prog Var Val} {st st' : TState
       simp only [runAllT_par, List.mem_flatMap, List.mem_map] at h
       obtain ⟨a, ha, b, hb, rfl⟩ := h
       exact .par (ih ha) (ih hb)
+    | prob r p q =>
+      simp only [runAllT_prob, List.mem_append] at h
+      rcases h with h | h
+      · split_ifs at h with hr
+        · exact .probLeft hr (ih h)
+        · simp at h
+      · split_ifs at h with hr
+        · exact .probRight hr (ih h)
+        · simp at h
 
 /-- **Completeness of the timed search**, for the whole language: every timed
 execution is found with enough fuel. -/
@@ -848,6 +909,12 @@ theorem exists_mem_runAllT_of_evalT : ∀ {p : Prog Var Val} {st st' : TState Va
     refine ⟨max f₁ f₂ + 1, ?_⟩
     simp only [runAllT_par, List.mem_flatMap, List.mem_map]
     exact ⟨a, runAllT_le h₁ (le_max_left _ _), b, runAllT_le h₂ (le_max_right _ _), rfl⟩
+  | probLeft hr _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    exact ⟨f + 1, by simp only [runAllT_prob, List.mem_append, ite_eq_left hr]; exact Or.inl hf⟩
+  | probRight hr _ ih =>
+    obtain ⟨f, hf⟩ := ih
+    exact ⟨f + 1, by simp only [runAllT_prob, List.mem_append, ite_eq_left hr]; exact Or.inr hf⟩
 
 /-- The timed search computes exactly the timed specification, for every program
 — the choice is searched, not resolved, so no `Det` hypothesis is needed. -/
@@ -910,6 +977,14 @@ theorem evalT_of_eval {p : Prog Var Val} {s s' : Spec.State Var Val} (h : Eval p
     obtain ⟨t₂, ht₂, h₂⟩ := ihq t ht
     exact ⟨max t₁ t₂, (max_lt (lt_top_iff_ne_top.mpr ht₁) (lt_top_iff_ne_top.mpr ht₂)).ne,
       EvalT.par (st₁ := ⟨_, t₁⟩) (st₂ := ⟨_, t₂⟩) h₁ h₂⟩
+  | probLeft hr _ ih =>
+    intro t ht
+    obtain ⟨t', ht', h⟩ := ih t ht
+    exact ⟨t', ht', .probLeft hr h⟩
+  | probRight hr _ ih =>
+    intro t ht
+    obtain ⟨t', ht', h⟩ := ih t ht
+    exact ⟨t', ht', .probRight hr h⟩
 
 /-- A timed execution that starts and ends at finite times is an untimed one. -/
 theorem eval_of_evalT {p : Prog Var Val} {st st' : TState Var Val} (h : EvalT p st st') :
@@ -942,6 +1017,8 @@ theorem eval_of_evalT {p : Prog Var Val} {st st' : TState Var Val} (h : EvalT p 
     have ha : a.t ≠ ⊤ := fun h => hs' (by simp [mergeT, h])
     have hb : b.t ≠ ⊤ := fun h => hs' (by simp [mergeT, h])
     exact .par (ihp hs ha) (ihq hs hb)
+  | probLeft hr _ ih => exact fun hs hs' => .probLeft hr (ih hs hs')
+  | probRight hr _ ih => exact fun hs hs' => .probRight hr (ih hs hs')
 
 /-- **The projection theorem.** From a state at finite time, the behaviours the
 untimed interpreter has are exactly the timed behaviours that end in finite

@@ -22,6 +22,7 @@ import LaPToP.ProgramTheory.Interpreter
 import LaPToP.ProgramTheory.InterpreterSyntax
 import LaPToP.ProgramTheory.InterpreterTime
 import LaPToP.ProgramTheory.InterpreterLangSyntax
+import LaPToP.ProgramTheory.InterpreterProb
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1482,4 +1483,57 @@ variables, pointwise. The interpreters run both processes and merge, and each
 proof's new case pairs the two runs, with the larger of the two fuels where one
 is needed. The timed finite-time projection needs the finishing time of the
 composition finite exactly when both processes' are, which holds of a maximum.
+:::
+
+:::theorem "interpreter_probability" (parent := "programming_language_core") (tags := "programs, interpreter, probability, hehner-5.7") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.run_prob, LaPToP.ProgramTheory.Interpreter.denote_prob, LaPToP.ProgramTheory.Interpreter.runAll_prob, LaPToP.ProgramTheory.Interpreter.writes_prob, LaPToP.ProgramTheory.Interpreter.Timed.runT_prob, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_prob, LaPToP.ProgramTheory.Interpreter.leftProb, LaPToP.ProgramTheory.Interpreter.rightProb, LaPToP.ProgramTheory.Interpreter.scaleDist, LaPToP.ProgramTheory.Interpreter.bindDist, LaPToP.ProgramTheory.Interpreter.runDist, LaPToP.ProgramTheory.Interpreter.mass, LaPToP.ProgramTheory.Interpreter.eval_of_mem_runDist, LaPToP.ProgramTheory.Interpreter.denote_of_mem_runDist, LaPToP.ProgramTheory.Interpreter.SubDist, LaPToP.ProgramTheory.Interpreter.subDist_runDist, LaPToP.ProgramTheory.Interpreter.runDist_nonneg, LaPToP.ProgramTheory.Interpreter.runDist_mass_le, LaPToP.ProgramTheory.Interpreter.Lang.ratio, LaPToP.ProgramTheory.Interpreter.Lang.probIf, LaPToP.ProgramTheory.Interpreter.Lang.randBody, LaPToP.ProgramTheory.Interpreter.Lang.Program.runDist, LaPToP.ProgramTheory.Interpreter.Lang.Demo.probEx1_dist, LaPToP.ProgramTheory.Interpreter.Lang.Demo.probEx2_dist, LaPToP.ProgramTheory.Interpreter.Lang.Demo.probEx2_average, LaPToP.ProgramTheory.Interpreter.Lang.Demo.rand_one")
+Probabilistic programs. {uses "probabilistic_programming"}[] generalizes the
+notations "to allow probabilistic operands":
+$`\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ Q = b \times P + (1-b) \times Q`
+with $`b` a probability, and sequential composition sums over the intermediate
+states. A program then denotes a distribution of final states, and "after
+execution of $`P`, the average value of $`e` is $`(P.\ e)`".
+
+The core syntax gains the probabilistic $`\mathbf{if}`. The interpreters of
+{uses "interpreter_soundness"}[] read it as the choice between the branches that
+have a chance, which is its support, so all their theorems extend to it. A new
+interpreter reads it as the book does: from a prestate it computes the list of
+final states, each with the probability of reaching it, exactly, in rationals.
+Every state it gives is an execution of the program, so the support lies inside
+the denotation. Every weight is a probability, and the weights sum to at most
+$`1`. What is missing is the probability of not finishing within the fuel, of not
+finishing at all, or of a failed $`\mathbf{ensure}`.
+
+In the language, $`\mathbf{if}\ a/b\ \mathbf{then}\ P\ \mathbf{else}\ Q\ \mathbf{fi}`
+is the book's notation. A `/` at the top of a condition can only be a
+probability, since integer division is written `div`. $`x := \mathrm{rand}\ n`
+gives $`x` each value below $`n` with probability $`1/n`. It is built from
+probabilistic choices: take the counter with probability $`1/(n-i)` or count on.
+The command line prints the distribution with `--dist`.
+
+The demonstrations are the book's examples, decided in the kernel from their
+token lists, and they agree with the values {uses "probabilistic_programming"}[]
+proves:
+- $`\mathbf{if}\ 1/3\ \mathbf{then}\ x := 0\ \mathbf{else}\ x := 1` gives $`1/3` and $`2/3`;
+- the "slightly more elaborate example" gives
+  $`(x'=2)/6 + (x'=3)/6 + (x'=5)/6 + (x'=6)/2`, with average $`4 + 2/3`;
+- $`x := \mathrm{rand}\ 2.\ x := x + \mathrm{rand}\ 3`, with the book's fresh
+  variable, ends at $`x = 1` with probability $`1/3`.
+
+Honest scope. The agreement with the book's distributions is computed for these
+examples, not proved for every program: no theorem says the interpreter's
+weights are the book's sums in general. `rand` may be used only as the whole of
+an assignment, with the book's own advice of a fresh variable for any other use.
+A probability outside $`[0, 1]` is clamped, a nondeterministic choice is resolved
+by its first branch, and time is not kept.
+:::
+
+:::proof "interpreter_probability"
+That every state is an execution is an induction on the fuel, each probabilistic
+branch being taken exactly when its probability is positive, which is the
+condition of the corresponding execution rule. That the weights form a
+sub-distribution is the same induction. Sequencing multiplies each weight by the
+inner masses, which are at most $`1`, so the total does not grow. The
+probabilistic $`\mathbf{if}`'s two branches have masses at most $`r` and $`1-r`. The
+demonstrations are decided by kernel reduction of the parser and the
+interpreter on rationals.
 :::
