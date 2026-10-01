@@ -63,6 +63,15 @@ MovePile ⇐ if n = 0 then ok
 `lake exe interp --n=10 --timed hanoi.ap` reports `moves = 1023, t = 1023`.
 A specification may take parameters, `MovePile(from, to, using) ⇐ ...`, called as
 `MovePile(0, 1, 2)`; `x, y:= y, x` assigns simultaneously.
+
+Channels are the book's (Section 9.1.1): `c! e` outputs, `c?` inputs, `c` is the
+last message input and `√c` says one is waiting. A channel's script is the list
+variable of its name, so input is supplied on the command line:
+
+```bash
+echo 'keyboard?. a:= keyboard. keyboard?. screen! a + keyboard' | lake exe interp --keyboard='[3;4]'
+# => keyboard = [3; 4], screen = [7], a = 3
+```
 `do ... exit when b ... od` is the exit-loop (`exit n when b` leaves `n` loops) and
 `for i:= m;..n do P od` the for-loop; both are compiled to the refinements the
 book defines them by.

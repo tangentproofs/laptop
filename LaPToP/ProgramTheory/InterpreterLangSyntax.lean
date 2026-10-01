@@ -21,6 +21,7 @@ statement := 'ok' | 'tick'
            | name atom* ':=' exp
            | name (',' name)* ':=' exp (',' exp)*   -- simultaneous
            | name ('(' exp (',' exp)* ')')?         -- a call
+           | name '!' exp | name '?'                -- output, input
            | 'if' exp 'then' program ('else' program)? 'fi'
            | 'while' exp 'do' program 'od'
            | 'do' body 'od'
@@ -46,6 +47,7 @@ app       := atom atom*
 atom      := integer | '⊤' | '⊥' | name | '(' exp ')'
            | '[' ']' | '[' exp (';' exp)* ']'
            | 'if' exp 'then' exp 'else' exp 'fi'
+           | '√' name
 ```
 
 A file is a list of refinements `P ⇐ ...`, as the book develops a program
@@ -68,6 +70,11 @@ A specification may have parameters, `P(x, y) ⇐ ...`, and is then called as
 arguments all computed before any parameter is bound and the body forbidden to
 assign a parameter. `x, y:= e, f` likewise computes both values before assigning
 either.
+
+A name written `c! e` or `c?` anywhere is a channel (Section 9.1.1): `c! e`
+outputs `e`, `c?` inputs, `c` in an expression is the last message input and
+`√c` says whether one is waiting. The channel's script so far is the list
+variable named `c`, so an input script is given as its initial value.
 
 Juxtaposition is indexing, as in the book: `A i` is item `i` of `A`, and
 `A i j:= e` assigns an item of a two-dimensional array. Each symbol has an ASCII
@@ -95,7 +102,8 @@ private def isWordChar (c : Char) : Bool := isWordStart c || isDigitChar c
 /-- The single-character ASCII symbols. -/
 private def isSymChar (c : Char) : Bool :=
   c == '+' || c == '-' || c == '*' || c == '(' || c == ')' || c == '=' || c == '.' ||
-  c == '<' || c == '>' || c == '[' || c == ']' || c == ';' || c == ',' || c == '#' || c == '^'
+  c == '<' || c == '>' || c == '[' || c == ']' || c == ';' || c == ',' || c == '#' || c == '^' ||
+  c == '!' || c == '?'
 
 /-- The book's symbols, each as the token of its ASCII spelling. -/
 private def unicodeTok : Char → Option Tok
@@ -109,6 +117,7 @@ private def unicodeTok : Char → Option Tok
   | '∨' => some (.sym "\\/")
   | '¬' => some (.sym "¬")
   | '×' => some (.sym "*")
+  | '√' => some (.sym "√")
   | '⊤' => some (.word "true")
   | '⊥' => some (.word "false")
   | _ => none
@@ -190,6 +199,21 @@ def scanDefs : ℕ → Toks → List (String × List String) → List (String ×
   | f + 1, _ :: ts, acc => scanDefs f ts acc
   | _, [], acc => acc
 
+/-- The channels: the names written `c! e` or `c?` anywhere in the tokens. -/
+def scanChans : Toks → List String → List String
+  | .word c :: ts, acc =>
+    match ts with
+    | .sym "!" :: _ | .sym "?" :: _ => scanChans ts (if acc.contains c then acc else acc ++ [c])
+    | _ => scanChans ts acc
+  | _ :: ts, acc => scanChans ts acc
+  | [], acc => acc
+termination_by structural ts => ts
+
+/-- Whether a word can name a variable given a value on the command line. -/
+def validName (w : String) : Bool :=
+  !w.isEmpty && !isKeyword w && (w.toList.head?.map fun c => c.isAlpha || c == '_').getD false &&
+    w.toList.all fun c => c.isAlphanum || c == '_'
+
 /-- The parser's state. -/
 structure PS where
   /-- The tokens not yet read. -/
@@ -202,6 +226,8 @@ structure PS where
   bodies : List (ℕ × P)
   /-- The parameters of each specification, as variables. -/
   params : List (List ℕ)
+  /-- The channels: each name with its script variable and its read cursor. -/
+  chans : List (String × ℕ × ℕ)
 
 /-- The state with other tokens. -/
 def PS.at (st : PS) (ts : Toks) : PS := { st with toks := ts }
@@ -224,6 +250,7 @@ def parseName (st : PS) : Except String (ℕ × PS) :=
   | .word w :: rest =>
     if isKeyword w then .error s!"expected a name, found the keyword '{w}'"
     else if st.procs.contains w then .error s!"'{w}' names a specification, not a variable"
+    else if st.chans.any (·.1 == w) then .error s!"'{w}' is a channel: write to it with {w}! e"
     else let (x, names) := intern w st.names; .ok (x, { st with toks := rest, names := names })
   | t :: _ => .error s!"expected a name, found '{t.render}'"
   | [] => .error "expected a name, found the end of the program"
@@ -280,7 +307,7 @@ keyword, and not the name of a specification. -/
 def startsAtom (procs : List String) : Tok → Bool
   | .num _ => true
   | .word w => w == "true" || w == "false" || (!isKeyword w && !procs.contains w)
-  | .sym s => s == "(" || s == "["
+  | .sym s => s == "(" || s == "[" || s == "√"
 
 /-- The left-associative operators at each level of precedence: `∨` at 1, `∧` at
 2, `+ -` at 4, `× div mod` at 5. -/
@@ -449,9 +476,16 @@ def parseAtom (fuel : ℕ) (st : PS) : Except String (Exp × PS) :=
       let (b, st) ← parseExp f st
       let st ← expectWord "fi" st
       .ok (.cond c a b, st)
-    | .word _ :: _ => do
-      let (x, st) ← parseName st
-      .ok (.var x, st)
+    | .sym "√" :: .word c :: ts =>
+      match st.chans.find? (·.1 == c) with
+      | some (_, M, r) => .ok (check M r, st.at ts)
+      | none => .error s!"'{c}' is not a channel"
+    | .word w :: ts =>
+      match st.chans.find? (·.1 == w) with
+      | some (_, M, r) => .ok (message M r, st.at ts)
+      | none => do
+        let (x, st) ← parseName st
+        .ok (.var x, st)
     | t :: _ => .error s!"expected an expression, found '{t.render}'"
     | [] => .error "expected an expression, found the end of the program"
 termination_by structural fuel
@@ -727,6 +761,16 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
         let step : P := .seq body (.seq (assign i (.bin .add (.var i) (.lit (.int 1)))) (.call k))
         let st := st.define k (ifThen (.bin .lt (.var i) (.var hi)) step .ok)
         .ok (declare hi n (declare i m (.call k)), st)
+    | .word c :: .sym "!" :: ts =>
+      match st.chans.find? (·.1 == c) with
+      | some (_, M, _) => do
+        let (e, st) ← parseExp f (st.at ts)
+        .ok (output M e, st)
+      | none => .error s!"'{c}' is not a channel"
+    | .word c :: .sym "?" :: ts =>
+      match st.chans.find? (·.1 == c) with
+      | some (_, M, r) => .ok (input M r, st.at ts)
+      | none => .error s!"'{c}' is not a channel"
     | .word "exit" :: _ =>
       .error "'exit' is allowed only in a do-loop, and not inside a while-loop, a scope or a choice"
     | .word "new" :: ts => do
@@ -825,17 +869,30 @@ where
       let (xs, names) := internAll ps names
       (x :: xs, names)
 
+/-- The channels, each with its script variable, which has the channel's name,
+and a hidden read cursor. -/
+def internChans : List String → List String → List String × List (String × ℕ × ℕ)
+  | [], names => (names, [])
+  | c :: cs, names =>
+    let (M, names) := intern c names
+    let (r, names) := intern ("#" ++ c ++ ".read") names
+    let (names, rest) := internChans cs names
+    (names, (c, M, r) :: rest)
+
 /-- Parse a whole token list, starting from a table of variable names already in
 use. The fuel is read off its length. -/
 def parseToksWith (names : List String) (ts : Toks) : Except String Program :=
   let defs := scanDefs (ts.length + 1) ts []
   let procs := defs.map (·.1)
   let (names, params) := internParams defs names
-  match procs.find? isKeyword, procs.find? names.contains with
-  | some w, _ => .error s!"the keyword '{w}' cannot be defined"
-  | none, some w => .error s!"'{w}' names a variable or a parameter, not a specification"
-  | none, none =>
-    match parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params⟩ with
+  let chanNames := scanChans ts []
+  let (names, chans) := internChans chanNames names
+  match procs.find? isKeyword, procs.find? names.contains, chanNames.find? procs.contains with
+  | some w, _, _ => .error s!"the keyword '{w}' cannot be defined"
+  | none, some w, _ => .error s!"'{w}' names a variable, a parameter or a channel, not a specification"
+  | none, none, some w => .error s!"'{w}' is both a channel and a specification"
+  | none, none, none =>
+    match parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params, chans⟩ with
     | .error e => .error e
     | .ok (some p, st) => .ok ⟨p, st.bodies, st.names, st.procs⟩
     | .ok (none, st) =>
@@ -856,9 +913,9 @@ def parseProgram (src : String) : Except String Program := parseProgramWith [] s
 /-- Parse a lone expression, given the variable names in use. -/
 def parseExpression (names : List String) (src : String) : Except String (Exp × List String) := do
   let ts ← tokenize (src.length + 1) src.toList
-  match parseExp (8 * ts.length + 32) ⟨ts, names, [], [], []⟩ with
-  | .ok (e, ⟨[], names, _, _, _⟩) => .ok (e, names)
-  | .ok (_, ⟨t :: _, _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
+  match parseExp (8 * ts.length + 32) ⟨ts, names, [], [], [], []⟩ with
+  | .ok (e, ⟨[], names, _, _, _, _⟩) => .ok (e, names)
+  | .ok (_, ⟨t :: _, _, _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
   | .error e => .error e
 
 /-! ### States -/
@@ -1054,13 +1111,54 @@ theorem swap_run :
       prog.run 10 (initWith [(0, .int 1), (1, .int 2)])).map (fun s => (s 0, s 1)) =
       some (.int 2, .int 1) := by decide +kernel
 
+/-! #### Channels, Section 9.1.1 -/
+
+/-- The first example of Section 9.1.1, `c?. d! even c`: read a number from `c`
+and write whether it is even to `d`. -/
+def evenSrc : String := "c?. d! c mod 2 = 0"
+
+def evenToks : Toks :=
+  [.word "c", .sym "?", .sym ".", .word "d", .sym "!", .word "c", .word "mod", .num 2,
+   .sym "=", .num 0]
+
+/-- From the script `[4]` on `c`, the script written to `d` is `[⊤]`. -/
+theorem even_run :
+    ((parseToksWith ["c"] evenToks).toOption.bind fun prog =>
+      prog.run 20 (initWith [(0, .list [.int 4])])).map (fun s => s 2) =
+      some (.list [.bool true]) := by decide +kernel
+
+/-- With no message on `c`, the input waits: without a clock there is no
+poststate, and with one the wait is until `∞`. -/
+theorem even_run_empty :
+    ((parseToks evenToks).toOption.map fun prog => (prog.run 20 init).isSome) = some false := by
+  decide +kernel
+
+theorem even_runT_empty :
+    ((parseToks evenToks).toOption.bind fun prog =>
+      (prog.runT 20 ⟨init, 0⟩).map (·.t)) = some ⊤ := by decide +kernel
+
+/-- Input until none is waiting, `√c` being the check: the total of the script
+on `c` is output on `screen`. -/
+def channelSrc : String := "do exit when ¬√c. c?. total:= total + c od. screen! total"
+
+def channelToks : Toks :=
+  [.word "do", .word "exit", .word "when", .sym "¬", .sym "√", .word "c", .sym ".",
+   .word "c", .sym "?", .sym ".", .word "total", .sym ":=", .word "total", .sym "+",
+   .word "c", .word "od", .sym ".", .word "screen", .sym "!", .word "total"]
+
+theorem channel_run :
+    ((parseToksWith ["c"] channelToks).toOption.bind fun prog =>
+      prog.run 100 (initWith [(0, .list [.int 5, .int 6, .int 7])])).map (fun s => s 2) =
+      some (.list [.int 18]) := by decide +kernel
+
 /-- The self-test the binary runs: each demonstration's name, source, and the
 tokens the theorems above are stated of. -/
 def selfTests : List (String × String × Toks) :=
   [("sumTo", sumToSrc, sumToToks), ("backtrack", backtrackSrc, backtrackToks),
    ("arrays", arraysSrc, arraysToks), ("listSum", listSumSrc, listSumToks),
    ("exitLoop", exitLoopSrc, exitLoopToks), ("deepExit", deepExitSrc, deepExitToks),
-   ("forLoop", forLoopSrc, forLoopToks), ("gcd", gcdSrc, gcdToks), ("swap", swapSrc, swapToks)]
+   ("forLoop", forLoopSrc, forLoopToks), ("gcd", gcdSrc, gcdToks), ("swap", swapSrc, swapToks),
+   ("even", evenSrc, evenToks), ("channel", channelSrc, channelToks)]
 
 end Demo
 

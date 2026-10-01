@@ -266,6 +266,47 @@ def assigns (x : ℕ) : P → Bool
   | .assignAt _ _ => true
   | _ => false
 
+/-! ### Channels, Section 9.1.1
+
+"Communication on channel `c` is described by two infinite strings `Mc` and `Tc`
+called the message script and the time script, and two extended natural
+variables `rc` and `wc` called the read cursor and the write cursor", with
+`c! e = Mw=e ∧ Tw = t ∧ (w:= w+1)`, `c? = r:= r+1`, `c = M r–1`, `√c = T r ≤ t`.
+
+A sequential program sees of the message script only the messages written so
+far, or supplied to it: a channel here is a list variable holding that prefix of
+`Mc`, whose length is the write cursor, and a hidden read cursor. Output appends
+to the list; input advances the read cursor, and when no message is there it
+waits — an assertion that the cursor is inside the list, so that with a clock the
+wait is until `∞` (the book's input "must wait" for a message that never comes),
+and without one there is no poststate. The time script is not kept. -/
+
+/-- `c! e`: the message `e` is written at the write cursor, the length of the
+script so far, which moves on. A variable never assigned is an empty script. -/
+def output (M : ℕ) (e : Exp) : P := .assign M fun s => .list ((s M).toList ++ [e.eval s])
+
+/-- `c?`: wait for a message, then move the read cursor past it. -/
+def input (M r : ℕ) : P :=
+  .seq (.assert fun s => decide ((s r).toInt < ((s M).toList.length : ℤ)))
+    (.assign r fun s => .int ((s r).toInt + 1))
+
+/-- `c`, the last message read: `M r–1`. -/
+def message (M r : ℕ) : Exp := .index (.var M) (.bin .sub (.var r) (.lit (.int 1)))
+
+/-- `√c`: a message is there to be read. -/
+def check (M r : ℕ) : Exp := .bin .lt (.var r) (.un .len (.var M))
+
+/-- Output is the book's `Mw = e ∧ (w:= w+1)` on the part of the script written
+so far: the message at the write cursor `w = #M` is `e`, the cursor moves on, and
+the messages before it are unchanged. -/
+theorem denote_output {M : ℕ} {e : Exp} {s s' : St} (h : denote (output M e) s s') :
+    (s' M).toList[(s M).toList.length]? = some (e.eval s) ∧
+      (s' M).toList.length = (s M).toList.length + 1 ∧
+      (s' M).toList.take (s M).toList.length = (s M).toList ∧ ∀ y, y ≠ M → s' y = s y := by
+  have hs : s' = Function.update s M (.list ((s M).toList ++ [e.eval s])) := h
+  subst hs
+  refine ⟨by simp, by simp, by simp, fun y hy => Function.update_of_ne hy _ _⟩
+
 /-! ### Whole programs -/
 
 /-- A program as the command line runs it: named specifications, each with the

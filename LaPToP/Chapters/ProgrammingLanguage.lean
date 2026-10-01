@@ -1404,3 +1404,40 @@ Completeness of the fuelled interpreters and the projection theorem are
 inductions on executions, the intermediate times of a finite execution being
 finite because time does not decrease.
 :::
+
+:::theorem "interpreter_channels" (parent := "programming_language_core") (tags := "programs, interpreter, channels, input, output, hehner-9.1.1") (effort := "medium") (lean := "LaPToP.ProgramTheory.Interpreter.Lang.output, LaPToP.ProgramTheory.Interpreter.Lang.input, LaPToP.ProgramTheory.Interpreter.Lang.message, LaPToP.ProgramTheory.Interpreter.Lang.check, LaPToP.ProgramTheory.Interpreter.Lang.denote_output, LaPToP.ProgramTheory.Interpreter.Lang.scanChans, LaPToP.ProgramTheory.Interpreter.Lang.internChans, LaPToP.ProgramTheory.Interpreter.Lang.Demo.even_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.even_run_empty, LaPToP.ProgramTheory.Interpreter.Lang.Demo.even_runT_empty, LaPToP.ProgramTheory.Interpreter.Lang.Demo.channel_run")
+Input and output. {uses "communication"}[] describes a channel $`c` by a message
+script, a time script and two cursors, with
+$`c!\,e = M_w = e \land T_w = t \land (w := w+1)`, $`c? = (r := r+1)`,
+$`c = M_{r-1}` and $`\surd c = T_r \le t`. A sequential program sees of the
+message script only the messages written so far or supplied to it. So a channel
+here is a list variable holding that prefix of the script, with the write cursor
+its length, and a hidden read cursor. Output appends; output is proved to be the
+book's $`M_w = e \land (w := w+1)` on that prefix, the messages before the cursor
+unchanged. Input advances the read cursor, and when no message is there it waits:
+it is an assertion that a message is there, so with the clock of
+{uses "interpreter_time"}[] it waits until $`\infty`, as the book's input must
+wait for a message that never comes, and without a clock it has no poststate.
+The last message input is $`M_{r-1}`, and $`\surd c` says one is waiting.
+
+In the language a name written $`c!\,e` or $`c?` is a channel. An input script
+is the channel's initial value, given on the command line, and the script a
+program writes prints as the list of its messages. The demonstrations run the
+first example of {uses "input_output_examples"}[], $`c?.\ d!\ \mathrm{even}\ c`:
+from the script $`[4]` it writes $`[\top]`, and with nothing to input it has no
+poststate untimed and ends at $`t = \infty` timed. A loop that inputs while
+$`\surd c` and outputs the total is also run.
+
+Honest scope. The time script is not kept, so input does not wait for a message
+to arrive at a later time. There is no concurrency here, so a message a program
+reads was supplied to it rather than written by another process. A recursive
+process such as $`S \Leftarrow c?.\ d!\ 2 \times c.\ S` has no terminating run,
+and so shows no output.
+:::
+
+:::proof "interpreter_channels"
+Output is an assignment of the script variable, so its poststate is computed
+directly and the three facts about the script are list lemmas. The input
+demonstrations are decided in the kernel, the timed one through the timed
+interpreter.
+:::

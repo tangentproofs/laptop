@@ -48,7 +48,8 @@ usage: interp [options] [file]
 
   file               read the program from this file (default: standard input)
   --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
-                     listSum, exitLoop, deepExit, forLoop, gcd, swap
+                     listSum, exitLoop, deepExit, forLoop, gcd, swap, even,
+                     channel
   --NAME=EXP         the initial value of variable NAME, an expression such as
                      --n=10 or --L=[3;1;2] (every other variable starts at 0)
   --fuel=K           execution fuel (default 1000)
@@ -73,6 +74,7 @@ statement := 'ok' | 'tick'
            | name atom* ':=' exp
            | name (',' name)* ':=' exp (',' exp)*   -- simultaneous
            | name ('(' exp (',' exp)* ')')?         -- a call
+           | name '!' exp | name '?'                -- output, input
            | 'if' exp 'then' program ('else' program)? 'fi'
            | 'while' exp 'do' program 'od'
            | 'do' body 'od'
@@ -98,6 +100,7 @@ app       := atom atom*
 atom      := integer | '⊤' | '⊥' | name | '(' exp ')'
            | '[' ']' | '[' exp (';' exp)* ']'
            | 'if' exp 'then' exp 'else' exp 'fi'
+           | '√' name
 
 A file is a list of refinements P ⇐ ... and a main program; with no main
 program the first specification is run. A specification's name on the right of
@@ -105,6 +108,10 @@ a refinement is a call, and may be recursive. 'do ... od' is the exit-loop:
 'exit n when b' leaves n loops. 'for i:= m;..n do P od' runs i from m to n-1.
 A specification with parameters, P(x, y) ⇐ ..., is called as P(e, f); the
 arguments are computed first and bound as locals, which the body may not assign.
+A name written c! e or c? is a channel: c! e outputs, c? inputs (waiting for a
+message), c is the last message input and √c says one is waiting. The channel's
+script is the list variable c: --keyboard=[3;4] supplies input, and a channel
+written to prints as the list of its messages.
 
 Values are integers, binaries (⊤, ⊥) and lists ([3; 1; 2]); a variable never
 assigned is 0. '.' is sequential composition and binds loosest, so
@@ -163,6 +170,8 @@ def demoSrc : String → Option String
   | "forLoop" => some Lang.Demo.forLoopSrc
   | "gcd" => some Lang.Demo.gcdSrc
   | "swap" => some Lang.Demo.swapSrc
+  | "even" => some Lang.Demo.evenSrc
+  | "channel" => some Lang.Demo.channelSrc
   | _ => none
 
 /-- Read the program text. -/
@@ -270,11 +279,10 @@ def main (args : List String) : IO UInt32 := do
       | some name =>
         match demoSrc name with
         | some src => pure (Except.ok src)
-        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd or swap)")
+        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd, swap, even or channel)")
       | none => readSource o
     for (w, _) in o.sets do
-      if w.isEmpty || isKeyword w || !(parseName ⟨[.word w], [], [], [], []⟩ matches .ok _) ||
-          !w.all (fun c => c.isAlphanum || c == '_') then
+      if !validName w then
         IO.eprintln s!"interp: '{w}' cannot be a variable name"
         return 1
     let setNames := (o.sets.map (·.1)).foldl (fun ns w => (intern w ns).2) []
