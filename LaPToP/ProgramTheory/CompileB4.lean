@@ -1175,9 +1175,13 @@ def compile (L : Layout) (p : Stmt) : List UInt8 := L.blocks L.keys ++ (scode L 
 from `0x100`, the main code and its `hl` after them, everything below the
 variables, and the stack depths within bounds. -/
 structure Layout.Fit (L : Layout) (p : Stmt) : Prop where
+  /-- The named statements are laid out from `0x100`. -/
   laid : L.Laid 0x100 L.keys
+  /-- The main code and its `hl` end below the variables. -/
   hi : L.start + slen L p + 1 ≤ L.base
+  /-- The main statement's stack fits. -/
   depth : sdepth p ≤ STACKSZ
+  /-- Each named statement's stack fits. -/
   depths : ∀ k ∈ L.keys, sdepth (L.defs k) ≤ STACKSZ
 
 /-- The image a call needs, from the loaded program. -/
