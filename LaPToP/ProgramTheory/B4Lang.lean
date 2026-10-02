@@ -4,13 +4,16 @@ import LaPToP.ProgramTheory.NetworkLang
 /-!
 # Running the language on b4 (`interp --b4`)
 
-The part of the concrete syntax the b4 compiler takes — `ok`, `tick`, `x:= e`,
-`if`, `while`, parentheses, `c! e`, `c?`, and a `||` of processes as the whole
-program — read into the compiler's statements (`CompileB4.Stmt`), compiled, and
-run: a single program on one b4 machine, a network on a swarm (`B4.Swarm`).
-The tokens, the variable table and the expressions are the interpreter's own
-(`InterpreterLangSyntax`); `≠ ≤ > ≥` are rewritten into `= <` and `¬`, which the
-compiler handles. What the machine computes is, by `CompileB4.load_correct` and
+The part of the language the b4 compiler takes — `ok`, `tick`, `x:= e`, `if`,
+`while`, `do`/`exit` loops, `for` loops, `new x := e in P end`, simultaneous
+assignment, specifications with parameters and recursion, `c! e`, `c?`, and a
+`||` of processes as the whole program — read by the language's own parser,
+which builds the compiler's statements (`CompileB4.Stmt`) beside each program it
+reads (`parseToksShadow`), compiled, and run: a single program on one b4
+machine, a network on a swarm (`B4.Swarm`). Named statements are laid out from
+`0x100` and called with `cl`; local variables keep their old values on the
+control stack. `≠ ≤ > ≥` are rewritten into `= <` and `¬`, which the compiler
+handles. What the machine computes is, by `CompileB4.load_correct` and
 `CompileNet.swarm_correct`, what the language computes, as long as no value
 leaves 32 bits; `interp --selftest` also compares the two on the demonstrations.
 -/
@@ -31,148 +34,88 @@ def Exp.toB4 : Exp → Except String Exp
     let a ← a.toB4
     let b ← b.toB4
     match op with
-    | .add | .sub | .mul | .eq | .lt => .ok (.bin op a b)
+    | .add | .sub | .mul | .div | .mod | .eq | .lt => .ok (.bin op a b)
     | .ne => .ok (.un .not (.bin .eq a b))
     | .le => .ok (.un .not (.bin .lt b a))
     | .gt => .ok (.bin .lt b a)
     | .ge => .ok (.un .not (.bin .lt a b))
-    | _ => .error "the b4 compiler takes only + - × = ≠ < ≤ > ≥ ¬ on integers and binaries"
+    | _ => .error "the b4 compiler takes only + - × div mod = ≠ < ≤ > ≥ ¬ on integers and binaries"
   | _ => .error "the b4 compiler takes only integers, binaries and variables, not lists"
 
-private def expectTok (t : Tok) (st : PS) : Except String PS :=
-  match st.toks with
-  | u :: rest => if u == t then .ok (st.at rest) else .error s!"expected '{t.render}', found '{u.render}'"
-  | [] => .error s!"expected '{t.render}', found the end of the program"
+/-- A statement's expressions in the operators the compiler takes, or why not. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toB4 : Stmt → Except String Stmt
+  | .assign x e => do .ok (.assign x (← e.toB4))
+  | .seq p q => do .ok (.seq (← p.toB4) (← q.toB4))
+  | .cond c p q => do .ok (.cond (← c.toB4) (← p.toB4) (← q.toB4))
+  | .loop c p => do .ok (.loop (← c.toB4) (← p.toB4))
+  | .send ch e => do .ok (.send ch (← e.toB4))
+  | .scope x e p => do .ok (.scope x (← e.toB4) (← p.toB4))
+  | s => .ok s
 
-/-- The tokens that end a block. -/
-def b4Ends : Toks → Bool
-  | [] => true
-  | .word "else" :: _ | .word "fi" :: _ | .word "od" :: _ | .sym ")" :: _ | .sym "||" :: _ => true
-  | _ => false
-
-mutual
-
-/-- `program := statement ('.' statement)* '.'?`. -/
-def b4Prog (fuel : ℕ) (st : PS) : Except String (Stmt × PS) :=
-  match fuel with
-  | 0 => .error "program too long"
-  | f + 1 => do
-    let (p, st) ← b4Stmt f st
-    match st.toks with
-    | .sym "." :: ts =>
-      if b4Ends ts then .ok (p, st.at ts)
-      else do
-        let (q, st) ← b4Prog f (st.at ts)
-        .ok (.seq p q, st)
-    | _ => .ok (p, st)
-termination_by structural fuel
-
-/-- A statement. -/
-def b4Stmt (fuel : ℕ) (st : PS) : Except String (Stmt × PS) :=
-  match fuel with
-  | 0 => .error "program too long"
-  | f + 1 =>
-    match st.toks with
-    | .word "ok" :: ts => .ok (.ok, st.at ts)
-    | .word "tick" :: ts => .ok (.tick, st.at ts)
-    | .word "if" :: ts => do
-      let (c, st) ← parseExp f (st.at ts)
-      let c ← c.toB4
-      let st ← expectTok (.word "then") st
-      let (p, st) ← b4Prog f st
-      match st.toks with
-      | .word "else" :: ts => do
-        let (q, st) ← b4Prog f (st.at ts)
-        let st ← expectTok (.word "fi") st
-        .ok (.cond c p q, st)
-      | _ => do
-        let st ← expectTok (.word "fi") st
-        .ok (.cond c p .ok, st)
-    | .word "while" :: ts => do
-      let (c, st) ← parseExp f (st.at ts)
-      let c ← c.toB4
-      let st ← expectTok (.word "do") st
-      let (p, st) ← b4Prog f st
-      let st ← expectTok (.word "od") st
-      .ok (.loop c p, st)
-    | .sym "(" :: ts => do
-      let (p, st) ← b4Prog f (st.at ts)
-      let st ← expectTok (.sym ")") st
-      .ok (p, st)
-    | .word c :: .sym "!" :: ts =>
-      match st.chans.findIdx? (·.1 == c) with
-      | some k => do
-        let (e, st) ← parseExp f (st.at ts)
-        .ok (.send k (← e.toB4), st)
-      | none => .error s!"'{c}' is not a channel"
-    | .word c :: .sym "?" :: ts =>
-      match st.chans.findIdx? (·.1 == c), st.chans.find? (·.1 == c) with
-      | some k, some (_, M, _) => .ok (.recv k M, st.at ts)
-      | _, _ => .error s!"'{c}' is not a channel"
-    | .word w :: _ => do
-      let (x, st) ← parseName st
-      match st.toks with
-      | .sym ":=" :: ts => do
-        let (e, st) ← parseExp f (st.at ts)
-        .ok (.assign x (← e.toB4), st)
-      | _ => .error s!"'{w}': the b4 compiler takes only plain assignments x:= e"
-    | t :: _ => .error s!"'{t.render}' is not something the b4 compiler takes yet: it compiles \
-        ok, tick, x:= e, if, while, c! e, c? and a || of processes"
-    | [] => .error "expected a statement, found the end of the program"
-termination_by structural fuel
-
-end
-
-/-- `processes := program ('||' program)*`. -/
-def b4Procs (fuel : ℕ) (st : PS) : Except String (List Stmt × PS) :=
-  match fuel with
-  | 0 => .error "too many processes"
-  | f + 1 => do
-    let (p, st) ← b4Prog fuel st
-    match st.toks with
-    | .sym "||" :: ts => do
-      let (ps, st) ← b4Procs f (st.at ts)
-      .ok (p :: ps, st)
-    | _ => .ok ([p], st)
-
-/-- A program for b4: its processes (one, if there is no `||`), its variables,
-and its channels. -/
+/-- A program for b4: its processes (one, if there is no `||`), the named
+statements they call, its variables, and its channels. -/
 structure B4Program where
   /-- The processes. -/
   procs : List Stmt
+  /-- The named statements. -/
+  defs : List (ℕ × Stmt)
   /-- The variables: variable `k` is written `names[k]`. -/
   names : List String
   /-- The channels: name, variable, (unused) cursor variable. -/
   chans : List (String × ℕ × ℕ)
 
-/-- Read a program for b4, the names given on the command line first. -/
+/-- Read a program for b4, the names given on the command line first, through the
+language's own parser (`parseToksShadow`), after checking it as the interpreter
+does. -/
 def parseB4 (names : List String) (ts : Toks) : Except String B4Program := do
-  if ts.any (· == .sym "<==") then
-    throw "the b4 compiler does not take refinements (named specifications) yet"
-  let (names, chans) := internChans (scanChans ts []) names
-  let (procs, st) ← b4Procs (8 * ts.length + 32) ⟨ts, names, [], [], [], chans, true⟩
-  match st.toks with
-  | [] => .ok ⟨procs, st.names, chans⟩
-  | t :: _ => throw s!"unexpected '{t.render}': a || must be the whole program, each process \
-      in parentheses"
+  let _ ← parseToksMode true names ts
+  let sh ← parseToksShadow names ts
+  .ok ⟨← sh.procs.mapM Stmt.toB4, ← sh.defs.mapM fun (k, p) => do .ok (k, ← p.toB4), sh.names,
+    sh.chans⟩
 
 /-! ### Running -/
 
-/-- The variables a statement assigns, and the channels it writes and reads. -/
-def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.writes : Stmt → List ℕ
+/-- The variables a statement may assign, given those each named statement may.
+A scope hides its own variable. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.writes (look : ℕ → List ℕ) : Stmt → List ℕ
   | .assign x _ => [x]
   | .recv _ x => [x]
-  | .seq p q | .cond _ p q => p.writes ++ q.writes
-  | .loop _ p => p.writes
+  | .seq p q | .cond _ p q => p.writes look ++ q.writes look
+  | .loop _ p => p.writes look
+  | .scope x _ p => (p.writes look).filter (· != x)
+  | .call k => look k
   | _ => []
 
-/-- The channels a statement outputs on (`true`) or inputs from. -/
-def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.comms : Stmt → List (Bool × ℕ)
+/-- The channels a statement outputs on (`true`) or inputs from, given those of
+each named statement. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.comms (look : ℕ → List (Bool × ℕ)) :
+    Stmt → List (Bool × ℕ)
   | .send c _ => [(true, c)]
   | .recv c _ => [(false, c)]
-  | .seq p q | .cond _ p q => p.comms ++ q.comms
-  | .loop _ p => p.comms
+  | .seq p q | .cond _ p q => p.comms look ++ q.comms look
+  | .loop _ p | .scope _ _ p => p.comms look
+  | .call k => look k
   | _ => []
+
+/-- Close a property of named statements under the calls they make: the least
+solution, by iteration from nothing. -/
+def closeDefs {α : Type} [BEq α] (defs : List (ℕ × Stmt)) (f : (ℕ → List α) → Stmt → List α) :
+    ℕ → List (ℕ × List α) → List (ℕ × List α)
+  | 0, w => w
+  | n + 1, w =>
+    let look := fun k => (w.lookup k).getD []
+    let w' := defs.map fun (k, b) => (k, (f look b).eraseDups)
+    if w' == w then w else closeDefs defs f n w'
+
+/-- What each named statement may assign. -/
+def B4Program.writesLook (bp : B4Program) : ℕ → List ℕ :=
+  let w := closeDefs bp.defs Stmt.writes (bp.defs.length * (bp.names.length + 1) + 1) []
+  fun k => (w.lookup k).getD []
+
+/-- Where each named statement communicates. -/
+def B4Program.commsLook (bp : B4Program) : ℕ → List (Bool × ℕ) :=
+  let w := closeDefs bp.defs Stmt.comms (bp.defs.length * (2 * bp.chans.length + 1) + 1) []
+  fun k => (w.lookup k).getD []
 
 /-- Whether an expression is a binary, by its form. -/
 def Exp.isBin : Exp → Bool
@@ -184,28 +127,32 @@ def Exp.isBin : Exp → Bool
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.assignsTo (x : ℕ) : Stmt → List Exp
   | .assign y e => if x = y then [e] else []
   | .seq p q | .cond _ p q => p.assignsTo x ++ q.assignsTo x
-  | .loop _ p => p.assignsTo x
+  | .loop _ p | .scope _ _ p => p.assignsTo x
   | _ => []
 
 /-- A variable every assignment of which is a binary, so it is shown as one. -/
 def B4Program.isBinVar (bp : B4Program) (x : ℕ) : Bool :=
-  let es := bp.procs.flatMap (·.assignsTo x)
+  let es := (bp.procs ++ bp.defs.map (·.2)).flatMap (·.assignsTo x)
   !es.isEmpty && es.all Exp.isBin
 
-/-- The layout: the cells above the longest process's code. -/
+/-- The layout: the named statements from `0x100`, each process's code after
+them, and the cells above the longest. -/
 def B4Program.layout (bp : B4Program) : Layout :=
-  ⟨0x100 + (bp.procs.map (slen ⟨0, 0⟩ ·)).foldl max 0 + 16, bp.names.length⟩
+  let L₀ := Layout.build 0 bp.names.length bp.defs
+  Layout.build (L₀.start + (bp.procs.map (slen L₀ ·)).foldl max 0 + 16) bp.names.length bp.defs
 
 /-- The network the processes make, with the command line's input on the
 channels no process writes. -/
 def B4Program.toSNet (bp : B4Program) (s : St) : SNet :=
-  let outs := bp.procs.map fun p => (p.comms.filterMap fun (b, c) => if b then some c else none)
-  ⟨bp.procs.zip outs |>.map fun (p, o) =>
-      ⟨p, o, p.comms.filterMap fun (b, c) => if b then none else some c⟩,
-    fun c => if outs.any (·.contains c) then [] else
+  let cs := bp.procs.map (·.comms bp.commsLook)
+  let outs := cs.map fun l => (l.filterMap fun (b, c) => if b then some c else none).eraseDups
+  { procs := (bp.procs.zip (outs.zip cs)).map fun (p, o, l) =>
+      ⟨p, o, (l.filterMap fun (b, c) => if b then none else some c).eraseDups⟩
+    input := fun c => if outs.any (·.contains c) then [] else
       match bp.chans[c]? with
       | some (_, M, _) => (s M).toList.map fun v => (v, 0)
-      | none => []⟩
+      | none => []
+    defs := fun k => (bp.defs.lookup k).getD .ok }
 
 /-- How a run on b4 ended. -/
 inductive B4Status where
@@ -247,7 +194,7 @@ def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outco
   let st :=
     if w.ms.all (getRST · != 1) then B4Status.halted
     else if w.sweep.2 then .running else .deadlock
-  let owner := fun x => bp.procs.findIdx? (·.writes.contains x)
+  let owner := fun x => bp.procs.findIdx? (·.writes bp.writesLook |>.contains x)
   let value := fun x => match owner x with
     | some i => ((w.ms[i]?).map fun m => B4Program.value (getVal m.mem (L.addr x))).getD 0
     | none => (s x).toInt
@@ -288,6 +235,11 @@ namespace Demo
 #eval b4Outcome [] bufferToks init 1000
 #eval b4Outcome [] pipelineToks init 1000
 #eval b4Outcome [] deadlockToks init 1000
+#eval b4Outcome ["n", "x"] exitLoopToks (fun x => if x = 0 then .int 5 else .int 0) 10000
+#eval b4Outcome [] deepExitToks init 100000
+#eval b4Outcome ["n"] forLoopToks (fun x => if x = 0 then .int 10 else .int 0) 100000
+#eval b4Outcome ["x", "y"] gcdToks (fun x => if x = 0 then .int 12 else if x = 1 then .int 18 else .int 0) 100000
+#eval b4Outcome ["x", "y"] swapToks (fun x => if x = 0 then .int 1 else if x = 1 then .int 2 else .int 0) 1000
 
 end Demo
 

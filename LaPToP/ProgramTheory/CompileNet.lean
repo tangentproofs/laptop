@@ -26,7 +26,8 @@ open LaPToP.ProgramTheory.CompileB4
 /-! ### Processes -/
 
 /-- A statement as a process of the network machine: each assignment and `tick`
-is a chunk, communication is communication, and the control structure stays. -/
+is a chunk, communication is communication, and the control structure stays. A
+call's return is a chunk that does nothing. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toNP : Stmt → NProc ℕ Value
   | .ok => .act .ok
   | .assign x e => .act (Lang.assign x e)
@@ -36,6 +37,25 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toNP : Stmt → NProc ℕ Value
   | .loop c p => .loop c.test p.toNP
   | .send ch e => .send ch e.eval
   | .recv ch x => .recv ch x
+  | .call k => .call k
+  | .scope x e p => .scope x e.eval p.toNP
+  | .ret => .act .ok
+  | .restore x v => .restore x v
+
+/-- A statement a program is written in: no return or end of scope, which only
+running makes. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.clean : Stmt → Bool
+  | .seq p q => p.clean && q.clean
+  | .cond _ p q => p.clean && q.clean
+  | .loop _ p => p.clean
+  | .scope _ _ p => p.clean
+  | .ret => false
+  | .restore _ _ => false
+  | _ => true
+
+/-- How many entries what is left keeps on the control stack: one for each
+return and each end of scope. -/
+def frames (ks : List Stmt) : ℕ := ks.countP fun p => !p.clean
 
 /-- A process: its statement, and the channels it writes and reads. -/
 structure SProc where
@@ -46,16 +66,21 @@ structure SProc where
   /-- The channels it reads. -/
   ins : List ℕ
 
-/-- A network of statements, and the scripts the environment supplies. -/
+/-- A network of statements, the named statements its processes call, and the
+scripts the environment supplies. -/
 structure SNet where
   /-- The processes. -/
   procs : List SProc
   /-- The input. -/
   input : Scripts Value
+  /-- The named statements. -/
+  defs : ℕ → Stmt := fun _ => .ok
 
-/-- The network the network machine runs. -/
+/-- The network the network machine runs: a call runs the named statement and
+then returns. -/
 def SNet.toNet (net : SNet) : Net ℕ Value :=
-  ⟨fun _ => .act .ok, net.procs.map fun pr => ⟨pr.body.toNP, pr.outs, pr.ins⟩, net.input⟩
+  ⟨fun k => .seq (net.defs k).toNP (.act .ok),
+    net.procs.map fun pr => ⟨pr.body.toNP, pr.outs, pr.ins⟩, net.input⟩
 
 /-- A configuration: each process's statements still to run and its state, and
 the scripts so far. -/
@@ -80,7 +105,8 @@ def TFits (t : ℕ∞) : Prop := t < (2 ^ 31 : ℕ)
 
 /-- **What process `i` can do, in 32 bits**: the network machine's actions,
 with every expression fitting (`Fits`), every condition a binary, every variable
-assigned or input having a cell, and every time fitting. -/
+assigned or input having a cell, every time fitting, every call of a defined
+name, and the control stack not overflowing. -/
 inductive SAct (L : Layout) (pr : SProc) :
     Scripts Value → List Stmt × PSt ℕ Value → List Stmt × PSt ℕ Value → Scripts Value → Prop
   /-- `ok`. -/
@@ -113,6 +139,19 @@ inductive SAct (L : Layout) (pr : SProc) :
   | recv {Λ ks st ch x m} : ch ∈ pr.ins → (Λ ch)[st.r ch]? = some m → x < L.n →
       TFits (max st.t (m.2 + 1)) →
       SAct L pr Λ (.recv ch x :: ks, st) (ks, st.received ch x m) Λ
+  /-- A call: the named statement, then the return. -/
+  | call {Λ ks st k} : k ∈ L.keys → (L.defs k).clean = true → frames ks < STACKSZ →
+      SAct L pr Λ (.call k :: ks, st) (L.defs k :: .ret :: ks, st) Λ
+  /-- The return. -/
+  | ret {Λ ks st} : SAct L pr Λ (.ret :: ks, st) (ks, st) Λ
+  /-- A scope begins: `x` holds `e`, and gets its value back at the end. -/
+  | scope {Λ ks st x e p} : x < L.n → Fits L st.mem e → frames ks < STACKSZ →
+      SAct L pr Λ (.scope x e p :: ks, st)
+        (p :: .restore x (st.mem x) :: ks,
+          { st with mem := Function.update st.mem x (e.eval st.mem) }) Λ
+  /-- A scope ends. -/
+  | restore {Λ ks st x v} : SAct L pr Λ (.restore x v :: ks, st)
+      (ks, { st with mem := Function.update st.mem x v }) Λ
 
 /-- **A step of the network, in 32 bits**: one process acts. -/
 inductive SStep (L : Layout) (net : SNet) : SCfg → SCfg → Prop
@@ -121,9 +160,10 @@ inductive SStep (L : Layout) (net : SNet) : SCfg → SCfg → Prop
       net.procs[i]? = some pr → c.ps[i]? = some a → SAct L pr c.L a b Λ →
       SStep L net c ⟨c.ps.set i b, Λ⟩
 
-/-- An action in 32 bits is an action of the network machine. -/
+/-- An action in 32 bits, other than a call, is an action of the network machine. -/
 theorem SAct.act {L : Layout} {net : SNet} {i : ℕ} {pr : SProc} (hpr : net.procs[i]? = some pr)
-    {Λ Λ' : Scripts Value} {a b : List Stmt × PSt ℕ Value} (h : SAct L pr Λ a b Λ') :
+    {Λ Λ' : Scripts Value} {a b : List Stmt × PSt ℕ Value} (h : SAct L pr Λ a b Λ')
+    (hnc : ∀ k ks, a.1 ≠ .call k :: ks) :
     Act net.toNet i Λ ⟨a.1.map Stmt.toNP, a.2⟩ ⟨b.1.map Stmt.toNP, b.2⟩ Λ' := by
   have hpr' : net.toNet.procs[i]? = some ⟨pr.body.toNP, pr.outs, pr.ins⟩ := by
     simp [SNet.toNet, hpr]
@@ -138,66 +178,136 @@ theorem SAct.act {L : Layout} {net : SNet} {i : ℕ} {pr : SProc} (hpr : net.pro
   | loopF _ hc => exact .loc (.loopF (by simp [Exp.test, hc]))
   | send hch _ => exact .send hpr' hch rfl
   | recv hch hm _ _ => exact .recv hpr' hch hm
+  | call => exact (hnc _ _ rfl).elim
+  | ret => exact .loc (.act (u := ⟨_, _⟩) trivial .ok)
+  | scope => exact .loc .scope
+  | restore => exact .loc .restore
 
-/-- A step in 32 bits is a step of the network machine. -/
-theorem SStep.mstep {L : Layout} {net : SNet} {c c' : SCfg} (h : SStep L net c c') :
-    MStep net.toNet c.toM c'.toM := by
+/-- A step in 32 bits is one or two steps of the network machine: a call is the
+call and then the start of the named statement and its return. -/
+theorem SStep.msteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c' : SCfg}
+    (h : SStep L net c c') : TransGen (MStep net.toNet) c.toM c'.toM := by
   obtain ⟨hpr, ha, hact⟩ := h
-  have := MStep.mk (net := net.toNet) (c := c.toM) (by simp [SCfg.toM, ha]) (hact.act hpr)
-  simpa [SCfg.toM, List.map_set] using this
+  rename_i i pr a b Λ
+  have hlt : i < c.ps.length := (List.getElem?_eq_some_iff.mp ha).1
+  have hps : c.toM.ps[i]? = some ⟨a.1.map Stmt.toNP, a.2⟩ := by simp [SCfg.toM, ha]
+  have one : (∀ k ks, a.1 ≠ .call k :: ks) →
+      TransGen (MStep net.toNet) c.toM (SCfg.toM ⟨c.ps.set i b, Λ⟩) := fun hc => by
+    have := MStep.mk (net := net.toNet) (c := c.toM) hps (hact.act hpr hc)
+    exact .single (by simpa [SCfg.toM, List.map_set] using this)
+  cases hact with
+  | @call ks st k _ _ _ =>
+    refine .tail (.single (MStep.mk (net := net.toNet) (c := c.toM) hps (.loc .call))) ?_
+    have h₂ := MStep.mk (net := net.toNet)
+      (c := ⟨c.toM.ps.set i ⟨net.toNet.defs k :: ks.map Stmt.toNP, st⟩, c.toM.L⟩) (i := i)
+      (a := ⟨.seq (net.defs k).toNP (.act .ok) :: ks.map Stmt.toNP, st⟩)
+      (by simp [SCfg.toM, hlt, SNet.toNet]) (.loc .seq)
+    simpa [SCfg.toM, List.map_set, SNet.toNet, hdefs, Stmt.toNP] using h₂
+  | ok => exact one (by simp)
+  | assign => exact one (by simp)
+  | tick => exact one (by simp)
+  | seq => exact one (by simp)
+  | condT => exact one (by simp)
+  | condF => exact one (by simp)
+  | loopT => exact one (by simp)
+  | loopF => exact one (by simp)
+  | send => exact one (by simp)
+  | recv => exact one (by simp)
+  | ret => exact one (by simp)
+  | scope => exact one (by simp)
+  | restore => exact one (by simp)
 
 /-- A run in 32 bits is a run of the network machine. -/
-theorem reach_of_sSteps {L : Layout} {net : SNet} {c c' : SCfg}
+theorem reach_of_sSteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c' : SCfg}
     (h : ReflTransGen (SStep L net) c c') : ReflTransGen (MStep net.toNet) c.toM c'.toM := by
   induction h with
   | refl => exact .refl
-  | tail _ hs ih => exact ih.tail hs.mstep
+  | tail _ hs ih => exact ih.trans (hs.msteps hdefs).to_reflTransGen
 
 /-! ### Code that continues -/
 
-/-- What is left for a process to do, laid out in memory `m` from `a`: the
-statements one after another, perhaps reached through jumps, ending at `hl`. -/
-inductive Cont (L : Layout) (m : ℕ → UInt8) : List Stmt → ℕ → Prop
+/-- What is left for a process to do, laid out in memory `m` from `a`, with the
+control stack `cs`: the statements one after another, perhaps reached through
+jumps, ending at `hl`; a return goes where the control stack says, and the end
+of a scope gives a variable back the value the control stack keeps. -/
+inductive Cont (L : Layout) (m : ℕ → UInt8) : List UInt32 → List Stmt → ℕ → Prop
   /-- Nothing is left: `hl`. -/
-  | nil {a : ℕ} : 256 ≤ a → a < L.base → m a = 0xFF → Cont L m [] a
+  | nil {a : ℕ} : 256 ≤ a → a < L.base → m a = 0xFF → Cont L m [] [] a
   /-- A statement's code, and what follows it. -/
-  | cons {p : Stmt} {ks : List Stmt} {a : ℕ} : 256 ≤ a → a + slen L p ≤ L.base →
-      sdepth p ≤ STACKSZ → CodeAt m a (scode L a p) → Cont L m ks (a + slen L p) →
-      Cont L m (p :: ks) a
+  | cons {cs : List UInt32} {p : Stmt} {ks : List Stmt} {a : ℕ} : 256 ≤ a → a + slen L p ≤ L.base →
+      sdepth p ≤ STACKSZ → p.clean = true → CodeAt m a (scode L a p) →
+      Cont L m cs ks (a + slen L p) → Cont L m cs (p :: ks) a
   /-- A jump to it. -/
-  | jump {ks : List Stmt} {a b : ℕ} : 256 ≤ a → a + 5 ≤ L.base → CodeAt m a (jmTo b) →
-      Cont L m ks b → Cont L m ks a
+  | jump {cs : List UInt32} {ks : List Stmt} {a b : ℕ} : 256 ≤ a → a + 5 ≤ L.base →
+      CodeAt m a (jmTo b) → Cont L m cs ks b → Cont L m cs ks a
+  /-- A return, `rt`, to `b`. -/
+  | ret {cs : List UInt32} {ks : List Stmt} {a b : ℕ} : 256 ≤ a → a < L.base → m a = 0x9E →
+      Cont L m cs ks b → Cont L m (cs ++ [UInt32.ofNat b]) (.ret :: ks) a
+  /-- The end of a scope, `cd li x wi`, giving `x` back `v`. -/
+  | restore {cs : List UInt32} {ks : List Stmt} {a x : ℕ} {v : Value} : 256 ≤ a → a + 7 ≤ L.base →
+      x < L.n → CodeAt m a ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) →
+      Cont L m cs ks (a + 7) → Cont L m (cs ++ [enc v]) (.restore x v :: ks) a
 
 /-- What is left, without a jump first. -/
-inductive Direct (L : Layout) (m : ℕ → UInt8) : List Stmt → ℕ → Prop
+inductive Direct (L : Layout) (m : ℕ → UInt8) : List UInt32 → List Stmt → ℕ → Prop
   /-- Nothing is left: `hl`. -/
-  | nil {a : ℕ} : 256 ≤ a → a < L.base → m a = 0xFF → Direct L m [] a
+  | nil {a : ℕ} : 256 ≤ a → a < L.base → m a = 0xFF → Direct L m [] [] a
   /-- A statement's code, and what follows it. -/
-  | cons {p : Stmt} {ks : List Stmt} {a : ℕ} : 256 ≤ a → a + slen L p ≤ L.base →
-      sdepth p ≤ STACKSZ → CodeAt m a (scode L a p) → Cont L m ks (a + slen L p) →
-      Direct L m (p :: ks) a
+  | cons {cs : List UInt32} {p : Stmt} {ks : List Stmt} {a : ℕ} : 256 ≤ a → a + slen L p ≤ L.base →
+      sdepth p ≤ STACKSZ → p.clean = true → CodeAt m a (scode L a p) →
+      Cont L m cs ks (a + slen L p) → Direct L m cs (p :: ks) a
+  /-- A return. -/
+  | ret {cs : List UInt32} {ks : List Stmt} {a b : ℕ} : 256 ≤ a → a < L.base → m a = 0x9E →
+      Cont L m cs ks b → Direct L m (cs ++ [UInt32.ofNat b]) (.ret :: ks) a
+  /-- The end of a scope. -/
+  | restore {cs : List UInt32} {ks : List Stmt} {a x : ℕ} {v : Value} : 256 ≤ a → a + 7 ≤ L.base →
+      x < L.n → CodeAt m a ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) →
+      Cont L m cs ks (a + 7) → Direct L m (cs ++ [enc v]) (.restore x v :: ks) a
 
-theorem Cont.bounds {L : Layout} {m : ℕ → UInt8} {ks : List Stmt} {a : ℕ} (h : Cont L m ks a) :
-    256 ≤ a ∧ a ≤ L.base := by
+theorem Cont.bounds {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a : ℕ}
+    (h : Cont L m cs ks a) : 256 ≤ a ∧ a ≤ L.base := by
   cases h with
   | nil h₁ h₂ _ => exact ⟨h₁, by omega⟩
-  | cons h₁ h₂ _ _ _ => exact ⟨h₁, by omega⟩
+  | cons h₁ h₂ _ _ _ _ => exact ⟨h₁, by omega⟩
   | jump h₁ h₂ _ _ => exact ⟨h₁, by omega⟩
+  | ret h₁ h₂ _ _ => exact ⟨h₁, by omega⟩
+  | restore h₁ h₂ _ _ _ => exact ⟨h₁, by omega⟩
 
-theorem Direct.cont {L : Layout} {m : ℕ → UInt8} {ks : List Stmt} {a : ℕ} (h : Direct L m ks a) :
-    Cont L m ks a := by
+theorem Direct.cont {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a : ℕ}
+    (h : Direct L m cs ks a) : Cont L m cs ks a := by
   cases h with
   | nil h₁ h₂ h₃ => exact .nil h₁ h₂ h₃
-  | cons h₁ h₂ h₃ h₄ h₅ => exact .cons h₁ h₂ h₃ h₄ h₅
+  | cons h₁ h₂ h₃ h₄ h₅ h₆ => exact .cons h₁ h₂ h₃ h₄ h₅ h₆
+  | ret h₁ h₂ h₃ h₄ => exact .ret h₁ h₂ h₃ h₄
+  | restore h₁ h₂ h₃ h₄ h₅ => exact .restore h₁ h₂ h₃ h₄ h₅
 
 /-- What is left survives writes above the code. -/
 theorem Cont.mono {L : Layout} {m m' : ℕ → UInt8} (hm : ∀ i < L.base, m' i = m i)
-    {ks : List Stmt} {a : ℕ} (h : Cont L m ks a) : Cont L m' ks a := by
+    {cs : List UInt32} {ks : List Stmt} {a : ℕ} (h : Cont L m cs ks a) : Cont L m' cs ks a := by
   induction h with
   | nil h₁ h₂ h₃ => exact .nil h₁ h₂ (by rw [hm _ h₂]; exact h₃)
-  | cons h₁ h₂ h₃ h₄ _ ih =>
-    exact .cons h₁ h₂ h₃ (h₄.mono hm (by rw [length_scode]; exact h₂)) ih
+  | cons h₁ h₂ h₃ h₄ h₅ _ ih =>
+    exact .cons h₁ h₂ h₃ h₄ (h₅.mono hm (by rw [length_scode]; exact h₂)) ih
   | jump h₁ h₂ h₃ _ ih => exact .jump h₁ h₂ (h₃.mono hm (by simpa using h₂)) ih
+  | ret h₁ h₂ h₃ _ ih => exact .ret h₁ h₂ (by rw [hm _ h₂]; exact h₃) ih
+  | restore h₁ h₂ h₃ h₄ _ ih => exact .restore h₁ h₂ h₃ (h₄.mono hm (by simpa using h₂)) ih
+
+/-- The control stack holds an entry for each return and end of scope. -/
+theorem Cont.frames {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a : ℕ}
+    (h : Cont L m cs ks a) : cs.length = frames ks := by
+  induction h with
+  | nil => rfl
+  | cons _ _ _ h₄ _ _ ih => simp [CompileNet.frames, h₄] at ih ⊢; exact ih
+  | jump _ _ _ _ ih => exact ih
+  | ret _ _ _ _ ih => simp [CompileNet.frames, Stmt.clean] at ih ⊢; exact ih
+  | restore _ _ _ _ _ ih => simp [CompileNet.frames, Stmt.clean] at ih ⊢; exact ih
+
+theorem frames_cons_clean {p : Stmt} {ks : List Stmt} (h : p.clean = true) :
+    frames (p :: ks) = frames ks := by
+  simp [CompileNet.frames, h]
+
+theorem Cont.cast {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a b : ℕ}
+    (h : Cont L m cs ks a) (e : a = b) : Cont L m cs ks b := e ▸ h
 
 /-! ### The swarm, machine by machine -/
 
@@ -227,22 +337,28 @@ theorem swarm_lift {w : Swarm} {i : ℕ} {s s' : State} (hi : w.ms[i]? = some s)
     simp
 
 /-- Follow the jumps before what is left. -/
-theorem follow (L : Layout) (hL : L.Ok) {m : ℕ → UInt8} {ks : List Stmt} {a : ℕ}
-    (hc : Cont L m ks a) : ∀ s, high s = m → WF s → Running s → getIP s = a →
-      ∃ s', Steps s s' ∧ Same s s' ∧ WF s' ∧ dstack s' = dstack s ∧ Direct L m ks (getIP s') := by
+theorem follow (L : Layout) (hL : L.Ok) {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a : ℕ}
+    (hc : Cont L m cs ks a) : ∀ s, high s = m → cstack s = cs → WF s → Running s → getIP s = a →
+      ∃ s', Steps s s' ∧ Same s s' ∧ WF s' ∧ dstack s' = dstack s ∧ Direct L m cs ks (getIP s') := by
   induction hc with
   | nil h₁ h₂ h₃ =>
-    intro s hm hw hr hip
+    intro s hm hcs hw hr hip
     exact ⟨s, .refl, Same.refl s, hw, rfl, hip ▸ .nil h₁ h₂ h₃⟩
-  | cons h₁ h₂ h₃ h₄ h₅ =>
-    intro s hm hw hr hip
-    exact ⟨s, .refl, Same.refl s, hw, rfl, hip ▸ .cons h₁ h₂ h₃ h₄ h₅⟩
-  | @jump ks a b h₁ h₂ h₃ hcb ih =>
-    intro s hm hw hr hip
+  | cons h₁ h₂ h₃ h₄ h₅ h₆ =>
+    intro s hm hcs hw hr hip
+    exact ⟨s, .refl, Same.refl s, hw, rfl, hip ▸ .cons h₁ h₂ h₃ h₄ h₅ h₆⟩
+  | ret h₁ h₂ h₃ h₄ =>
+    intro s hm hcs hw hr hip
+    exact ⟨s, .refl, Same.refl s, hw, rfl, hip ▸ .ret h₁ h₂ h₃ h₄⟩
+  | restore h₁ h₂ h₃ h₄ h₅ =>
+    intro s hm hcs hw hr hip
+    exact ⟨s, .refl, Same.refl s, hw, rfl, hip ▸ .restore h₁ h₂ h₃ h₄ h₅⟩
+  | @jump cs ks a b h₁ h₂ h₃ hcb ih =>
+    intro s hm hcs hw hr hip
     have hb := hcb.bounds
     have hJ : CodeAt (high s) (getIP s) (jmTo b) := by rw [hm, hip]; exact h₃
     obtain ⟨w₁, i₁, d₁, sm₁⟩ := run_jm' hL hw (by omega) (by omega) hJ hb.1 hb.2
-    obtain ⟨s', r', sm', w', d', hd'⟩ := ih (step s) (by rw [sm₁.high, hm]) w₁
+    obtain ⟨s', r', sm', w', d', hd'⟩ := ih (step s) (by rw [sm₁.high, hm]) (by rw [sm₁.cs, hcs]) w₁
       (sm₁.running hr) i₁
     exact ⟨s', (Steps.one hr (notIo_jm (by omega) hJ)).trans r', sm₁.trans sm', w',
       by rw [d', d₁], hd'⟩
@@ -441,8 +557,8 @@ structure PRel (L : Layout) (ks : List Stmt) (st : PSt ℕ Value) (s : State) (r
   run : Running s
   /-- Its data stack is empty. -/
   stack : dstack s = []
-  /-- What is left is laid out from the pointer. -/
-  cont : Cont L (high s) ks (getIP s)
+  /-- What is left is laid out from the pointer, with the control stack. -/
+  cont : Cont L (high s) (cstack s) ks (getIP s)
   /-- The cells hold the variables. -/
   vars : VarsOk L (high s) st.mem
   /-- The clock holds the time. -/
@@ -451,47 +567,77 @@ structure PRel (L : Layout) (ks : List Stmt) (st : PSt ℕ Value) (s : State) (r
   tfit : TFits st.t
   /-- The cursors are the process's. -/
   rd : ∀ c, r c = st.r c
+  /-- The named statements are laid out. -/
+  image : L.Image (high s)
 
-theorem Direct.cons_inv {L : Layout} {m : ℕ → UInt8} {p : Stmt} {ks : List Stmt} {a : ℕ}
-    (h : Direct L m (p :: ks) a) : 256 ≤ a ∧ a + slen L p ≤ L.base ∧ sdepth p ≤ STACKSZ ∧
-      CodeAt m a (scode L a p) ∧ Cont L m ks (a + slen L p) := by
+theorem Direct.cons_inv {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {p : Stmt}
+    {ks : List Stmt} {a : ℕ} (h : Direct L m cs (p :: ks) a) (hr : p ≠ .ret)
+    (hs : ∀ x v, p ≠ .restore x v) : 256 ≤ a ∧ a + slen L p ≤ L.base ∧ sdepth p ≤ STACKSZ ∧
+      CodeAt m a (scode L a p) ∧ Cont L m cs ks (a + slen L p) ∧ p.clean = true := by
   cases h with
-  | cons h₁ h₂ h₃ h₄ h₅ => exact ⟨h₁, h₂, h₃, h₄, h₅⟩
+  | cons h₁ h₂ h₃ h₄ h₅ h₆ => exact ⟨h₁, h₂, h₃, h₅, h₆, h₄⟩
+  | ret => exact (hr rfl).elim
+  | restore => exact (hs _ _ rfl).elim
+
+theorem Direct.nil_inv {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {a : ℕ}
+    (h : Direct L m cs [] a) : 256 ≤ a ∧ a < L.base ∧ m a = 0xFF := by
+  cases h with
+  | nil h₁ h₂ h₃ => exact ⟨h₁, h₂, h₃⟩
+
+theorem Direct.ret_inv {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a : ℕ}
+    (h : Direct L m cs (.ret :: ks) a) : ∃ cs' b, cs = cs' ++ [UInt32.ofNat b] ∧ 256 ≤ a ∧
+      a < L.base ∧ m a = 0x9E ∧ Cont L m cs' ks b := by
+  cases h with
+  | cons _ _ _ h₄ => simp [Stmt.clean] at h₄
+  | ret h₁ h₂ h₃ h₄ => exact ⟨_, _, rfl, h₁, h₂, h₃, h₄⟩
+
+theorem Direct.restore_inv {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a x : ℕ}
+    {v : Value} (h : Direct L m cs (.restore x v :: ks) a) : ∃ cs', cs = cs' ++ [enc v] ∧ 256 ≤ a ∧
+      a + 7 ≤ L.base ∧ x < L.n ∧
+      CodeAt m a ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) ∧
+      Cont L m cs' ks (a + 7) := by
+  cases h with
+  | cons _ _ _ h₄ => simp [Stmt.clean] at h₄
+  | restore h₁ h₂ h₃ h₄ h₅ => exact ⟨_, rfl, h₁, h₂, h₃, h₄, h₅⟩
 
 /-- **The machine does a process's step** that is not communication. -/
 theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Value}
     {a b : List Stmt × PSt ℕ Value} (h : SAct L pr Λ a b Λ')
     (hsend : ∀ ch e ks, a.1 ≠ .send ch e :: ks) (hrecv : ∀ ch x ks, a.1 ≠ .recv ch x :: ks)
-    {s : State} {r : ℕ → ℕ} (hp : PRel L a.1 a.2 s r) (hd : Direct L (high s) a.1 (getIP s)) :
+    {s : State} {r : ℕ → ℕ} (hp : PRel L a.1 a.2 s r)
+    (hd : Direct L (high s) (cstack s) a.1 (getIP s)) :
     ∃ s', Steps s s' ∧ PRel L b.1 b.2 s' r := by
   have hb := hL.2
   cases h with
   | @ok ks st =>
-    obtain ⟨-, -, -, -, hk⟩ := hd.cons_inv
+    obtain ⟨-, -, -, -, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     exact ⟨s, .refl, ⟨hp.wf, hp.run, hp.stack, by simpa [slen] using hk, hp.vars, hp.clk, hp.tfit,
-      hp.rd⟩⟩
+      hp.rd, hp.image⟩⟩
   | @assign ks st x e hx hf =>
-    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     obtain ⟨s', r', w', run', i', d', v', k'⟩ := assign_runs L hL hx hf s (getIP s)
-      ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃⟩
-    refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
-    rw [i']; exact hk.mono k'.low
+      ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
+    refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
+      hp.image.mono k'.low⟩⟩
+    rw [i', k'.cs]; exact hk.mono k'.low
   | @tick ks st hfit =>
-    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
-    obtain ⟨s', r', w', run', i', d', c', hi', -, -⟩ := tick_runs (L := L) hp.wf hp.run h₁
+    obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
+    obtain ⟨s', r', w', run', i', d', c', hi', hcs', -⟩ := tick_runs (L := L) hp.wf hp.run h₁
       (by simp [slen] at h₂; omega) h₄ hp.stack hp.clk hfit
-    refine ⟨s', r', ⟨w', run', d', by rw [hi', i']; simpa [slen] using hk,
-      by rw [hi']; exact hp.vars, c', hfit, hp.rd⟩⟩
+    refine ⟨s', r', ⟨w', run', d', by rw [hi', i', hcs']; simpa [slen] using hk,
+      by rw [hi']; exact hp.vars, c', hfit, hp.rd, by rw [hi']; exact hp.image⟩⟩
   | @seq ks st p q =>
-    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
+    simp only [Stmt.clean, Bool.and_eq_true] at hcl
     simp only [scode] at h₄
     rw [CodeAt.append, length_scode] at h₄
     simp only [slen, sdepth] at h₂ h₃ hk
-    exact ⟨s, .refl, ⟨hp.wf, hp.run, hp.stack, .cons h₁ (by omega) (by omega) h₄.1
-      (.cons (by omega) (by omega) (by omega) h₄.2 (by rwa [Nat.add_assoc])), hp.vars, hp.clk,
-      hp.tfit, hp.rd⟩⟩
+    exact ⟨s, .refl, ⟨hp.wf, hp.run, hp.stack, .cons h₁ (by omega) (by omega) hcl.1 h₄.1
+      (.cons (by omega) (by omega) (by omega) hcl.2 h₄.2 (by rwa [Nat.add_assoc])), hp.vars, hp.clk,
+      hp.tfit, hp.rd, hp.image⟩⟩
   | @condT ks st c p q hf hc =>
-    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
+    simp only [Stmt.clean, Bool.and_eq_true] at hcl
     obtain ⟨hE, hT, hJ, hP, hJ', hQ⟩ := cond_code h₄
     simp only [slen, sdepth] at h₂ h₃ hk
     have hcode := h₄; simp only [scode] at hcode
@@ -501,12 +647,13 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       hp.stack (by omega)
     simp only [ite_true] at i'
     refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
-      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
-    rw [i', sm'.high]
-    refine .cons (by omega) (by omega) (by omega) hP (.jump (by omega) (by omega) hJ' ?_)
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩⟩
+    rw [i', sm'.high, sm'.cs]
+    refine .cons (by omega) (by omega) (by omega) hcl.1 hP (.jump (by omega) (by omega) hJ' ?_)
     convert hk using 1; omega
   | @condF ks st c p q hf hc =>
-    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
+    simp only [Stmt.clean, Bool.and_eq_true] at hcl
     obtain ⟨hE, hT, hJ, hP, hJ', hQ⟩ := cond_code h₄
     simp only [slen, sdepth] at h₂ h₃ hk
     have hcode := h₄; simp only [scode] at hcode
@@ -516,12 +663,13 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       hp.stack (by omega)
     simp only [Bool.false_eq_true, ite_false] at i'
     refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
-      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
-    rw [i', sm'.high]
-    refine .jump (by omega) (by omega) hJ (.cons (by omega) (by omega) (by omega) hQ ?_)
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩⟩
+    rw [i', sm'.high, sm'.cs]
+    refine .jump (by omega) (by omega) hJ (.cons (by omega) (by omega) (by omega) hcl.2 hQ ?_)
     convert hk using 1; omega
   | @loopT ks st c p hf hc =>
-    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
+    have hcl' : p.clean = true := by simpa [Stmt.clean] using hcl
     obtain ⟨hE, hT, hJ, hP, hJ'⟩ := loop_code h₄
     have h₂' := h₂; have h₃' := h₃
     simp only [slen, sdepth] at h₂ h₃
@@ -532,12 +680,12 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       hp.stack (by omega)
     simp only [ite_true] at i'
     refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
-      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
-    rw [i', sm'.high]
-    exact .cons (by omega) (by omega) (by omega) hP
-      (.jump (by omega) (by omega) hJ' (.cons h₁ h₂' h₃' h₄ hk))
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩⟩
+    rw [i', sm'.high, sm'.cs]
+    exact .cons (by omega) (by omega) (by omega) hcl' hP
+      (.jump (by omega) (by omega) hJ' (.cons h₁ h₂' h₃' hcl h₄ hk))
   | @loopF ks st c p hf hc =>
-    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     obtain ⟨hE, hT, hJ, hP, hJ'⟩ := loop_code h₄
     simp only [slen, sdepth] at h₂ h₃ hk
     have hcode := h₄; simp only [scode] at hcode
@@ -547,12 +695,87 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       hp.stack (by omega)
     simp only [Bool.false_eq_true, ite_false] at i'
     refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
-      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
-    rw [i', sm'.high]
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩⟩
+    rw [i', sm'.high, sm'.cs]
     refine .jump (by omega) (by omega) hJ ?_
     convert hk using 1; omega
   | send => exact (hsend _ _ _ rfl).elim
   | recv => exact (hrecv _ _ _ rfl).elim
+  | @call ks st k hk hcl hfr =>
+    obtain ⟨h₁, h₂, -, h₄, hk', -⟩ := hd.cons_inv (by simp) (by simp)
+    simp only [slen] at h₂ hk'
+    simp only [scode] at h₄
+    rw [show (0x9D : UInt8) :: le4 (UInt32.ofNat (L.entry k)) =
+      [0x9D] ++ le4 (UInt32.ofNat (L.entry k)) from rfl, CodeAt.append] at h₄
+    obtain ⟨he₁, he₂, he₃, he₄⟩ := hp.image k hk
+    have hop : high s (getIP s) = 0x9D := by simpa using h₄.1 0 (by simp)
+    have hword : word (high s) (getIP s + 1) = UInt32.ofNat (L.entry k) :=
+      word_le4 (by simpa using h₄.2)
+    have hen : (UInt32.ofNat (L.entry k)).toNat = L.entry k := toNat_ofNat_addr (by omega)
+    have hcsl : (cstack s).length < STACKSZ := by
+      rw [hp.cont.frames, frames_cons_clean rfl]; exact hfr
+    obtain ⟨w₁, i₁, d₁, c₁, f₁⟩ := step_cl s hp.wf h₁ (by omega) hop
+      (by rw [hword, hen]; exact he₁) hcsl
+    rw [hword, hen] at i₁
+    have hc₂ := CodeAt.append.mp he₄
+    rw [length_scode] at hc₂
+    refine ⟨step s, Steps.one hp.run (notIo_of_hop h₁ hop),
+      ⟨w₁, ⟨f₁.st.trans hp.run.1, f₁.db.trans hp.run.2⟩, by rw [d₁]; exact hp.stack, ?_,
+        by rw [f₁.high]; exact hp.vars, by rw [f₁.clk]; exact hp.clk, hp.tfit, hp.rd,
+        by rw [f₁.high]; exact hp.image⟩⟩
+    rw [i₁, f₁.high, c₁]
+    exact .cons he₁ (by omega) he₃ hcl hc₂.1
+      (.ret (by omega) (by omega) (by simpa using hc₂.2 0 (by simp)) hk')
+  | @ret ks st =>
+    obtain ⟨cs', b', hcs, h₁, h₂, h₃, hk⟩ := hd.ret_inv
+    have hb' := hk.bounds
+    have hbn : (UInt32.ofNat b').toNat = b' := toNat_ofNat_addr (by omega)
+    obtain ⟨w₁, i₁, d₁, c₁, f₁⟩ := step_rt s cs' (UInt32.ofNat b') hp.wf h₁ h₃ hcs
+      (by rw [hbn]; exact hb'.1)
+    refine ⟨step s, Steps.one hp.run (notIo_of_hop h₁ h₃),
+      ⟨w₁, ⟨f₁.st.trans hp.run.1, f₁.db.trans hp.run.2⟩, by rw [d₁]; exact hp.stack,
+        by rw [i₁, hbn, f₁.high, c₁]; exact hk, by rw [f₁.high]; exact hp.vars,
+        by rw [f₁.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [f₁.high]; exact hp.image⟩⟩
+  | @scope ks st x e p hx hf hfr =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
+    have hcsl : (cstack s).length < STACKSZ := by
+      rw [hp.cont.frames, frames_cons_clean hcl]; exact hfr
+    simp only [Stmt.clean] at hcl
+    simp only [slen, sdepth] at h₂ h₃ hk
+    simp only [scode] at h₄
+    rw [CodeAt.append, CodeAt.append, CodeAt.append] at h₄
+    obtain ⟨⟨⟨hA, hB⟩, hP⟩, hC⟩ := h₄
+    simp only [List.length_append, List.length_cons, length_le4, length_scode] at hB hP hC
+    replace hP : CodeAt (high s) (getIP s + 7 + ((ecode L e).length + 6))
+        (scode L (getIP s + 7 + ((ecode L e).length + 6)) p) :=
+      hP.cast (by first | omega | (simp; omega))
+    replace hC : CodeAt (high s) (getIP s + 7 + ((ecode L e).length + 6) + slen L p)
+        ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) := by
+      have := hC.cast (b := getIP s + 7 + ((ecode L e).length + 6) + slen L p)
+        (by first | omega | (simp; omega))
+      rwa [List.append_assoc] at this
+    obtain ⟨s₁, r₁, w₁, run₁, i₁, d₁, c₁, f₁⟩ := enter_runs L hL hx hp.wf hp.run h₁ (by omega) hA
+      hp.vars hp.stack hcsl
+    obtain ⟨s₂, r₂, w₂, run₂, i₂, d₂, v₂, k₂⟩ := assign_runs L hL (d := (cstack s₁).length) hx hf
+      s₁ (getIP s + 7)
+      ⟨w₁, run₁, i₁, by omega, by simp [slen]; omega, by rw [f₁.high]; simpa [scode] using hB,
+        by rw [f₁.high]; exact hp.vars, d₁, by simp [sdepth]; omega, rfl,
+        by rw [f₁.high]; exact hp.image⟩
+    simp only [slen] at i₂
+    have hhigh : ∀ i < L.base, high s₂ i = high s i := fun i hi => by rw [k₂.low i hi, f₁.high]
+    refine ⟨s₂, r₁.trans r₂, ⟨w₂, run₂, d₂, ?_, v₂, by rw [k₂.clk, f₁.clk]; exact hp.clk, hp.tfit,
+      hp.rd, hp.image.mono hhigh⟩⟩
+    rw [i₂, k₂.cs, c₁]
+    refine .cons (by omega) (by omega) (by omega) hcl
+      (hP.mono hhigh (by rw [length_scode]; omega)) ?_
+    refine .restore (by omega) (by omega) hx (hC.mono hhigh (by simp; omega)) ?_
+    exact (hk.mono hhigh).cast (by omega)
+  | @restore ks st x v =>
+    obtain ⟨cs', hcs, h₁, h₂, hx, h₄, hk⟩ := hd.restore_inv
+    obtain ⟨s', r', w', run', i', d', c', v', lo', -, k'⟩ := restore_runs L hL hx hp.wf hp.run h₁
+      h₂ h₄ hp.vars hp.stack hcs
+    exact ⟨s', r', ⟨w', run', d', by rw [i', c']; exact hk.mono lo', v', by rw [k']; exact hp.clk,
+      hp.tfit, hp.rd, hp.image.mono lo'⟩⟩
 
 theorem toNat_encT {t : ℕ∞} (h : TFits t) : (encT t).toNat = t.toNat := by
   have := h.toNat_lt
@@ -619,13 +842,14 @@ theorem swarm_set_set (w : Swarm) (i : ℕ) (s s' : State) :
 /-- **Send**, on the machine and then in the swarm. -/
 theorem send_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch : ℕ} {e : Exp}
     {ks : List Stmt} {st : PSt ℕ Value} {r : ℕ → ℕ} (hi : w.ms[i]? = some s)
-    (hp : PRel L (.send ch e :: ks) st s r) (hd : Direct L (high s) (.send ch e :: ks) (getIP s))
+    (hp : PRel L (.send ch e :: ks) st s r)
+    (hd : Direct L (high s) (cstack s) (.send ch e :: ks) (getIP s))
     (hf : Fits L st.mem e) (hch : ch < 2 ^ 32) (ho : w.owner ch = some i) :
     ∃ s', Swarm.Steps w ⟨w.ms.set i s',
         fun c => if c = ch then w.chans c ++ [(enc (e.eval st.mem), encT st.t)] else w.chans c,
         w.rd, w.owner⟩ ∧ PRel L ks (st.sent ch) s' r := by
   have hb := hL.2
-  obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+  obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
   simp only [slen, sdepth] at h₂ h₃
   simp only [scode, List.append_assoc] at h₄
   have hA : At L st.mem s (ecode L e ++ ((0x97 :: le4 (UInt32.ofNat ch)) ++
@@ -651,12 +875,12 @@ theorem send_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
     (by rw [d₃, d₂, d₁, hp.stack]; rfl) hch ho
   have hsm := sm₁.trans (sm₂.trans (sm₃.trans sm'))
   refine ⟨s', ?_, ⟨w', hsm.running hp.run, d', ?_, by rw [hsm.high]; exact hp.vars,
-    by rw [hsm.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
+    by rw [hsm.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [hsm.high]; exact hp.image⟩⟩
   · refine hlift.tail ⟨i, ?_⟩
     rw [hst]
     simp only [List.set_set]
     rw [(sm₁.trans (sm₂.trans sm₃)).clk, hp.clk]
-  · rw [i', i₃, i₂, i₁, hsm.high]
+  · rw [i', i₃, i₂, i₁, hsm.high, hsm.cs]
     convert hk using 1
     simp [slen]; omega
 
@@ -664,7 +888,7 @@ theorem send_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
 theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch x : ℕ}
     {ks : List Stmt} {st : PSt ℕ Value} {m : Msg Value} {Λ : Scripts Value} (hi : w.ms[i]? = some s)
     (hp : PRel L (.recv ch x :: ks) st s (w.rd.getD i fun _ => 0))
-    (hd : Direct L (high s) (.recv ch x :: ks) (getIP s)) (hch : ch < 2 ^ 32)
+    (hd : Direct L (high s) (cstack s) (.recv ch x :: ks) (getIP s)) (hch : ch < 2 ^ 32)
     (hchan : w.chans ch = encS (Λ ch)) (hm : (Λ ch)[st.r ch]? = some m) (hx : x < L.n)
     (hfit : TFits (max st.t (m.2 + 1))) :
     ∃ s', Swarm.Steps w ⟨w.ms.set i s', w.chans,
@@ -674,7 +898,7 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
         s' (fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1 else (w.rd.getD i fun _ => 0) c) := by
   have hb := hL.2
   have hlt : i < w.ms.length := (List.getElem?_eq_some_iff.mp hi).1
-  obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+  obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
   simp only [slen, sdepth] at h₂ h₃
   simp only [scode, List.append_assoc] at h₄
   have hA : At L st.mem s ((0x97 :: le4 (UInt32.ofNat ch)) ++ ((0x97 :: le4 RECV) ++ ([0xFD] ++
@@ -722,17 +946,21 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
   have run₄ : Running (step s₃) := sm₄.running run₃
   have hrun₂ : Steps s₃ (step (step s₃)) :=
     (Steps.one run₃ (notIo_li hA₃)).tail ⟨run₄, notIo_of_hop hip₄ hop₄, rfl⟩
-  refine ⟨step (step s₃), ?_, ⟨w₅, ⟨st₅.trans run₄.1, db₅.trans run₄.2⟩, d₅, ?_, ?_, ?_, hfit, ?_⟩⟩
+  have hlow : ∀ j < L.base, high (step (step s₃)) j = high s j := by
+    intro j hj
+    rw [hi₅, sm₄.high, h₃', sm₂.high, sm₁.high]
+    unfold writeWord Layout.addr
+    simp [show j ≠ L.base + 4 * x by omega, show j ≠ L.base + 4 * x + 1 by omega,
+      show j ≠ L.base + 4 * x + 2 by omega, show j ≠ L.base + 4 * x + 3 by omega]
+  refine ⟨step (step s₃), ?_, ⟨w₅, ⟨st₅.trans run₄.1, db₅.trans run₄.2⟩, d₅, ?_, ?_, ?_, hfit, ?_,
+    hp.image.mono hlow⟩⟩
   · refine (hlift.tail ⟨i, hstep⟩).trans ?_
     have := swarm_lift (w := ⟨w.ms.set i s₃, w.chans, w.rd.set i (fun c => if c = ch then
       (w.rd.getD i fun _ => 0) ch + 1 else (w.rd.getD i fun _ => 0) c), w.owner⟩) (i := i) (s := s₃)
       (by simp [List.getElem?_set_self hlt]) hrun₂
     simpa using this
-  · rw [hi₅, sm₄.high, h₃', sm₂.high, sm₁.high, i₅, i₄, i₃, i₂, i₁]
-    refine Cont.mono (fun j hj => ?_) (by convert hk using 1; simp [slen])
-    unfold writeWord Layout.addr
-    simp [show j ≠ L.base + 4 * x by omega, show j ≠ L.base + 4 * x + 1 by omega,
-      show j ≠ L.base + 4 * x + 2 by omega, show j ≠ L.base + 4 * x + 3 by omega]
+  · rw [i₅, i₄, i₃, i₂, i₁, c₅, sm₄.cs, cs₃, sm₂.cs, sm₁.cs]
+    exact Cont.mono hlow (by convert hk using 1; simp [slen])
   · rw [hi₅, sm₄.high, h₃', sm₂.high, sm₁.high]
     exact varsOk_write hp.vars
   · rw [hclk₅, sm₄.clk, c₃, (sm₁.trans sm₂).clk, hp.clk]
@@ -772,12 +1000,13 @@ theorem Rel.machine {L : Layout} {c : SCfg} {w : Swarm} (hr : Rel L c w) {i : �
 theorem Rel.follow (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ks : List Stmt}
     {st : PSt ℕ Value} {r : ℕ → ℕ} (hi : w.ms[i]? = some s) (hp : PRel L ks st s r) :
     ∃ s₁, Swarm.Steps w { w with ms := w.ms.set i s₁ } ∧ Steps s s₁ ∧ PRel L ks st s₁ r ∧
-      Direct L (high s₁) ks (getIP s₁) := by
+      Direct L (high s₁) (cstack s₁) ks (getIP s₁) := by
   obtain ⟨s₁, r₁, sm₁, w₁, d₁, hd₁⟩ := LaPToP.ProgramTheory.CompileNet.follow L hL hp.cont s rfl
-    hp.wf hp.run rfl
+    rfl hp.wf hp.run rfl
   exact ⟨s₁, swarm_lift hi r₁, r₁, ⟨w₁, sm₁.running hp.run, d₁.trans hp.stack,
-    by rw [sm₁.high]; exact hd₁.cont, by rw [sm₁.high]; exact hp.vars, by rw [sm₁.clk]; exact hp.clk,
-    hp.tfit, hp.rd⟩, by rw [sm₁.high]; exact hd₁⟩
+    by rw [sm₁.high, sm₁.cs]; exact hd₁.cont, by rw [sm₁.high]; exact hp.vars,
+    by rw [sm₁.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm₁.high]; exact hp.image⟩,
+    by rw [sm₁.high, sm₁.cs]; exact hd₁⟩
 
 /-- **One step of the network, in 32 bits, is some steps of the swarm**, which
 keep them agreeing. -/
@@ -815,6 +1044,10 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
   | condF hf hc => exact local_case (.condF hf hc) (by simp) (by simp)
   | loopT hf hc => exact local_case (.loopT hf hc) (by simp) (by simp)
   | loopF hf hc => exact local_case (.loopF hf hc) (by simp) (by simp)
+  | call hk hcl hfr => exact local_case (.call hk hcl hfr) (by simp) (by simp)
+  | ret => exact local_case .ret (by simp) (by simp)
+  | scope hx hf hfr => exact local_case (.scope hx hf hfr) (by simp) (by simp)
+  | restore => exact local_case .restore (by simp) (by simp)
   | @send ks' _ ch e hch hf =>
     obtain ⟨s₂, hw₂, hp₂⟩ := send_sim L hL hs₁ hp₁ hd₁ hf (hchb pr hprm ch (.inl hch))
       (hown hpr hch)
@@ -861,10 +1094,10 @@ theorem swarm_simulates (L : Layout) (hL : L.Ok) {net : SNet}
 /-! ### Loading the swarm -/
 
 theorem getClk_load (L : Layout) (hL : L.Ok) (p : Stmt) (st : St)
-    (hfit : 0x100 + slen L p + 1 ≤ L.base) : getClk (load L p st) = 0 := by
+    (hfit : L.start + slen L p + 1 ≤ L.base) : getClk (load L p st) = 0 := by
   have hlow := loadMem_low L p st hfit hL
   have hload : load L p st = setRST (setIP ⟨loadMem L p st, Array.replicate STACKSZ 0,
-      Array.replicate STACKSZ 0, ""⟩ 0x100) 1 := rfl
+      Array.replicate STACKSZ 0, ""⟩ L.start) 1 := rfl
   rw [hload, getClk_setRST, getClk_setIP]
   exact getVal_of_zero _ _ fun i _ hi => hlow i (by simp [CLK_OFF, Register.toNat] at hi; omega)
 
@@ -891,9 +1124,10 @@ theorem load_owner (L : Layout) {net : SNet} (hwf : net.toNet.WF) (s : St) {i : 
     simp [SNet.toNet, hpr]
   exact hwf.writer (by omega) h₁ h₂ hj' hch
 
-/-- The code of each process fits below the variables, and its stack. -/
+/-- The code of each process, after the named statements', fits below the
+variables, and its stack; and each is written in the language. -/
 def SNet.Fits (L : Layout) (net : SNet) : Prop :=
-  ∀ pr ∈ net.procs, 0x100 + slen L pr.body + 1 ≤ L.base ∧ sdepth pr.body ≤ STACKSZ
+  ∀ pr ∈ net.procs, L.Fit pr.body ∧ pr.body.clean = true
 
 /-- **At the start, the swarm and the network agree.** -/
 theorem rel_init (L : Layout) (hL : L.Ok) (net : SNet) (hfit : net.Fits L) (s : St) :
@@ -906,15 +1140,16 @@ theorem rel_init (L : Layout) (hL : L.Ok) (net : SNet) (hfit : net.Fits L) (s : 
   obtain ⟨rfl, rfl⟩ := hpe
   simp only [SNet.load, List.getElem?_map, hpr, Option.map_some, Option.some.injEq] at hm
   subst hm
-  obtain ⟨hf₁, hf₂⟩ := hfit pr (List.mem_of_getElem? hpr)
-  obtain ⟨hw, hrun, hip, hc, hv, hd⟩ := load_ready L hL pr.body s hf₁
-  have hc' := CodeAt.append.mp hc
-  rw [length_scode] at hc'
+  obtain ⟨hF, hcl⟩ := hfit pr (List.mem_of_getElem? hpr)
+  have hf₁ := hF.hi
+  obtain ⟨hw, hrun, hip, hc, hv, hd, hcs⟩ := load_ready L hL pr.body s hf₁
+  obtain ⟨hc₁, hc₂⟩ := L.main_of_compile hc
+  have hs : 256 ≤ L.start := by unfold Layout.start; omega
   refine ⟨hw, hrun, hd, ?_, hv, by rw [getClk_load L hL _ _ hf₁]; rfl,
-    by simp [TFits], fun _ => by simp [SNet.load, List.getD_eq_getElem?_getD]⟩
-  rw [hip]
-  exact .cons le_rfl (by omega) hf₂ hc'.1
-    (.nil (by omega) (by omega) (by simpa using hc'.2 0 (by simp)))
+    by simp [TFits], fun _ => by simp [SNet.load, List.getD_eq_getElem?_getD],
+    L.image_of_compile hF hc⟩
+  rw [hip, hcs]
+  exact .cons hs (by omega) hF.depth hcl hc₁ (.nil (by omega) (by omega) hc₂)
 
 /-! ### The end -/
 
@@ -929,9 +1164,8 @@ theorem halt_one (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {st 
     {r : ℕ → ℕ} (hi : w.ms[i]? = some s) (hp : PRel L [] st s r) :
     ∃ s', Swarm.Steps w { w with ms := w.ms.set i s' } ∧ Halted L st s' := by
   obtain ⟨s₁, hw₁, -, hp₁, hd₁⟩ := Rel.follow L hL hi hp
-  cases hd₁ with
-  | nil h₁ h₂ h₃ =>
-    have hs₁ : ({ w with ms := w.ms.set i s₁ } : Swarm).ms[i]? = some s₁ := by
+  obtain ⟨h₁, h₂, h₃⟩ := hd₁.nil_inv
+  · have hs₁ : ({ w with ms := w.ms.set i s₁ } : Swarm).ms[i]? = some s₁ := by
       simp [List.getElem?_set_self (List.getElem?_eq_some_iff.mp hi).1]
     have hn : NotIo s₁ := notIo_of_hop h₁ h₃
     refine ⟨step s₁, hw₁.tail ⟨i, ?_⟩, ⟨step_hl s₁ hp₁.wf h₁ h₃, ?_, ?_⟩⟩
@@ -1004,13 +1238,14 @@ bits until every process has finished, its final states and scripts are a
 behaviour of the book's semantics of the network (`Network.NetSpec`), and the
 swarm halts holding exactly them. -/
 theorem swarm_book (L : Layout) (hL : L.Ok) {net : SNet} (hwf : net.toNet.WF) (hfit : net.Fits L)
+    (hdefs : L.defs = net.defs)
     (hchb : ∀ pr ∈ net.procs, ∀ ch, ch ∈ pr.outs ∨ ch ∈ pr.ins → ch < 2 ^ 32) (s : St)
     {c : SCfg} (h : ReflTransGen (SStep L net) (net.init s) c) (hdone : ∀ p ∈ c.ps, p.1 = []) :
     NetSpec net.toNet s 0 (c.ps.map (·.2)) c.L ∧
       ∃ w, Swarm.Steps (net.load L s) w ∧ (∀ ch, w.chans ch = encS (c.L ch)) ∧
         ∀ {i : ℕ} {ks : List Stmt} {st : PSt ℕ Value}, c.ps[i]? = some (ks, st) →
           ∃ m, w.ms[i]? = some m ∧ Halted L st m := by
-  have hm := reach_of_sSteps h
+  have hm := reach_of_sSteps hdefs h
   rw [SNet.init_toM] at hm
   have hd : c.toM.Done := by
     intro pc hpc
@@ -1035,29 +1270,29 @@ def display (L : Layout) (w : Swarm) : List (List ℤ × UInt32) × List (List B
   (w.ms.map fun m => (readVars L m, getClk m), [w.chans 0, w.chans 1])
 
 /-- Cells above 64 bytes of code. -/
-def layout : Layout := ⟨0x400, 3⟩
+def layout : Layout := { base := 0x400, n := 3 }
 
 /-- `c! 2 || (c?. x:= c)`. -/
 def sendRecv : SNet :=
-  ⟨[⟨.send 0 (.lit (.int 2)), [0], []⟩, ⟨.recv 0 0, [], [0]⟩], fun _ => []⟩
+  { procs := [⟨.send 0 (.lit (.int 2)), [0], []⟩, ⟨.recv 0 0, [], [0]⟩], input := fun _ => [] }
 
 -- The receiver has `x = 2` at time `1`.
 #eval display layout ((sendRecv.load layout fun _ => .int 0).run 1000)
 
 /-- The buffer: `(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)`, `x`, `y` variables `0`, `1`. -/
 def buffer : SNet :=
-  ⟨[⟨.seq (.send 0 (.lit (.int 3))) (.seq .tick (.send 0 (.lit (.int 4)))), [0], []⟩,
-    ⟨.seq (.recv 0 1) (.recv 0 0), [], [0]⟩], fun _ => []⟩
+  { procs := [⟨.seq (.send 0 (.lit (.int 3))) (.seq .tick (.send 0 (.lit (.int 4)))), [0], []⟩,
+      ⟨.seq (.recv 0 1) (.recv 0 0), [], [0]⟩], input := fun _ => [] }
 
 -- `y = 3`, `x = 4`, the reader at time `2`; the script `[(3, 0), (4, 1)]`.
 #eval display layout ((buffer.load layout fun _ => .int 0).run 1000)
 
 /-- A pipeline: `(c! 1. c! 2) || (c?. d! c+10. c?. d! c+10) || (d?. x:= d. d?. y:= d)`. -/
 def pipeline : SNet :=
-  ⟨[⟨.seq (.send 0 (.lit (.int 1))) (.send 0 (.lit (.int 2))), [0], []⟩,
-    ⟨.seq (.recv 0 0) (.seq (.send 1 (.bin .add (.var 0) (.lit (.int 10))))
-      (.seq (.recv 0 0) (.send 1 (.bin .add (.var 0) (.lit (.int 10)))))), [1], [0]⟩,
-    ⟨.seq (.recv 1 0) (.recv 1 1), [], [1]⟩], fun _ => []⟩
+  { procs := [⟨.seq (.send 0 (.lit (.int 1))) (.send 0 (.lit (.int 2))), [0], []⟩,
+      ⟨.seq (.recv 0 0) (.seq (.send 1 (.bin .add (.var 0) (.lit (.int 10))))
+        (.seq (.recv 0 0) (.send 1 (.bin .add (.var 0) (.lit (.int 10)))))), [1], [0]⟩,
+      ⟨.seq (.recv 1 0) (.recv 1 1), [], [1]⟩], input := fun _ => [] }
 
 -- The last process has `x = 11`, `y = 12` at time `2`.
 #eval display layout ((pipeline.load layout fun _ => .int 0).run 1000)

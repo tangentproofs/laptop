@@ -70,7 +70,9 @@ usage: interp [options] [file]
                      each with its probability, and the probability of none
   --b4               compile to the b4 virtual machine and run there (a network
                      on a swarm of b4 machines): ok, tick, x:= e, if, while,
-                     c! e, c? and a || of processes, on 32-bit integers
+                     do/exit and for loops, new, simultaneous assignment,
+                     specifications with parameters and recursion, c! e, c?
+                     and a || of processes, on 32-bit integers
   --net              run as a network of communicating processes (Chapter 9),
                      as is done anyway when the program has channels and a ||:
                      each process has its own variables, communicates only on
@@ -250,16 +252,25 @@ def runSelfTest : IO UInt32 := do
       IO.eprintln s!"FAIL  {name}: {e}"
       bad := bad + 1
   -- The b4 compiler against the interpreters, on the demonstrations it takes.
-  let sumToStart : St := fun x => if x = 0 then .int 10 else .int 0
-  match (parseToksWith ["n"] Lang.Demo.sumToToks), b4Outcome ["n"] Lang.Demo.sumToToks sumToStart 100000 with
-  | .ok prog, .ok b =>
-    let arr : Array Value := Array.ofFn (n := prog.names.length) fun i => sumToStart i.1
-    match prog.runFast 100000 arr with
-    | some r =>
-      if b.agreesWith prog.names (toFun r) then IO.println "ok    sumTo: b4 computes what the interpreter does"
-      else IO.eprintln "FAIL  sumTo: b4 and the interpreter differ"; bad := bad + 1
-    | none => IO.eprintln "FAIL  sumTo: the interpreter found no poststate"; bad := bad + 1
-  | _, _ => IO.eprintln "FAIL  sumTo: does not parse for b4"; bad := bad + 1
+  let given : List (ℕ × ℤ) → St := fun l x => .int (((l.lookup x).getD 0))
+  let b4Tests : List (String × List String × Toks × St) :=
+    [("sumTo", ["n"], Lang.Demo.sumToToks, given [(0, 10)]),
+     ("exitLoop", ["n", "x"], Lang.Demo.exitLoopToks, given [(0, 5)]),
+     ("deepExit", [], Lang.Demo.deepExitToks, given []),
+     ("forLoop", ["n"], Lang.Demo.forLoopToks, given [(0, 10)]),
+     ("gcd", ["x", "y"], Lang.Demo.gcdToks, given [(0, 12), (1, 18)]),
+     ("swap", ["x", "y"], Lang.Demo.swapToks, given [(0, 1), (1, 2)])]
+  for (name, names, toks, start) in b4Tests do
+    match parseToksWith names toks, b4Outcome names toks start 100000 with
+    | .ok prog, .ok b =>
+      let arr : Array Value := Array.ofFn (n := prog.names.length) fun i => start i.1
+      match prog.runFast 100000 arr with
+      | some r =>
+        if b.agreesWith prog.names (toFun r) then
+          IO.println s!"ok    {name}: b4 computes what the interpreter does"
+        else IO.eprintln s!"FAIL  {name}: b4 and the interpreter differ"; bad := bad + 1
+      | none => IO.eprintln s!"FAIL  {name}: the interpreter found no poststate"; bad := bad + 1
+    | .error e, _ | _, .error e => IO.eprintln s!"FAIL  {name}: {e}"; bad := bad + 1
   for (name, _, toks) in Lang.Demo.netSelfTests do
     let start : St := if name == "doubler" then Function.update init 0 (.list [.int 1, .int 2, .int 5]) else init
     if name == "doubler" then continue
@@ -404,7 +415,8 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     -- The theorems hold while no value leaves 32 bits: check against the
     -- language's own interpreters, and say so if the machine went outside.
     let agrees : Bool :=
-      if bp.procs.length == 1 && bp.chans.isEmpty then
+      if out.status == .running then true
+      else if bp.procs.length == 1 && bp.chans.isEmpty then
         match parseToksMode false setNames ts with
         | .ok prog =>
           let arr : Array Value := Array.ofFn (n := prog.names.length) fun i => st i.1

@@ -1,4 +1,5 @@
 import LaPToP.ProgramTheory.InterpreterLang
+import LaPToP.ProgramTheory.InterpreterStmt
 import LaPToP.ProgramTheory.InterpreterSyntax
 
 /-!
@@ -229,6 +230,58 @@ def validName (w : String) : Bool :=
   !w.isEmpty && !isKeyword w && (w.toList.head?.map fun c => c.isAlpha || c == '_').getD false &&
     w.toList.all fun c => c.isAlphanum || c == '_'
 
+/-! ### Programs, and what the b4 compiler makes of them -/
+
+open LaPToP.ProgramTheory.CompileB4 (Stmt)
+
+/-- A program as read, with what the b4 compiler makes of it (`CompileB4.Stmt`):
+the statements of its processes — one, unless it is a `||` — or why it has none. -/
+structure PB where
+  /-- The program. -/
+  p : P
+  /-- Its processes' statements, or why the compiler does not take it. -/
+  s : Except String (List Stmt)
+
+namespace PB
+
+/-- A program the compiler takes as the statement `s`. -/
+def of (p : P) (s : Stmt) : PB := ⟨p, .ok [s]⟩
+
+/-- A program the compiler does not take. -/
+def no (p : P) (what : String) : PB := ⟨p, .error s!"the b4 compiler does not take {what}"⟩
+
+/-- The one statement of a program that is not a `||`. -/
+def one (b : PB) : Except String Stmt := do
+  match ← b.s with
+  | [s] => .ok s
+  | _ => .error "the b4 compiler takes a || only as the whole program, each process in parentheses"
+
+/-- `ok`. -/
+def ok : PB := of .ok .ok
+
+/-- A call. -/
+def call (k : ℕ) : PB := of (.call k) (.call k)
+
+/-- `x:= e`. -/
+def assign (x : ℕ) (e : Exp) : PB := of (Lang.assign x e) (.assign x e)
+
+/-- `P. Q`. -/
+def seq (a b : PB) : PB := ⟨.seq a.p b.p, do .ok [.seq (← a.one) (← b.one)]⟩
+
+/-- `if c then P else Q fi`. -/
+def ifThen (c : Exp) (a b : PB) : PB := ⟨Lang.ifThen c a.p b.p, do .ok [.cond c (← a.one) (← b.one)]⟩
+
+/-- `while c do P od`. -/
+def loop (c : Exp) (a : PB) : PB := ⟨Lang.loop c a.p, do .ok [.loop c (← a.one)]⟩
+
+/-- `new x := e in P end`. -/
+def declare (x : ℕ) (e : Exp) (a : PB) : PB := ⟨Lang.declare x e a.p, do .ok [.scope x e (← a.one)]⟩
+
+/-- `P || Q`. -/
+def par (a b : PB) : PB := ⟨.par (fun _ => false) a.p b.p, do .ok ((← a.s) ++ (← b.s))⟩
+
+end PB
+
 /-- The parser's state. -/
 structure PS where
   /-- The tokens not yet read. -/
@@ -238,7 +291,7 @@ structure PS where
   /-- The specifications: those defined in the source first, then the loops'. -/
   procs : List String
   /-- The definitions read so far. -/
-  bodies : List (ℕ × P)
+  bodies : List (ℕ × PB)
   /-- The parameters of each specification, as variables. -/
   params : List (List ℕ)
   /-- The channels: each name with its script variable and its read cursor. -/
@@ -294,7 +347,7 @@ def newHidden (st : PS) : ℕ × PS :=
   (st.names.length, { st with names := st.names ++ ["#" ++ toString st.names.length] })
 
 /-- Record a definition. -/
-def PS.define (st : PS) (k : ℕ) (body : P) : PS := { st with bodies := st.bodies ++ [(k, body)] }
+def PS.define (st : PS) (k : ℕ) (body : PB) : PS := { st with bodies := st.bodies ++ [(k, body)] }
 
 /-- Fresh hidden variables, one for each of a list. -/
 def newHiddens {α : Type} : List α → PS → List ℕ × PS
@@ -306,25 +359,26 @@ def newHiddens {α : Type} : List α → PS → List ℕ × PS
 
 /-- `new t₁ := e₁ in ... new tₙ := eₙ in p`: every value computed before any is
 used, which is what a simultaneous assignment and a call with arguments need. -/
-def declareAll : List (ℕ × Exp) → P → P
+def declareAll : List (ℕ × Exp) → PB → PB
   | [], p => p
-  | (t, e) :: rest, p => declare t e (declareAll rest p)
+  | (t, e) :: rest, p => PB.declare t e (declareAll rest p)
 
 /-- A call `P(a, b, ...)` of a specification with parameters `p, q, ...`: the
 book's `⟨p: D· B⟩ a = (new p: D := a· B)` (Section 5.5.2), the arguments all
 evaluated before any parameter is bound. -/
-def callWith (k : ℕ) (ps : List ℕ) (args : List Exp) (st : PS) : P × PS :=
+def callWith (k : ℕ) (ps : List ℕ) (args : List Exp) (st : PS) : PB × PS :=
   match ps, args with
-  | [p], [a] => (declare p a (.call k), st)
+  | [p], [a] => (PB.declare p a (PB.call k), st)
   | _, _ =>
     let (ts, st) := newHiddens args st
-    (declareAll (ts.zip args) (declareAll (ps.zip (ts.map Exp.var)) (.call k)), st)
+    (declareAll (ts.zip args) (declareAll (ps.zip (ts.map Exp.var)) (PB.call k)), st)
 
 /-- `x, y, ...:= e, f, ...`: the values all computed before any is assigned. -/
-def assignAll (xs : List ℕ) (es : List Exp) (st : PS) : P × PS :=
+def assignAll (xs : List ℕ) (es : List Exp) (st : PS) : PB × PS :=
   let (ts, st) := newHiddens es st
-  let sets : List P := (xs.zip ts).map fun (x, t) => assign x (.var t)
-  (declareAll (ts.zip es) (sets.foldr (fun a b => if b matches .ok then a else .seq a b) .ok), st)
+  let sets : List PB := (xs.zip ts).map fun (x, t) => PB.assign x (.var t)
+  (declareAll (ts.zip es) (sets.foldr (fun a b => if b.p matches .ok then a else PB.seq a b) PB.ok),
+    st)
 
 /-- `n` things, for a message. -/
 def plural (n : ℕ) (thing : String) : String :=
@@ -580,7 +634,7 @@ termination_by structural fuel
 exit, an `if` whose branches may exit, or an inner loop. -/
 inductive Raw where
   /-- A statement. -/
-  | stmt (p : P)
+  | stmt (p : PB)
   /-- `exit n when c`. -/
   | exit (n : ℕ) (c : Exp)
   /-- `if c then t else e fi` in a loop body; `jumps` says whether it contains
@@ -599,41 +653,41 @@ def Raw.jumps : Raw → Bool
 that repeats the loop — or nothing at the top of a plain `if`; `E` lists what
 `exit 1`, `exit 2`, ... continue with. Each loop becomes a fresh specification
 refined by its compiled body, and is itself a call of it. -/
-def compile (fuel : ℕ) (items : List Raw) (K : Option P) (E : List P) (st : PS) :
-    Except String (P × PS) :=
+def compile (fuel : ℕ) (items : List Raw) (K : Option PB) (E : List PB) (st : PS) :
+    Except String (PB × PS) :=
   match fuel with
   | 0 => .error "loop too long or too deeply nested"
   | f + 1 =>
     match items with
-    | [] => .ok (K.getD .ok, st)
+    | [] => .ok (K.getD PB.ok, st)
     | [.stmt p] =>
       match K with
       | none => .ok (p, st)
-      | some k => .ok (.seq p k, st)
+      | some k => .ok (PB.seq p k, st)
     | .stmt p :: rest => do
       let (q, st) ← compile f rest K E st
-      .ok (.seq p q, st)
+      .ok (PB.seq p q, st)
     | .exit n c :: rest =>
       match E[n - 1]? with
       | some target =>
         if n = 0 then .error "there is no 'exit 0'" else do
         let (q, st) ← compile f rest K E st
-        .ok (.cond c.test target q, st)
+        .ok (PB.ifThen c target q, st)
       | none => .error s!"'exit {n}' leaves more loops than there are"
     | .ifr jumps c t e :: rest =>
       if jumps then do
         let (pt, st) ← compile f (t ++ rest) K E st
         let (pe, st) ← compile f (e ++ rest) K E st
-        .ok (.cond c.test pt pe, st)
+        .ok (PB.ifThen c pt pe, st)
       else do
         let (pt, st) ← compile f t none [] st
         let (pe, st) ← compile f e none [] st
-        compile f (.stmt (.cond c.test pt pe) :: rest) K E st
+        compile f (.stmt (PB.ifThen c pt pe) :: rest) K E st
     | .loop body :: rest => do
       let (after, st) ← compile f rest K E st
       let (k, st) := newProc "do" st
-      let (b, st) ← compile f body (some (.call k)) (after :: E) st
-      .ok (.call k, st.define k b)
+      let (b, st) ← compile f body (some (PB.call k)) (after :: E) st
+      .ok (PB.call k, st.define k b)
 
 /-! ### Programs -/
 
@@ -652,7 +706,7 @@ private def endsBlock : Toks → Bool
 mutual
 
 /-- `program := choice ('.' choice)* '.'?`, built to the right. -/
-def parseProg (fuel : ℕ) (st : PS) : Except String (P × PS) :=
+def parseProg (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
   match fuel with
   | 0 => .error "program too long or too deeply nested"
   | f + 1 => do
@@ -662,14 +716,14 @@ def parseProg (fuel : ℕ) (st : PS) : Except String (P × PS) :=
       if endsBlock ts₁ then .ok (p, st.at ts₁)
       else do
         let (q, st) ← parseProg f (st.at ts₁)
-        .ok (.seq p q, st)
+        .ok (PB.seq p q, st)
     | _ => .ok (p, st)
 termination_by structural fuel
 
 /-- `par := choice ('||' choice)*`: concurrent composition, which binds tighter
 than `.` and looser than `or`. Which variables belong to which process is
 settled when the whole file has been read (`resolvePar`). -/
-def parsePar (fuel : ℕ) (st : PS) : Except String (P × PS) :=
+def parsePar (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
   match fuel with
   | 0 => .error "program too long or too deeply nested"
   | f + 1 => do
@@ -677,12 +731,12 @@ def parsePar (fuel : ℕ) (st : PS) : Except String (P × PS) :=
     match st.toks with
     | .sym "||" :: ts₁ => do
       let (q, st) ← parsePar f (st.at ts₁)
-      .ok (.par (fun _ => false) p q, st)
+      .ok (PB.par p q, st)
     | _ => .ok (p, st)
 termination_by structural fuel
 
 /-- `choice := statement ('or' statement)*`. -/
-def parseChoice (fuel : ℕ) (st : PS) : Except String (P × PS) :=
+def parseChoice (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
   match fuel with
   | 0 => .error "program too long or too deeply nested"
   | f + 1 => do
@@ -690,7 +744,7 @@ def parseChoice (fuel : ℕ) (st : PS) : Except String (P × PS) :=
     match st.toks with
     | .word "or" :: ts₁ => do
       let (q, st) ← parseChoice f (st.at ts₁)
-      .ok (.or p q, st)
+      .ok (PB.no (.or p.p q.p) "a choice ('or')", st)
     | _ => .ok (p, st)
 termination_by structural fuel
 
@@ -756,7 +810,7 @@ def parseItem (fuel : ℕ) (st : PS) : Except String (Raw × PS) :=
           .ok (.ifr ((t ++ e).any Raw.jumps) c t e, st)
         | _ => do
           let st ← expectWord "fi" st
-          .ok (.ifr (t.any Raw.jumps) c t [.stmt .ok], st)
+          .ok (.ifr (t.any Raw.jumps) c t [.stmt PB.ok], st)
     | .word "do" :: ts => do
       let (b, st) ← parseBody f (st.at ts)
       let st ← expectWord "od" st
@@ -767,19 +821,19 @@ def parseItem (fuel : ℕ) (st : PS) : Except String (Raw × PS) :=
 termination_by structural fuel
 
 /-- A single statement. -/
-def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
+def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
   match fuel with
   | 0 => .error "program too long or too deeply nested"
   | f + 1 =>
     match st.toks with
-    | .word "ok" :: ts => .ok (.ok, st.at ts)
-    | .word "tick" :: ts => .ok (.tick, st.at ts)
+    | .word "ok" :: ts => .ok (PB.ok, st.at ts)
+    | .word "tick" :: ts => .ok (PB.of .tick .tick, st.at ts)
     | .word "ensure" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
-      .ok (ensure c, st)
+      .ok (PB.no (ensure c) "'ensure'", st)
     | .word "assert" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
-      .ok (assert c, st)
+      .ok (PB.no (assert c) "'assert'", st)
     | .word "if" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
       let (d, st) ← match st.toks with
@@ -796,16 +850,16 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
           .ok (q, st)
         | _ => do
           let st ← expectWord "fi" st
-          .ok (.ok, st)
+          .ok (PB.ok, st)
       match d with
-      | some d => .ok (probIf c d p q, st)
-      | none => .ok (ifThen c p q, st)
+      | some d => .ok (PB.no (probIf c d p.p q.p) "a probabilistic choice", st)
+      | none => .ok (PB.ifThen c p q, st)
     | .word "while" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
       let st ← expectWord "do" st
       let (p, st) ← parseProg f st
       let st ← expectWord "od" st
-      .ok (loop c p, st)
+      .ok (PB.loop c p, st)
     | .word "do" :: ts => do
       let (b, st) ← parseBody f (st.at ts)
       let st ← expectWord "od" st
@@ -819,24 +873,28 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
       let st ← expectWord "do" st
       let (body, st) ← parseProg f st
       let st ← expectWord "od" st
-      if assigns i body then
+      if assigns i body.p then
         .error s!"the body of a for-loop may not assign its index '{st.names.getD i "?"}'"
       else
         let (hi, st) := newHidden st
         let (k, st) := newProc "for" st
-        let step : P := .seq body (.seq (assign i (.bin .add (.var i) (.lit (.int 1)))) (.call k))
-        let st := st.define k (ifThen (.bin .lt (.var i) (.var hi)) step .ok)
-        .ok (declare hi n (declare i m (.call k)), st)
+        let step : PB := PB.seq body
+          (PB.seq (PB.assign i (.bin .add (.var i) (.lit (.int 1)))) (PB.call k))
+        let st := st.define k (PB.ifThen (.bin .lt (.var i) (.var hi)) step PB.ok)
+        .ok (PB.declare hi n (PB.declare i m (PB.call k)), st)
     | .word c :: .sym "!" :: ts =>
-      match st.chans.find? (·.1 == c) with
-      | some (_, M, r) => do
+      match st.chans.find? (·.1 == c), st.chans.findIdx? (·.1 == c) with
+      | some (_, M, r), some k => do
         let (e, st) ← parseExp f (st.at ts)
-        .ok (if st.net then netSend r e else output M e, st)
-      | none => .error s!"'{c}' is not a channel"
+        .ok (if st.net then PB.of (netSend r e) (.send k e)
+          else PB.no (output M e) "a channel outside a network", st)
+      | _, _ => .error s!"'{c}' is not a channel"
     | .word c :: .sym "?" :: ts =>
-      match st.chans.find? (·.1 == c) with
-      | some (_, M, r) => .ok (if st.net then netRecv M else input M r, st.at ts)
-      | none => .error s!"'{c}' is not a channel"
+      match st.chans.find? (·.1 == c), st.chans.findIdx? (·.1 == c) with
+      | some (_, M, r), some k =>
+        .ok (if st.net then PB.of (netRecv M) (.recv k M)
+          else PB.no (input M r) "a channel outside a network", st.at ts)
+      | _, _ => .error s!"'{c}' is not a channel"
     | .word "exit" :: _ =>
       .error "'exit' is allowed only in a do-loop, and not inside a while-loop, a scope or a choice"
     | .word "new" :: ts => do
@@ -846,7 +904,7 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
       let st ← expectWord "in" st
       let (p, st) ← parseProg f st
       let st ← expectWord "end" st
-      .ok (declare x e p, st)
+      .ok (PB.declare x e p, st)
     | .sym "(" :: ts => do
       let (p, st) ← parseProg f (st.at ts)
       let st ← expectSym ")" st
@@ -856,7 +914,7 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
       | some k =>
         match st.params.getD k [], ts with
         | [], .sym "(" :: _ => .error s!"'{w}' takes no arguments"
-        | [], ts => .ok (.call k, st.at ts)
+        | [], ts => .ok (PB.call k, st.at ts)
         | ps, .sym "(" :: ts => do
           let (args, st) ← parseArgs f (st.at ts)
           if args.length != ps.length then
@@ -879,13 +937,14 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
           let (hn, st) := newHidden st
           let (hi, st) := newHidden st
           let (k, st) := newProc "rand" st
-          .ok (declare hn e (declare hi (.lit (.int 0)) (.call k)), st.define k (randBody k x hn hi))
+          .ok (PB.no (declare hn e (declare hi (.lit (.int 0)) (.call k))) "'rand'",
+            st.define k (PB.no (randBody k x hn hi) "'rand'"))
         | _ => do
           let (idx, st) ← parseTarget f st
           let (e, st) ← parseExp f st
           match idx with
-          | [] => .ok (assign x e, st)
-          | _ => .ok (assignIdx x idx e, st)
+          | [] => .ok (PB.assign x e, st)
+          | _ => .ok (PB.no (assignIdx x idx e) "an indexed assignment", st)
     | t :: _ => .error s!"expected a statement, found '{t.render}'"
     | [] => .error "expected a statement, found the end of the program"
 termination_by structural fuel
@@ -893,7 +952,7 @@ termination_by structural fuel
 end
 
 /-- `file := (name '⇐' program | program)*`, with at most one main program. -/
-def parseFile (fuel : ℕ) (main : Option P) (st : PS) : Except String (Option P × PS) :=
+def parseFile (fuel : ℕ) (main : Option PB) (st : PS) : Except String (Option PB × PS) :=
   match fuel with
   | 0 => .error "program too long"
   | f + 1 =>
@@ -908,7 +967,7 @@ def parseFile (fuel : ℕ) (main : Option P) (st : PS) : Except String (Option P
         if st.bodies.any (·.1 == k) then .error s!"'{w}' is defined twice"
         else do
           let (b, st) ← parseProg f (st.at ts)
-          match (st.params.getD k []).find? (assigns · b) with
+          match (st.params.getD k []).find? (assigns · b.p) with
           | some x => .error s!"'{w}' may not assign its parameter '{st.names.getD x "?"}'"
           | none => parseFile f main (st.define k b)
       | _, _ =>
@@ -1005,9 +1064,10 @@ def internChans : List String → List String → List String × List (String ×
     let (names, rest) := internChans cs names
     (names, (c, M, r) :: rest)
 
-/-- Parse a whole token list, starting from a table of variable names already in
-use, as a network of processes if `net`. The fuel is read off its length. -/
-def parseToksMode (net : Bool) (names : List String) (ts : Toks) : Except String Program :=
+/-- Read a whole token list, starting from a table of variable names already in
+use, as a network of processes if `net`: the main program, if there is one, and
+the parser's final state. The fuel is read off its length. -/
+def parseToksRaw (net : Bool) (names : List String) (ts : Toks) : Except String (Option PB × PS) :=
   let defs := scanDefs (ts.length + 1) ts []
   let procs := defs.map (·.1)
   let (names, params) := internParams defs names
@@ -1018,13 +1078,45 @@ def parseToksMode (net : Bool) (names : List String) (ts : Toks) : Except String
   | none, some w, _ => .error s!"'{w}' names a variable, a parameter or a channel, not a specification"
   | none, none, some w => .error s!"'{w}' is both a channel and a specification"
   | none, none, none =>
-    match parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params, chans, net || isNet chans ts⟩ with
-    | .error e => .error e
-    | .ok (some p, st) => resolveProgram ⟨p, st.bodies, st.names, st.procs⟩
-    | .ok (none, st) =>
-      match procs with
-      | [] => .error "the program is empty"
-      | _ :: _ => resolveProgram ⟨.call 0, st.bodies, st.names, st.procs⟩
+    parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params, chans, net || isNet chans ts⟩
+
+/-- Parse a whole token list, starting from a table of variable names already in
+use, as a network of processes if `net`. -/
+def parseToksMode (net : Bool) (names : List String) (ts : Toks) : Except String Program :=
+  match parseToksRaw net names ts with
+  | .error e => .error e
+  | .ok (some p, st) => resolveProgram ⟨p.p, st.bodies.map fun (k, b) => (k, b.p), st.names, st.procs⟩
+  | .ok (none, st) =>
+    match st.procs with
+    | [] => .error "the program is empty"
+    | _ :: _ => resolveProgram ⟨.call 0, st.bodies.map fun (k, b) => (k, b.p), st.names, st.procs⟩
+
+/-- What the b4 compiler makes of a program (`CompileB4.Stmt`): its processes'
+statements (one, unless it is a `||`), the named statements, the variables and
+the channels. -/
+structure Shadow where
+  /-- The processes. -/
+  procs : List Stmt
+  /-- The named statements: the specifications, and the loops'. -/
+  defs : List (ℕ × Stmt)
+  /-- The variables: variable `k` is written `names[k]`. -/
+  names : List String
+  /-- The channels: name, variable, cursor variable. -/
+  chans : List (String × ℕ × ℕ)
+
+/-- Read a whole token list for the b4 compiler, its channels marks of a network
+(`Network`). Each named statement must be one the compiler takes, as must the main
+program, which may be a `||` of processes. -/
+def parseToksShadow (names : List String) (ts : Toks) : Except String Shadow := do
+  let (main, st) ← parseToksRaw true names ts
+  let procs ← match main with
+    | some p => p.s
+    | none => if st.procs.isEmpty then throw "the program is empty" else .ok [.call 0]
+  let defs ← st.bodies.mapM fun (k, b) => do
+    match b.one with
+    | .ok s => .ok (k, s)
+    | .error e => throw s!"in {st.procs.getD k "?"}: {e}"
+  .ok ⟨procs, defs, st.names, st.chans⟩
 
 /-- Parse a whole token list, starting from a table of variable names already in
 use; it is a network when it has channels and a `||`. -/

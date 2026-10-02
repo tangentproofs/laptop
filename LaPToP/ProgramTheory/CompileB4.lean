@@ -135,7 +135,8 @@ def Rep (v : Value) : Prop := IsInt v ∨ ∃ b, v = .bool b
 
 /-- The opcode of a binary operator the compiler handles. -/
 def binByte : BinOp → UInt8
-  | .add => 0x80 | .sub => 0x81 | .mul => 0x82 | .eq => 0x8A | .lt => 0x8B | _ => 0
+  | .add => 0x80 | .sub => 0x81 | .mul => 0x82 | .div => 0x83 | .mod => 0x84 | .eq => 0x8A
+  | .lt => 0x8B | _ => 0
 
 /-- The code of an expression: it pushes the expression's value. -/
 def ecode (L : Layout) : Exp → List UInt8
@@ -172,6 +173,10 @@ def Fits (L : Layout) (st : St) : Exp → Prop
       InRange ((a.eval st).toInt - (b.eval st).toInt)
   | .bin .mul a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st) ∧
       InRange ((a.eval st).toInt * (b.eval st).toInt)
+  | .bin .div a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st) ∧
+      0 < (b.eval st).toInt ∧ InRange ((a.eval st).toInt.fdiv (b.eval st).toInt)
+  | .bin .mod a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st) ∧
+      0 < (b.eval st).toInt ∧ InRange ((a.eval st).toInt.fmod (b.eval st).toInt)
   | .bin .eq a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st)
   | .bin .lt a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st)
   | .un .neg a => Fits L st a ∧ IsInt (a.eval st) ∧ InRange (-(a.eval st).toInt)
@@ -198,6 +203,34 @@ theorem enc_mul {a b : ℤ} (ha : InRange a) (hb : InRange b) :
     fromInt32 (toInt32 (fromInt32 a) * toInt32 (fromInt32 b)) =
       enc (BinOp.apply .mul (.int a) (.int b)) := by
   rw [toInt32_fromInt32 ha, toInt32_fromInt32 hb]; rfl
+
+theorem enc_div {a b : ℤ} (ha : InRange a) (hb : InRange b) (hpos : 0 < b) :
+    fromInt32 (toInt32 (fromInt32 a) / toInt32 (fromInt32 b)) =
+      enc (BinOp.apply .div (.int a) (.int b)) := by
+  rw [toInt32_fromInt32 ha, toInt32_fromInt32 hb]
+  simp only [BinOp.apply, enc, Value.toInt_int, Int.fdiv_eq_ediv]
+  rw [ite_eq_left (Or.inl hpos.le), sub_zero]
+
+theorem enc_mod {a b : ℤ} (ha : InRange a) (hb : InRange b) (hpos : 0 < b) :
+    fromInt32 (toInt32 (fromInt32 a) % toInt32 (fromInt32 b)) =
+      enc (BinOp.apply .mod (.int a) (.int b)) := by
+  rw [toInt32_fromInt32 ha, toInt32_fromInt32 hb]
+  simp only [BinOp.apply, enc, Value.toInt_int, Int.fmod_eq_emod]
+  rw [ite_eq_left (Or.inl hpos.le), add_zero]
+
+/-- A word that is a nonzero integer is not `0`. -/
+theorem fromInt32_ne_zero {b : ℤ} (hb : InRange b) (h : b ≠ 0) : fromInt32 b ≠ 0 := by
+  intro e
+  have : fromInt32 b = fromInt32 0 := by rw [e]; rfl
+  exact h (fromInt32_inj hb ⟨by norm_num, by norm_num⟩ this)
+
+theorem runOp_dv (s : State) (h : (dpop s).1 ≠ 0) : runOp s 0x83 =
+    (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (fromInt32 (toInt32 x / toInt32 y))) := by
+  simp [runOp, h]
+
+theorem runOp_md (s : State) (h : (dpop s).1 ≠ 0) : runOp s 0x84 =
+    (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (fromInt32 (toInt32 x % toInt32 y))) := by
+  simp [runOp, h]
 
 theorem enc_eq {a b : ℤ} (ha : InRange a) (hb : InRange b) :
     (if fromInt32 a == fromInt32 b then (0xFFFFFFFF : UInt32) else 0) =
@@ -257,7 +290,8 @@ theorem At.left {L : Layout} {st : St} {s : State} {bs₁ bs₂ : List UInt8} {d
 
 theorem run_bin (L : Layout) (st : St) (op : BinOp) (a b : Exp) (byte : UInt8)
     (f : UInt32 → UInt32 → UInt32)
-    (hr : ∀ s, runOp s byte = (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (f x y)))
+    (hr : ∀ s, (dpop s).1 = enc (b.eval st) →
+      runOp s byte = (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (f x y)))
     (hb : binByte op = byte) (hne : byte ≠ 0xFD)
     (hval : f (enc (a.eval st)) (enc (b.eval st)) = enc ((Exp.bin op a b).eval st))
     (iha : ERuns L st a) (ihb : ERuns L st b) (fa : Fits L st a) (fb : Fits L st b)
@@ -272,8 +306,11 @@ theorem run_bin (L : Layout) (st : St) (op : BinOp) (a b : Exp) (byte : UInt8)
   have h₂ := h₁.after (d₂ := 0) (depth_pos b) w₂ i₂ d₂ sm₂
   have hop : high s₂ (getIP s₂) = byte := by
     have := h₂.code 0 (by simp); simpa [hb] using this
-  obtain ⟨w₃, i₃, d₃, sm₃⟩ := step_binop' s₂ byte f (dstack s) (enc (a.eval st)) (enc (b.eval st))
-    w₂ h₂.lo (by have := h₂.hi; simp at this; unfold MAXBYTE at this; omega) hop (by rw [d₂, d₁]; simp) hr
+  have hd₂ : dstack s₂ = dstack s ++ [enc (a.eval st), enc (b.eval st)] := by rw [d₂, d₁]; simp
+  obtain ⟨e₂, -⟩ := dpop_same s₂ (dstack s ++ [enc (a.eval st)]) (enc (b.eval st)) w₂
+    (by rw [hd₂]; simp)
+  obtain ⟨w₃, i₃, d₃, sm₃⟩ := step_binop s₂ byte f (dstack s) (enc (a.eval st)) (enc (b.eval st))
+    w₂ h₂.lo (by have := h₂.hi; simp at this; unfold MAXBYTE at this; omega) hop hd₂ (hr s₂ e₂)
   refine ⟨step s₂, r₁.trans (r₂.trans (Steps.one h₂.run (notIo_of_hop h₂.lo hop hne))), w₃, ?_, by rw [d₃, hval],
     sm₁.trans (sm₂.trans sm₃)⟩
   rw [i₃, i₂, i₁]; simp; omega
@@ -328,19 +365,31 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
     intro s hf h
     cases op <;> simp only [Fits] at hf
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩, _⟩ := hf
-      exact run_bin L st _ a b 0x80 (fun x y => fromInt32 (toInt32 x + toInt32 y)) runOp_ad rfl (by decide)
+      exact run_bin L st _ a b 0x80 (fun x y => fromInt32 (toInt32 x + toInt32 y)) (fun s _ => runOp_ad s) rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_add ra rb) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩, _⟩ := hf
-      exact run_bin L st _ a b 0x81 (fun x y => fromInt32 (toInt32 x - toInt32 y)) runOp_sb rfl (by decide)
+      exact run_bin L st _ a b 0x81 (fun x y => fromInt32 (toInt32 x - toInt32 y)) (fun s _ => runOp_sb s) rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_sub ra rb) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩, _⟩ := hf
-      exact run_bin L st _ a b 0x82 (fun x y => fromInt32 (toInt32 x * toInt32 y)) runOp_ml rfl (by decide)
+      exact run_bin L st _ a b 0x82 (fun x y => fromInt32 (toInt32 x * toInt32 y)) (fun s _ => runOp_ml s) rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_mul ra rb) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩, hpos, _⟩ := hf
+      rw [eb, Value.toInt_int] at hpos
+      exact run_bin L st _ a b 0x83 (fun x y => fromInt32 (toInt32 x / toInt32 y))
+        (fun s e => runOp_dv s (by rw [e, eb, enc_int]; exact fromInt32_ne_zero rb (by omega)))
+        rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_div ra rb hpos) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩, hpos, _⟩ := hf
+      rw [eb, Value.toInt_int] at hpos
+      exact run_bin L st _ a b 0x84 (fun x y => fromInt32 (toInt32 x % toInt32 y))
+        (fun s e => runOp_md s (by rw [e, eb, enc_int]; exact fromInt32_ne_zero rb (by omega)))
+        rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_mod ra rb hpos) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩⟩ := hf
-      exact run_bin L st _ a b 0x8A (fun x y => if x == y then 0xFFFFFFFF else 0) runOp_eq rfl (by decide)
+      exact run_bin L st _ a b 0x8A (fun x y => if x == y then 0xFFFFFFFF else 0) (fun s _ => runOp_eq s) rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_eq ra rb) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩⟩ := hf
-      exact run_bin L st _ a b 0x8B (fun x y => if toInt32 x < toInt32 y then 0xFFFFFFFF else 0) runOp_lt rfl (by decide)
+      exact run_bin L st _ a b 0x8B (fun x y => if toInt32 x < toInt32 y then 0xFFFFFFFF else 0) (fun s _ => runOp_lt s) rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_lt ra rb) iha ihb fa fb s h
   | un op a iha =>
     intro s hf h
@@ -878,11 +927,11 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {d : ℕ} {p : Stmt} {st st' : St}
     simp only [List.length_append, List.length_cons, length_le4, length_scode] at hB hP hC
     replace hP : CodeAt (high σ) (a + 7 + ((ecode L e).length + 6))
         (scode L (a + 7 + ((ecode L e).length + 6)) p) := by
-      exact hP.cast (by first | omega | (simp <;> omega))
+      exact hP.cast (by first | omega | (simp; omega))
     replace hC : CodeAt (high σ) (a + 7 + ((ecode L e).length + 6) + slen L p)
         ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) := by
       have := hC.cast (b := a + 7 + ((ecode L e).length + 6) + slen L p)
-        (by first | omega | (simp <;> omega))
+        (by first | omega | (simp; omega))
       rwa [List.append_assoc] at this
     have haddr : L.addr x + 3 < MAXBYTE := by unfold Layout.addr; omega
     have haddr' : 256 ≤ (UInt32.ofNat (L.addr x)).toNat := by
@@ -1004,7 +1053,7 @@ theorem enter_runs (L : Layout) (hL : L.Ok) {s : State} {st : St} {x : ℕ} (hx 
       notIo_of_hop (by rw [i₁]; omega) hop₁, rfl⟩).tail ⟨sm₁₂.running hr,
       notIo_of_hop (by rw [i₂, i₁]; omega) hop₂, rfl⟩, w₃,
     ⟨f₃.st.trans (sm₁₂.running hr).1, f₃.db.trans (sm₁₂.running hr).2⟩,
-    by rw [i₃, i₂, i₁] <;> omega, d₃, by rw [c₃, sm₂.cs, sm₁.cs], (Frame.of_same sm₁₂).trans f₃⟩
+    by rw [i₃, i₂, i₁], d₃, by rw [c₃, sm₂.cs, sm₁.cs], (Frame.of_same sm₁₂).trans f₃⟩
 
 /-- `cd li x wi`, a scope's end: the variable gets its old value back from the
 control stack. -/
@@ -1045,7 +1094,7 @@ theorem restore_runs (L : Layout) (hL : L.Ok) {s : State} {st : St} {x : ℕ} {v
   have run₇ : Running (step (step s)) := sm₇.running run₆
   refine ⟨step (step (step s)), ((Steps.one hr (notIo_of_hop hlo hop₅)).tail
       ⟨run₆, notIo_li hAt₆, rfl⟩).tail ⟨run₇, notIo_of_hop hip₇ hop₇, rfl⟩, w₈,
-    ⟨st₈.trans run₇.1, db₈.trans run₇.2⟩, by rw [i₈, i₇, i₆] <;> omega, d₈,
+    ⟨st₈.trans run₇.1, db₈.trans run₇.2⟩, by rw [i₈, i₇, i₆], d₈,
     by rw [c₈, sm₇.cs, c₆], ?_, ?_, by rw [o₈, sm₇.ob, f₆.ob], by rw [hclk₈, sm₇.clk, f₆.clk]⟩
   · rw [hi₈, sm₇.high, f₆.high]; exact varsOk_write hv
   · intro i hi
