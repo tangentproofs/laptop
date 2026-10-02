@@ -8,7 +8,7 @@ require VersoBlueprint from git
 -- (`LaPToP.ProgramTheory.CompileB4`). Pinned to a commit of the branch carrying
 -- its formalization until that is merged.
 require b4 from git
-  "https://github.com/tangentstorm/b4" @ "bf77af35513591129f4ffae9851b85bd275d02cd" / "imp/lean"
+  "https://github.com/tangentstorm/b4" @ "4f352c5cddc141379ffa7a620a3e52fe2ee6404a" / "imp/lean"
 
 -- Mathlib last so its transitive pins win for `lake exe cache get` hashes.
 require mathlib from git

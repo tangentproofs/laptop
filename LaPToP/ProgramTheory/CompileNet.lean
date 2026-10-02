@@ -329,4 +329,98 @@ theorem tick_runs {s : State} {t : ℕ∞} (hw : WF s) (hr : Running s) (hlo : 2
   rw [k₄, hclk]
   exact encT_succ hfit
 
+/-! ### `io` in the swarm -/
+
+theorem ioCmd_eq {s : State} {xs : List UInt32} {v : UInt32} (hlo : 256 ≤ getIP s)
+    (hop : high s (getIP s) = 0xFD) (hd : dstack s = xs ++ [v]) : ioCmd s = some v := by
+  unfold ioCmd
+  rw [get!_ip s hlo, hop, ite_eq_left rfl, hd]
+  simp
+
+theorem Swarm.send_eq (w : Swarm) (i : ℕ) (s : State) :
+    w.send i s = ⟨w.ms.set i (setIP (dpop (dpop (dpop s).2).2).2
+        (getIP (dpop (dpop (dpop s).2).2).2 + 1)),
+      fun c => if c = (dpop (dpop s).2).1.toNat then
+        w.chans c ++ [((dpop (dpop (dpop s).2).2).1, getClk (dpop (dpop (dpop s).2).2).2)]
+        else w.chans c, w.rd⟩ := rfl
+
+/-- **Send** in the swarm: with the value, the channel and `'s'` on the stack at
+an `io`, the message goes on the channel's script, stamped with the clock. -/
+theorem swarm_send {w : Swarm} {i : ℕ} {s : State} {v : UInt32} {ch : ℕ}
+    (hi : w.ms[i]? = some s) (hw : WF s) (hr : Running s) (hlo : 256 ≤ getIP s)
+    (hhi : getIP s + 1 < MAXBYTE) (hop : high s (getIP s) = 0xFD)
+    (hd : dstack s = [v, UInt32.ofNat ch, SEND]) (hch : ch < 2 ^ 32) :
+    ∃ s', w.stepAt i = some ⟨w.ms.set i s',
+        fun c => if c = ch then w.chans c ++ [(v, getClk s)] else w.chans c, w.rd⟩ ∧
+      WF s' ∧ getIP s' = getIP s + 1 ∧ dstack s' = [] ∧ Same s s' := by
+  have hio : ioCmd s = some SEND := ioCmd_eq (xs := [v, UInt32.ofNat ch]) hlo hop (by simpa using hd)
+  rw [Swarm.stepAt_send hi ((running_iff _).mpr hr) hio]
+  obtain ⟨e₁, w₁, i₁, d₁, sm₁⟩ := dpop_same s [v, UInt32.ofNat ch] SEND hw (by simpa using hd)
+  obtain ⟨e₂, w₂, i₂, d₂, sm₂⟩ := dpop_same _ [v] (UInt32.ofNat ch) w₁ (by simpa using d₁)
+  obtain ⟨e₃, w₃, i₃, d₃, sm₃⟩ := dpop_same _ [] v w₂ (by simpa using d₂)
+  obtain ⟨w₄, i₄, d₄, sm₄⟩ := setIP_same (dpop (dpop (dpop s).2).2).2
+    (getIP (dpop (dpop (dpop s).2).2).2 + 1) w₃ (by rw [i₃, i₂, i₁]; unfold MAXBYTE at hhi; omega)
+  refine ⟨_, ?_, w₄, by rw [i₄, i₃, i₂, i₁], d₄.trans d₃, sm₁.trans (sm₂.trans (sm₃.trans sm₄))⟩
+  have htn : (UInt32.ofNat ch).toNat = ch := by rw [UInt32.toNat_ofNat']; omega
+  rw [Swarm.send_eq, e₂, e₃, htn, (sm₁.trans (sm₂.trans sm₃)).clk]
+
+/-- The machine after it receives `(v, τ)`. -/
+def recvState (s : State) (v τ : UInt32) : State :=
+  setIP (setClk (dpush (dpop (dpop s).2).2 v) (later (getClk (dpush (dpop (dpop s).2).2 v)) (τ + 1)))
+    (getIP (setClk (dpush (dpop (dpop s).2).2 v)
+      (later (getClk (dpush (dpop (dpop s).2).2 v)) (τ + 1))) + 1)
+
+theorem recvState_view {s : State} {ch : UInt32} {v τ : UInt32} (hw : WF s)
+    (hhi : getIP s + 1 < MAXBYTE) (hd : dstack s = [ch, RECV]) :
+    WF (recvState s v τ) ∧ getIP (recvState s v τ) = getIP s + 1 ∧ dstack (recvState s v τ) = [v] ∧
+      getClk (recvState s v τ) = later (getClk s) (τ + 1) ∧ high (recvState s v τ) = high s ∧
+      cstack (recvState s v τ) = cstack s ∧ getRST (recvState s v τ) = getRST s ∧
+      getRDB (recvState s v τ) = getRDB s ∧ (recvState s v τ).ob = s.ob := by
+  obtain ⟨e₁, w₁, i₁, d₁, sm₁⟩ := dpop_same s [ch] RECV hw (by simpa using hd)
+  obtain ⟨e₂, w₂, i₂, d₂, sm₂⟩ := dpop_same _ [] ch w₁ (by simpa using d₁)
+  generalize hs₂ : (dpop (dpop s).2).2 = s₂ at w₂ i₂ d₂ sm₂
+  have hl : getDSH s₂ < STACKSZ := by
+    have := dstack_length _ w₂; rw [d₂] at this; simp at this; rw [← this]; decide
+  obtain ⟨w₃, i₃, d₃, sm₃⟩ := dpush_same s₂ v w₂ hl
+  generalize hs₃ : dpush s₂ v = s₃ at w₃ i₃ d₃ sm₃
+  have w₄ : WF (setClk s₃ (later (getClk s₃) (τ + 1))) :=
+    ⟨by simpa using w₃.mem, w₃.ds, w₃.cs, by rw [getDSH_setClk]; exact w₃.dsh,
+      by rw [getCSH_setClk]; exact w₃.csh⟩
+  obtain ⟨w₅, i₅, d₅, sm₅⟩ := setIP_same (setClk s₃ (later (getClk s₃) (τ + 1)))
+    (getIP (setClk s₃ (later (getClk s₃) (τ + 1))) + 1) w₄
+    (by rw [getIP_setClk, i₃, i₂, i₁]; unfold MAXBYTE at hhi; omega)
+  have hsm := sm₁.trans (sm₂.trans sm₃)
+  have hr : recvState s v τ = setIP (setClk s₃ (later (getClk s₃) (τ + 1)))
+      (getIP (setClk s₃ (later (getClk s₃) (τ + 1))) + 1) := by
+    rw [← hs₃, ← hs₂]; rfl
+  rw [hr]
+  refine ⟨w₅, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [i₅, getIP_setClk, i₃, i₂, i₁]
+  · rw [d₅, dstack, getDSH_setClk]; exact d₃.trans (by rw [d₂]; rfl)
+  · rw [sm₅.clk, getClk_setClk _ _ w₃.mem, hsm.clk]
+  · rw [sm₅.high, high_setClk]; exact hsm.high
+  · rw [sm₅.cs, cstack, getCSH_setClk]; exact hsm.cs
+  · rw [sm₅.st, getRST_setClk]; exact hsm.st
+  · rw [sm₅.db, getRDB_setClk]; exact hsm.db
+  · rw [sm₅.ob]; exact hsm.ob
+
+/-- **Receive** in the swarm: with the channel and `'r'` on the stack at an
+`io`, and the message at the read cursor there, its value is pushed, the clock
+moves to one past its time if that is later, and the cursor moves on. -/
+theorem swarm_recv {w : Swarm} {i : ℕ} {s : State} {ch : ℕ} {v τ : UInt32}
+    (hi : w.ms[i]? = some s) (hw : WF s) (hr : Running s) (hlo : 256 ≤ getIP s)
+    (hop : high s (getIP s) = 0xFD) (hd : dstack s = [UInt32.ofNat ch, RECV]) (hch : ch < 2 ^ 32)
+    (hm : (w.chans ch)[(w.rd.getD i fun _ => 0) ch]? = some (v, τ)) :
+    w.stepAt i = some ⟨w.ms.set i (recvState s v τ), w.chans,
+        w.rd.set i fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1
+          else (w.rd.getD i fun _ => 0) c⟩ := by
+  have hio : ioCmd s = some RECV := ioCmd_eq (xs := [UInt32.ofNat ch]) hlo hop (by simpa using hd)
+  rw [Swarm.stepAt_recv hi ((running_iff _).mpr hr) hio]
+  have htn : (UInt32.ofNat ch).toNat = ch := by rw [UInt32.toNat_ofNat']; omega
+  obtain ⟨e₁, w₁, -, d₁, -⟩ := dpop_same s [UInt32.ofNat ch] RECV hw (by simpa using hd)
+  obtain ⟨e₂, -, -, -, -⟩ := dpop_same _ [] (UInt32.ofNat ch) w₁ (by simpa using d₁)
+  unfold Swarm.recv
+  simp only [e₂, htn, hm]
+  rfl
+
 end LaPToP.ProgramTheory.CompileNet
