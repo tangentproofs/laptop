@@ -1,4 +1,4 @@
-import LaPToP.ProgramTheory.InterpreterLangSyntax
+import LaPToP.ProgramTheory.NetworkLang
 
 /-!
 # `interp`: running programs of the aPToP interpreter from a shell
@@ -18,6 +18,7 @@ does not touch it.
 open LaPToP.ProgramTheory.Interpreter
 open LaPToP.ProgramTheory.Interpreter.Lang
 open LaPToP.ProgramTheory.Interpreter.Timed (TState runT runAllT renderTime)
+open LaPToP.ProgramTheory.Interpreter.Demo (Toks)
 
 /-- What the command line asked for. -/
 structure Options where
@@ -35,6 +36,8 @@ structure Options where
   timed : Bool := false
   /-- Compute the distribution of the final states. -/
   dist : Bool := false
+  /-- Run as a network of communicating processes. -/
+  net : Bool := false
   /-- Check the tokenizer against the token lists the parser theorems use. -/
   selftest : Bool := false
   /-- Print the grammar. -/
@@ -51,7 +54,9 @@ usage: interp [options] [file]
   file               read the program from this file (default: standard input)
   --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
                      listSum, exitLoop, deepExit, forLoop, gcd, swap, even,
-                     channel, parSwap, seqPar, parTime, probEx1, probEx2, rand
+                     channel, parSwap, seqPar, parTime, probEx1, probEx2, rand,
+                     and the networks sendRecv, buffer, deadlock, doubler,
+                     pipeline
   --NAME=EXP         the initial value of variable NAME, an expression such as
                      --n=10 or --L=[3;1;2] (every other variable starts at 0)
   --fuel=K           execution fuel (default 1000)
@@ -61,6 +66,10 @@ usage: interp [options] [file]
                      with --all, search on the clock (runAllT)
   --dist             compute the distribution of the final states (Section 5.7):
                      each with its probability, and the probability of none
+  --net              run as a network of communicating processes (Chapter 9),
+                     as is done anyway when the program has channels and a ||:
+                     each process has its own variables, communicates only on
+                     channels, and a message takes one unit of time
   --selftest         check the tokenizer against the proved token lists
   --grammar          print the grammar of the concrete syntax
   --help             print this message
@@ -125,6 +134,13 @@ A name written c! e or c? is a channel: c! e outputs, c? inputs (waiting for a
 message), c is the last message input and √c says one is waiting. The channel's
 script is the list variable c: --keyboard=[3;4] supplies input, and a channel
 written to prints as the list of its messages.
+A program with channels and a || (or any program, with --net) is a network
+(Chapter 9): the processes of the main ||, each parenthesized, run concurrently,
+each with its own variables, and communicate only on channels, each written by
+one process; a message arrives one unit of time after it is sent. A run prints
+the final variables, the time, and each channel's messages with the times they
+were sent; when every unfinished process waits for input that never comes, it
+is a deadlock, and the time is ∞.
 
 Values are integers, binaries (⊤, ⊥) and lists ([3; 1; 2]); a variable never
 assigned is 0. '.' is sequential composition and binds loosest, so
@@ -152,6 +168,7 @@ def parseArgs : List String → Options → Except String Options
     else if a == "--all" then parseArgs rest { o with all := true }
     else if a == "--timed" then parseArgs rest { o with timed := true }
     else if a == "--dist" then parseArgs rest { o with dist := true }
+    else if a == "--net" then parseArgs rest { o with net := true }
     else if a == "--selftest" then parseArgs rest { o with selftest := true }
     else if a == "--grammar" then parseArgs rest { o with grammar := true }
     else if a.startsWith "--demo=" then parseArgs rest { o with demo := some (optValue a 7) }
@@ -192,6 +209,11 @@ def demoSrc : String → Option String
   | "probEx1" => some Lang.Demo.probEx1Src
   | "probEx2" => some Lang.Demo.probEx2Src
   | "rand" => some Lang.Demo.randSrc
+  | "sendRecv" => some Lang.Demo.sendRecvSrc
+  | "buffer" => some Lang.Demo.bufferSrc
+  | "deadlock" => some Lang.Demo.deadlockSrc
+  | "doubler" => some Lang.Demo.doublerSrc
+  | "pipeline" => some Lang.Demo.pipelineSrc
   | _ => none
 
 /-- Read the program text. -/
@@ -210,7 +232,7 @@ fellows) prove that the parser turns those tokens into the Lean programs, so
 passing here means the binary runs exactly what the library proves about. -/
 def runSelfTest : IO UInt32 := do
   let mut bad : Nat := 0
-  for (name, src, toks) in Lang.Demo.selfTests do
+  for (name, src, toks) in Lang.Demo.selfTests ++ Lang.Demo.netSelfTests do
     match tokenize (src.length + 1) src.toList with
     | .ok ts =>
       if ts == toks then
@@ -303,6 +325,44 @@ def runProgram (o : Options) (names : List String) (st : St) (prog : Program) : 
          branch the deterministic interpreter chose failed (try --all)"
       return 2
 
+/-- Run a network and print what it does. -/
+def runNetwork (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
+  let parsed := do
+    let prog ← parseToksMode true setNames ts
+    let (names, st) ← initialState prog.names o.sets
+    let np ← toNet prog (chansOf setNames ts) st
+    return (prog, names, st, np)
+  match parsed with
+  | .error e =>
+    IO.eprintln s!"interp: {e}"
+    return 1
+  | .ok (prog, _, st, np) =>
+    let (c, status) := np.run prog o.fuel o.fuel st
+    let out := np.outcome prog o.fuel o.fuel st
+    let vars := ", ".intercalate (out.vars.map fun (w, v) => s!"{w} = {v.render}")
+    let time := match status with
+      | .deadlock => "∞"
+      | _ => renderTime (finishTime c)
+    IO.println (if vars.isEmpty then s!"t = {time}" else s!"{vars}, t = {time}")
+    for (w, sc) in out.scripts do
+      let vs := "; ".intercalate (sc.map fun (v, _) => v.render)
+      let ts := "; ".intercalate (sc.map fun (_, t) => renderTime t)
+      IO.println s!"{w} = [{vs}] sent at [{ts}]"
+    match status with
+    | .done => return 0
+    | .deadlock =>
+      let waiting := (c.ps.zipIdx.filter fun (pc, _) => !pc.k.isEmpty).map fun (pc, i) =>
+        match pc.k with
+        | .recv ch _ :: _ =>
+          s!"process {i + 1} waits for input on {(np.chans[ch]?.map (·.1)).getD "?"}"
+        | _ => s!"process {i + 1} cannot go on"
+      IO.println s!"deadlock: {", ".intercalate waiting}; that input never comes"
+      return 0
+    | .running =>
+      IO.eprintln s!"interp: the processes were still running after {o.fuel} rounds \
+        (--fuel); shown is what they had done"
+      return 2
+
 def main (args : List String) : IO UInt32 := do
   match parseArgs args {} with
   | .error e =>
@@ -322,13 +382,22 @@ def main (args : List String) : IO UInt32 := do
       | some name =>
         match demoSrc name with
         | some src => pure (Except.ok src)
-        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd, swap, even, channel, parSwap, seqPar, parTime, probEx1, probEx2 or rand)")
+        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd, swap, even, channel, parSwap, seqPar, parTime, probEx1, probEx2, rand, sendRecv, buffer, deadlock, doubler or pipeline)")
       | none => readSource o
     for (w, _) in o.sets do
       if !validName w then
         IO.eprintln s!"interp: '{w}' cannot be a variable name"
         return 1
     let setNames := (o.sets.map (·.1)).foldl (fun ns w => (intern w ns).2) []
+    if !o.timed && !o.all && !o.dist then
+      match src with
+      | .ok text =>
+        match tokenize (text.length + 1) text.toList with
+        | .ok ts =>
+          if o.net || isNet (chansOf setNames ts) ts then
+            return (← runNetwork o setNames ts)
+        | .error _ => pure ()
+      | .error _ => pure ()
     let parsed := do
       let src ← src
       let prog ← parseProgramWith setNames src

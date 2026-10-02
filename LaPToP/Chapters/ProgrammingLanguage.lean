@@ -24,6 +24,7 @@ import LaPToP.ProgramTheory.InterpreterTime
 import LaPToP.ProgramTheory.InterpreterLangSyntax
 import LaPToP.ProgramTheory.InterpreterProb
 import LaPToP.ProgramTheory.InterpreterFast
+import LaPToP.ProgramTheory.NetworkLang
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1565,4 +1566,62 @@ its end, is assignment, by extensionality item by item. Merging two arrays is
 merging two states, likewise. Each interpreter is then the other with the state
 converted, by induction on the fuel, each case unfolding one step of both and
 using those two facts.
+:::
+
+:::theorem "interpreter_network" (parent := "programming_language_core") (tags := "programs, interpreter, channels, concurrency, deadlock, hehner-9.1") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.PStep, LaPToP.ProgramTheory.Interpreter.Network.NetSpec, LaPToP.ProgramTheory.Interpreter.Network.Net.WF, LaPToP.ProgramTheory.Interpreter.Network.Act, LaPToP.ProgramTheory.Interpreter.Network.MStep, LaPToP.ProgramTheory.Interpreter.Network.act_comm, LaPToP.ProgramTheory.Interpreter.Network.mstep_diamond, LaPToP.ProgramTheory.Interpreter.Network.mstep_confluent, LaPToP.ProgramTheory.Interpreter.Network.normal_unique, LaPToP.ProgramTheory.Interpreter.Network.Inv, LaPToP.ProgramTheory.Interpreter.Network.netSpec_of_reach, LaPToP.ProgramTheory.Interpreter.Network.Path.stamp, LaPToP.ProgramTheory.Interpreter.Network.blocked_descent, LaPToP.ProgramTheory.Interpreter.Network.progress, LaPToP.ProgramTheory.Interpreter.Network.reach_of_netSpec, LaPToP.ProgramTheory.Interpreter.Network.netSpec_unique, LaPToP.ProgramTheory.Interpreter.Network.deadlock_top, LaPToP.ProgramTheory.Interpreter.Network.runNet, LaPToP.ProgramTheory.Interpreter.Network.runNet_correct, LaPToP.ProgramTheory.Interpreter.Lang.toNP, LaPToP.ProgramTheory.Interpreter.Lang.toNet, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sendRecv_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.buffer_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deadlock_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.doubler_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.pipeline_net")
+Communicating processes, run by a machine proved equal to the book's semantics.
+A network is processes, each with its own variables, its own clock and its own
+read and write cursors, joined by channels, each with one writer and any number
+of readers. In the book's semantics the scripts of the channels are constants
+that some choice makes consistent: every process runs to completion against
+them, an output finding its message, stamped with the writer's time, at its
+write cursor ($`M w = e ∧ T w = t`) and an input taking the message at its read
+cursor at time $`t ↑ (T r + 1)`, as in {uses "communication_timing"}[]; a channel
+declaration quantifies the scripts existentially, as in
+{uses "channel_declaration"}[]. A message never written makes its input wait
+until $`∞`.
+
+The machine runs the processes in turns, an output appending its message to the
+channel's script, an input waiting while its message is not there. It is
+*determinate* (Kahn): two steps of different processes commute — an output only
+appends, and two outputs are on different channels — so the machine is
+confluent and reaches at most one configuration in which nothing can move,
+whatever the order of turns. It is *sound*: when every process finishes, the
+final states and the scripts it wrote are a behaviour of the book's semantics.
+It is *complete*: a behaviour of the book's semantics in which every process
+finishes at a finite time is reached by the machine. So the book's semantics has
+exactly one behaviour with finite times when the machine finishes, and when the
+machine stops with a process unfinished, every behaviour of the book's semantics
+has a process at time $`∞`: the deadlock of {uses "deadlock"}[], derived for
+every network. An executable round-robin runner computes the behaviour, and the
+concrete syntax runs a program with channels and a $`\|` as a network, with
+kernel-checked demonstrations: a message received one unit after it is sent, the
+book's buffer, a three-stage pipeline, the deadlock, and the recursive doubler
+$`S ⇐ c?. d!\,2×c. S` on input from the command line. This extends
+{uses "interpreter_time"}[].
+
+Honest scope. Each process is deterministic: its chunks are in the deterministic
+fragment. In the concrete syntax, a local variable, a choice or a $`\|` may not
+surround communication, and $`\surd c` is not available, since whether a message
+is waiting depends on how fast the other processes run. Uniqueness and
+completeness are for behaviours with finite times; with a deadlock the book
+leaves the messages sent at time $`∞` arbitrary, and so does this account.
+:::
+
+:::proof "interpreter_network"
+Determinacy: a step of a process is determined (its chunks are deterministic,
+so their timed executions are unique); steps of two processes commute, by
+commuting list updates and function updates; Church–Rosser then gives
+confluence, and a configuration without steps is reached only by the empty run.
+Soundness: an invariant of every reachable configuration says each process got
+where it is by the book's steps against any scripts extending those written so
+far, and each writer's cursor counts what it has written. Completeness: follow
+the book's histories, which are determined by the scripts. While some process
+has not finished, one can take its next step on the machine; otherwise each
+unfinished process waits for a message not yet written, and the writer of the
+one a process waits for is itself waiting for a message sent strictly earlier —
+it receives that message, one unit after it was sent, before it sends the one
+awaited, and the times are finite. That is an infinite descent in a well-founded
+order. Each step shortens the histories left, so the machine finishes, having
+written exactly the book's scripts.
 :::

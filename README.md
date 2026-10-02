@@ -77,6 +77,25 @@ echo 'keyboard?. a:= keyboard. keyboard?. screen! a + keyboard' | lake exe inter
 variables it assigns and sees the other's only at their initial values, so
 `x:= y || y:= x` swaps; on the clock it finishes when both processes have.
 
+A program with channels and a `||` is a network of communicating processes
+(Chapter 9, `LaPToP/ProgramTheory/Network.lean`): the processes of the main `||`,
+each parenthesized, run concurrently with their own variables, communicate only
+on channels, and a message arrives one unit of time after it is sent (§9.1.2).
+The machine that runs them is proved determinate (any order of turns gives the
+same result), sound and complete for the book's semantics, in which the scripts
+are constants some choice makes consistent; a run that stops with a process
+waiting for input that never comes is a deadlock, and the time is `∞`. `--net`
+runs any program this way, for a process fed from the command line:
+
+```bash
+echo '(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)' | lake exe interp
+# => y = 3, x = 4, t = 2
+#    c = [3; 4] sent at [0; 1]
+echo '(c?. d! 2) || (d?. c! 1)' | lake exe interp     # => t = ∞, deadlock
+echo 'S ⇐ c?. d! 2×c. S' | lake exe interp --net --c='[1;2;5]'
+# => d = [2; 4; 10] sent at [1; 1; 1], then waits for more input
+```
+
 Probabilistic programs are the book's (Section 5.7): `if 1/3 then x:= 0 else x:= 1 fi`
 and `x:= rand n`, and `--dist` prints the exact distribution of the final states:
 

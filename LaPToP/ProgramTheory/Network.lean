@@ -269,6 +269,7 @@ inductive Act (net : Net Var Val) (i : ℕ) :
 
 /-- **A step of the machine**: one process acts. -/
 inductive MStep (net : Net Var Val) : MCfg Var Val → MCfg Var Val → Prop
+  /-- Process `i`, in `a`, acts. -/
   | mk {c : MCfg Var Val} {i : ℕ} {a b : PCfg Var Val} {L' : Scripts Val} :
       c.ps[i]? = some a → Act net i c.L a b L' → MStep net c ⟨c.ps.set i b, L'⟩
 

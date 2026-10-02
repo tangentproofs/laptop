@@ -243,6 +243,21 @@ structure PS where
   params : List (List ℕ)
   /-- The channels: each name with its script variable and its read cursor. -/
   chans : List (String × ℕ × ℕ)
+  /-- Whether the program is a network of communicating processes
+  (`Network`): then `c! e` and `c?` are marks for the network's output and
+  input, and `c` is the variable an input stores its message in. -/
+  net : Bool
+
+/-- `c! e` in a network: a mark on the channel's (otherwise unused) cursor
+variable, read by `Network`'s translation as output. As a program it does nothing. -/
+def netSend (r : ℕ) (e : Exp) : P := .newLocal r e.eval .ok
+
+/-- `c?` in a network: a mark on the channel's variable, read as input into it. -/
+def netRecv (M : ℕ) : P := .newLocal M (fun _ => .int 0) .ok
+
+/-- A program is a network when it has channels and a `||`. -/
+def isNet (chans : List (String × ℕ × ℕ)) (ts : Toks) : Bool :=
+  !chans.isEmpty && ts.any fun | .sym "||" => true | _ => false
 
 /-- The state with other tokens. -/
 def PS.at (st : PS) (ts : Toks) : PS := { st with toks := ts }
@@ -496,11 +511,14 @@ def parseAtom (fuel : ℕ) (st : PS) : Except String (Exp × PS) :=
         assign it to a fresh variable first, as Section 5.7 does"
     | .sym "√" :: .word c :: ts =>
       match st.chans.find? (·.1 == c) with
-      | some (_, M, r) => .ok (check M r, st.at ts)
+      | some (_, M, r) =>
+        if st.net then .error s!"√{c} cannot be used in a network of processes: \
+          whether a message is waiting depends on how fast the others run"
+        else .ok (check M r, st.at ts)
       | none => .error s!"'{c}' is not a channel"
     | .word w :: ts =>
       match st.chans.find? (·.1 == w) with
-      | some (_, M, r) => .ok (message M r, st.at ts)
+      | some (_, M, r) => .ok (if st.net then .var M else message M r, st.at ts)
       | none => do
         let (x, st) ← parseName st
         .ok (.var x, st)
@@ -811,13 +829,13 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (P × PS) :=
         .ok (declare hi n (declare i m (.call k)), st)
     | .word c :: .sym "!" :: ts =>
       match st.chans.find? (·.1 == c) with
-      | some (_, M, _) => do
+      | some (_, M, r) => do
         let (e, st) ← parseExp f (st.at ts)
-        .ok (output M e, st)
+        .ok (if st.net then netSend r e else output M e, st)
       | none => .error s!"'{c}' is not a channel"
     | .word c :: .sym "?" :: ts =>
       match st.chans.find? (·.1 == c) with
-      | some (_, M, r) => .ok (input M r, st.at ts)
+      | some (_, M, r) => .ok (if st.net then netRecv M else input M r, st.at ts)
       | none => .error s!"'{c}' is not a channel"
     | .word "exit" :: _ =>
       .error "'exit' is allowed only in a do-loop, and not inside a while-loop, a scope or a choice"
@@ -988,8 +1006,8 @@ def internChans : List String → List String → List String × List (String ×
     (names, (c, M, r) :: rest)
 
 /-- Parse a whole token list, starting from a table of variable names already in
-use. The fuel is read off its length. -/
-def parseToksWith (names : List String) (ts : Toks) : Except String Program :=
+use, as a network of processes if `net`. The fuel is read off its length. -/
+def parseToksMode (net : Bool) (names : List String) (ts : Toks) : Except String Program :=
   let defs := scanDefs (ts.length + 1) ts []
   let procs := defs.map (·.1)
   let (names, params) := internParams defs names
@@ -1000,13 +1018,25 @@ def parseToksWith (names : List String) (ts : Toks) : Except String Program :=
   | none, some w, _ => .error s!"'{w}' names a variable, a parameter or a channel, not a specification"
   | none, none, some w => .error s!"'{w}' is both a channel and a specification"
   | none, none, none =>
-    match parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params, chans⟩ with
+    match parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params, chans, net || isNet chans ts⟩ with
     | .error e => .error e
     | .ok (some p, st) => resolveProgram ⟨p, st.bodies, st.names, st.procs⟩
     | .ok (none, st) =>
       match procs with
       | [] => .error "the program is empty"
       | _ :: _ => resolveProgram ⟨.call 0, st.bodies, st.names, st.procs⟩
+
+/-- Parse a whole token list, starting from a table of variable names already in
+use; it is a network when it has channels and a `||`. -/
+def parseToksWith (names : List String) (ts : Toks) : Except String Program :=
+  parseToksMode false names ts
+
+/-- The channels `parseToksWith` makes of a token list, each with its variable and
+its cursor variable. -/
+def chansOf (names : List String) (ts : Toks) : List (String × ℕ × ℕ) :=
+  let defs := scanDefs (ts.length + 1) ts []
+  let (names, _) := internParams defs names
+  (internChans (scanChans ts []) names).2
 
 /-- Parse a whole token list with no names in use. -/
 def parseToks (ts : Toks) : Except String Program := parseToksWith [] ts
@@ -1021,9 +1051,9 @@ def parseProgram (src : String) : Except String Program := parseProgramWith [] s
 /-- Parse a lone expression, given the variable names in use. -/
 def parseExpression (names : List String) (src : String) : Except String (Exp × List String) := do
   let ts ← tokenize (src.length + 1) src.toList
-  match parseExp (8 * ts.length + 32) ⟨ts, names, [], [], [], []⟩ with
-  | .ok (e, ⟨[], names, _, _, _, _⟩) => .ok (e, names)
-  | .ok (_, ⟨t :: _, _, _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
+  match parseExp (8 * ts.length + 32) ⟨ts, names, [], [], [], [], false⟩ with
+  | .ok (e, ⟨[], names, _, _, _, _, _⟩) => .ok (e, names)
+  | .ok (_, ⟨t :: _, _, _, _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
   | .error e => .error e
 
 /-! ### States -/
