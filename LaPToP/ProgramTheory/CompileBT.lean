@@ -550,4 +550,166 @@ theorem sim_act {L : Layout} (hL : L.Ok) {Λ : Scripts Value} {a b : List Stmt �
     by rw [hw _ (by omega)]; exact hr₁.flag, hr₁.len, fun i hi => (hr₁.recs i hi).mono lo₂ hw,
     fun cp hcp => by rw [et, er]; exact hr₁.same cp hcp⟩⟩
 
+/-! ### Running the runtime on the machine -/
+
+theorem scodeR_save (L : Layout) (a w alt : ℕ) :
+    scodeR L.rt a (RT.save w alt) = scode L.rt a (RT.save w alt) := by
+  simp [RT.save, RT.copy, scodeR, scode]
+
+theorem scodeR_pop (L : Layout) (a w : ℕ) : scodeR L.rt a (RT.pop w) = scode L.rt a (RT.pop w) := by
+  simp [RT.pop, RT.copy, scodeR, scode]
+
+theorem scodeR_halt (L : Layout) (a w : ℕ) : scodeR L.rt a (RT.halt w) = scode L.rt a (RT.halt w) := by
+  simp [RT.halt, scodeR, scode]
+
+/-- **The runtime's code runs as the runtime's program**: from the machine's
+words to the words the program leaves. -/
+theorem rt_runs {L : Layout} (hrt : L.rt.Ok) {P : Stmt} {σ : St} {ms' : List ℤ} {s : State} {a : ℕ}
+    (hsev : SEval L.rt 0 P (MS (words L (high s)) σ) (MS ms' σ)) (hl' : ms'.length = L.cap)
+    (hw : WF s) (hr : Running s) (hip : getIP s = a) (hlo : 256 ≤ a) (hhi : a + slen L.rt P ≤ L.base)
+    (hc : CodeAt (high s) a (scode L.rt a P)) (hd : dstack s = []) (hcs : cstack s = [])
+    (hdep : sdepth P ≤ STACKSZ) :
+    ∃ s', Steps s s' ∧ WF s' ∧ Running s' ∧ getIP s' = a + slen L.rt P ∧ dstack s' = [] ∧
+      (∀ j < L.cap, Wd L (high s') j = fromInt32 (rd ms' j)) ∧ Keeps L.rt s s' := by
+  obtain ⟨s', r', w', run', i', d', v', k'⟩ := stmt_runs L.rt hrt hsev s a
+    ⟨hw, hr, hip, hlo, hhi, hc, varsOk_words L _ σ, hd, hdep, by rw [hcs]; rfl,
+      fun k hk => by simp [Layout.rt] at hk⟩
+  exact ⟨s', r', w', run', i', d', fun j hj => wd_of_varsOk v' hl' hj, k'⟩
+
+theorem rt_top (L : Layout) : L.rt.top = L.base + 4 * L.cap := by
+  simp [Layout.top, Layout.rt, cellsOf, Layout.cap]
+
+theorem slen_save (L : Layout) (w alt : ℕ) : slen L.rt (RT.save w alt) = 415 := by
+  rw [← length_scode L.rt _ 0, ← scodeR_save, length_scodeR_save]
+
+theorem slen_pop (L : Layout) (w : ℕ) : slen L.rt (RT.pop w) = 367 := by
+  rw [← length_scode L.rt _ 0, ← scodeR_pop, length_scodeR_pop]
+
+theorem slen_halt (L : Layout) (w : ℕ) : slen L.rt (RT.halt w) = 23 := by
+  rw [← length_scode L.rt _ 0, ← scodeR_halt, length_scodeR_halt]
+
+/-! ### Simulation: a choice -/
+
+/-- What backtracking asks of the layout: the program's, and the runtime's. -/
+structure BTOk (L : Layout) : Prop where
+  ok : L.Ok
+  rt : L.rt.Ok
+  cap : L.cap < 2 ^ 20
+
+theorem recIdx_eq (L : Layout) (k : ℕ) : recIdx L k = (recN L k : ℤ) := by
+  unfold recIdx recN; push_cast; rfl
+
+theorem RecOk.mono' {L : Layout} {m m' : ℕ → UInt8} {i : ℕ} {cp : List Stmt × PSt ℕ Value}
+    (h : RecOk L m i cp) (hlo : ∀ j < L.base, m' j = m j)
+    (hw : ∀ j, recN L i ≤ j → j ≤ recN L i + L.W → Wd L m' j = Wd L m j) : RecOk L m' i cp := by
+  obtain ⟨alt, h₀, h₁, h₂, h₃⟩ := h
+  refine ⟨alt, h₀, by rw [hw _ le_rfl (by omega)]; exact h₁, h₂.mono hlo,
+    varsOk_congr h₃ fun k hk => ?_⟩
+  rw [wd_shift, wd_shift, hw _ (by omega) (by omega)]
+
+theorem recN_mono (L : Layout) {i k : ℕ} (h : i < k) : recN L i + L.W + 1 ≤ recN L k := by
+  unfold recN
+  have : (i + 1) * (L.W + 1) ≤ k * (L.W + 1) := Nat.mul_le_mul_right _ h
+  rw [Nat.succ_mul] at this; omega
+
+theorem recN_end (L : Layout) {k : ℕ} (h : k < L.choices) : recN L k + L.W + 1 ≤ L.cap := by
+  unfold recN Layout.cap
+  have : (k + 1) * (L.W + 1) ≤ L.choices * (L.W + 1) := Nat.mul_le_mul_right _ h
+  rw [Nat.succ_mul] at this; omega
+
+theorem rd_words_toInt {L : Layout} {m : ℕ → UInt8} {j : ℕ} (hj : j < L.cap) :
+    fromInt32 (rd (words L m) j) = Wd L m j := by
+  rw [rd_words hj, fromInt32_toInt32]
+
+/-- **A choice is steps of the machine**: keep the choice point, go on with the
+first choice. -/
+theorem sim_choice {L : Layout} (hB : BTOk L) {ks : List Stmt} {st : PSt ℕ Value} {p q : Stmt}
+    {cps : List (List Stmt × PSt ℕ Value)} (hfr : frames ks = 0) (hlen : cps.length < L.choices)
+    {s : State} (hr : BRel L ⟨(.choice p q :: ks, st), cps⟩ s) :
+    ∃ s', Steps s s' ∧ BRel L ⟨(p :: ks, st), (q :: ks, st) :: cps⟩ s' := by
+  have hL := hB.ok
+  have hb : L.base + 4 * L.n + 4 * cellsOf L.arrays + 16 ≤ 65536 := hL.2
+  have hcap := hB.cap
+  obtain ⟨s₁, r₁, hr₁, hd₁, -⟩ := hr.follow hL
+  obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd₁.cons_inv (by simp) (by simp)
+  simp only [Stmt.clean, Bool.and_eq_true] at hcl
+  have hcs : cstack s₁ = [] := by
+    have := hr₁.p.cont.frames
+    rw [frames_cons_clean (by simp [Stmt.clean, hcl.1, hcl.2]), hfr] at this
+    exact List.eq_nil_of_length_eq_zero this
+  obtain ⟨a, ha⟩ : ∃ a, getIP s₁ = a := ⟨_, rfl⟩
+  rw [ha] at h₁ h₂ h₄ hk
+  obtain ⟨k, hkdef⟩ : ∃ k, cps.length = k := ⟨_, rfl⟩
+  rw [hkdef] at hlen
+  simp only [slen, sdepth] at h₂ h₃ hk
+  simp only [scode] at h₄
+  rw [CodeAt.append, CodeAt.append, CodeAt.append] at h₄
+  obtain ⟨⟨⟨hS, hP⟩, hJ⟩, hQ⟩ := h₄
+  simp only [List.length_append, length_scodeR_save, length_scode, length_jmTo] at hP hJ hQ
+  rw [scodeR_save] at hS
+  obtain ⟨alt, haltdef⟩ : ∃ alt, alt = a + 415 + slen L p + 5 := ⟨_, rfl⟩
+  rw [← haltdef] at hQ hJ hS
+  have hcw : L.W + 5 ≤ L.cap := by unfold Layout.cap; omega
+  have hkc : k < L.cap := by
+    have := recN_end L hlen; unfold recN at this; nlinarith
+  have hcnt0 := hr₁.cnt
+  rw [hkdef] at hcnt0
+  have hcnt : rd (words L (high s₁)) L.W = k := by
+    rw [rd_words (by omega), hcnt0, toInt32_fromInt32 ⟨by omega, by omega⟩]
+  obtain ⟨ms', sv, l', c', a', cp', fr'⟩ := save_runs (d := 0) (σ := fun _ => .int 0) (alt := alt)
+    hB.cap (length_words L _) hcnt hlen (by omega)
+  obtain ⟨s₂, r₂, w₂, run₂, i₂, d₂, wd₂, k₂⟩ := rt_runs hB.rt sv (by rw [l', length_words]) hr₁.p.wf
+    hr₁.p.run ha h₁ (by rw [slen_save]; omega) hS hr₁.p.stack hcs
+    (by simp [RT.save, RT.copy, RT.recAt, sdepth, depth, STACKSZ])
+  rw [slen_save] at i₂
+  have lo₂ : ∀ j < L.base, high s₂ j = high s₁ j := k₂.low
+  have hW : ∀ j < L.cap, Wd L (high s₂) j = fromInt32 (rd ms' j) := wd₂
+  have hR := recN_end L hlen
+  have hRi := recIdx_eq L k
+  -- the cells, untouched
+  have hcells : ∀ j < L.W, Wd L (high s₂) j = Wd L (high s₁) j := fun j hj => by
+    rw [hW j (by omega), fr' j (by left; rw [hRi]; unfold recN; omega) (by omega) (by omega) (by omega)
+      (by omega), rd_words_toInt (by omega)]
+  refine ⟨s₂, r₁.trans r₂, ⟨⟨w₂, run₂, d₂, ?_, varsOk_congr hr₁.p.vars hcells,
+    by rw [k₂.clk]; exact hr₁.p.clk, hr₁.p.tfit, hr₁.p.rd, hr₁.p.image.mono lo₂⟩, ?_, ?_, ?_, ?_, ?_⟩⟩
+  · rw [i₂, k₂.cs, hcs]
+    rw [hcs] at hk
+    exact .cons (by omega) (by omega) (by omega) hcl.1 (hP.mono lo₂ (by rw [length_scode]; omega))
+      (.jump (by omega) (by omega) ((hJ.mono lo₂ (by simp; omega)).cast (by omega))
+        ((hk.mono lo₂).cast (by omega)))
+  · simp only [List.length_cons, hkdef]
+    rw [hW _ (by omega), c']; push_cast; rfl
+  · rw [hW _ (by omega), fr' _ (by left; rw [hRi]; unfold recN; omega) (by omega) (by omega)
+      (by omega) (by omega), rd_words_toInt (by omega), hr₁.flag]
+  · simp; omega
+  · intro i hi
+    simp only [List.reverse_cons, List.length_cons] at hi ⊢
+    rw [hkdef] at hi
+    rcases Nat.lt_succ_iff_lt_or_eq.mp hi with hi | hi
+    · rw [List.getElem_append_left (by simpa [hkdef] using hi)]
+      refine (hr₁.recs i (by rw [hkdef]; exact hi)).mono' lo₂ fun j h₁ h₂ => ?_
+      have := recN_mono L hi
+      have := recN_end L hlen
+      rw [hW j (by omega), fr' j (by left; rw [hRi]; omega) (by unfold recN at h₁; omega)
+        (by unfold recN at h₁; omega) (by unfold recN at h₁; omega) (by unfold recN at h₁; omega),
+        rd_words_toInt (by omega)]
+    · subst hi
+      rw [List.getElem_append_right (by simp [hkdef])]
+      simp only [List.length_reverse, hkdef, Nat.sub_self, List.getElem_cons_zero]
+      refine ⟨alt, by omega, by rw [hW _ (by omega), ← hRi, a'], ?_, varsOk_congr hr₁.p.vars ?_⟩
+      · rw [hcs] at hk
+        exact .cons (by omega) (by omega) (by omega) hcl.2 ((hQ.mono lo₂ (by rw [length_scode]; omega)).cast (by omega))
+          ((hk.mono lo₂).cast (by omega))
+      · intro j hj
+        rw [wd_shift, hW _ (by omega)]
+        have := cp' j (by omega) (by omega)
+        rw [hRi] at this; push_cast at this
+        rw [show ((recN L i + 1 + j : ℕ) : ℤ) = (recN L i : ℤ) + 1 + j by push_cast; rfl, this,
+          rd_words_toInt (by omega)]
+  · intro cp hcp
+    simp only [List.mem_cons] at hcp
+    rcases hcp with rfl | hcp
+    · exact ⟨rfl, rfl⟩
+    · exact hr₁.same cp hcp
+
 end LaPToP.ProgramTheory.CompileBT
