@@ -782,4 +782,187 @@ theorem sim_ensureT {L : Layout} (hL : L.Ok) {ks : List Stmt} {st : PSt ℕ Valu
   rw [i₃, sm.high, sm.cs]
   exact hk.cast (by omega)
 
+set_option maxRecDepth 20000 in
+/-- **`ensure c`, `c` false, reaches the failure code**, with nothing changed
+but the pointer, and the control stack empty. -/
+theorem to_fail {L : Layout} (hL : L.Ok) {ks : List Stmt} {st : PSt ℕ Value} {c : Exp}
+    {cps : List (List Stmt × PSt ℕ Value)} (hf : Fits L st.mem c) (hc : c.eval st.mem = .bool false)
+    (hfr : frames ks = 0) {s : State} (hr : BRel L ⟨(.ensure c :: ks, st), cps⟩ s) :
+    ∃ s' f, Steps s s' ∧ BRel L ⟨(.ensure c :: ks, st), cps⟩ s ∧ WF s' ∧ Running s' ∧
+      getIP s' = f ∧ 256 ≤ f ∧ f + 461 ≤ L.base ∧ dstack s' = [] ∧ cstack s' = [] ∧
+      high s' = high s ∧ getClk s' = getClk s ∧ CodeAt (high s') f (failCode L f) := by
+  have hb : L.base + 4 * L.n + 4 * cellsOf L.arrays + 16 ≤ 65536 := hL.2
+  obtain ⟨s₁, r₁, hr₁, hd₁, hh₁⟩ := hr.follow hL
+  have hcs : cstack s₁ = [] := by
+    have := hr₁.p.cont.frames
+    rw [frames_cons_clean (by simp [Stmt.clean]), hfr] at this
+    exact List.eq_nil_of_length_eq_zero this
+  obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd₁.cons_inv (by simp) (by simp)
+  obtain ⟨a, ha⟩ : ∃ a, getIP s₁ = a := ⟨_, rfl⟩
+  rw [ha] at h₁ h₂ h₄ hk
+  simp only [slen, sdepth] at h₂ h₃ hk
+  obtain ⟨hA, hJ, -, hF⟩ := ensure_code h₄
+  obtain ⟨s₂, r₂, w₂, run₂, i₂, d₂, sm₂⟩ := run_cond (b := false)
+    (rest := jmTo (a + (ecode L c).length + 13) ++ jmTo (a + (ecode L c).length + 13 + 461) ++
+      failCode L (a + (ecode L c).length + 13)) hL hf hc hr₁.p.wf hr₁.p.run ha h₁
+    (by rw [length_ensure_rest]; omega) hA hr₁.p.vars hr₁.p.stack (by omega)
+  simp only [Bool.false_eq_true, ite_false] at i₂
+  have hJ₂ : CodeAt (high s₂) (getIP s₂) (jmTo (a + (ecode L c).length + 13)) := by
+    rw [i₂, sm₂.high]; exact hJ
+  obtain ⟨w₃, i₃, d₃, sm₃⟩ := run_jm' hL w₂ (by rw [i₂]; omega) (by rw [i₂]; omega) hJ₂ (by omega)
+    (by omega)
+  have sm := sm₂.trans sm₃
+  refine ⟨step s₂, a + (ecode L c).length + 13, r₁.trans (r₂.tail ⟨run₂, notIo_jm (by rw [i₂]; omega) hJ₂, rfl⟩),
+    hr, w₃, sm₃.running run₂, i₃, by omega, by omega, by rw [d₃, d₂], by rw [sm.cs, hcs],
+    by rw [sm.high, hh₁], by rw [sm.clk, hr₁.p.clk, hr.p.clk], by rw [sm.high]; exact hF⟩
+
+/-- An expression of the runtime, on the machine's words. -/
+theorem rt_exp {L : Layout} (hrt : L.rt.Ok) {e : Exp} {σ : St} {s : State}
+    (hf : Fits L.rt (MS (words L (high s)) σ) e) (hw : WF s) (hr : Running s) (hlo : 256 ≤ getIP s)
+    (hhi : getIP s + (ecode L.rt e).length + 8 < MAXBYTE) (hc : CodeAt (high s) (getIP s) (ecode L.rt e))
+    (hd : dstack s = []) (hdep : depth e ≤ STACKSZ) :
+    ∃ s', Steps s s' ∧ WF s' ∧ getIP s' = getIP s + (ecode L.rt e).length ∧
+      dstack s' = [enc (e.eval (MS (words L (high s)) σ))] ∧ Same s s' := by
+  obtain ⟨s', r', w', i', d', sm'⟩ := exp_runs L.rt hrt _ e s hf
+    ⟨hw, hr, hlo, hhi, hc, varsOk_words L _ σ, by rw [hd]; simpa using hdep⟩
+  exact ⟨s', r', w', i', by rw [d', hd]; rfl, sm'⟩
+
+theorem Steps.of_step {s : State} (hr : Running s) (hn : NotIo s) : Steps s (step s) := Steps.one hr hn
+
+set_option maxRecDepth 20000 in
+/-- **A failed `ensure` with a choice point left is steps of the machine**: take
+the choice point back, and go to its other choice. -/
+theorem sim_ensureF {L : Layout} (hB : BTOk L) {ks : List Stmt} {st : PSt ℕ Value} {c : Exp}
+    {cp : List Stmt × PSt ℕ Value} {cps : List (List Stmt × PSt ℕ Value)}
+    (hf : Fits L st.mem c) (hc : c.eval st.mem = .bool false) (hfr : frames ks = 0)
+    {s : State} (hr : BRel L ⟨(.ensure c :: ks, st), cp :: cps⟩ s) :
+    ∃ s', Steps s s' ∧ BRel L ⟨cp, cps⟩ s' := by
+  have hL := hB.ok
+  have hb : L.base + 4 * L.n + 4 * cellsOf L.arrays + 16 ≤ 65536 := hL.2
+  have hcap := hB.cap
+  have hcw : L.W + 5 ≤ L.cap := by unfold Layout.cap; omega
+  obtain ⟨s₃, f, r₃, -, w₃, run₃, i₃, f0, f1, d₃, c₃, hh₃, ck₃, hF⟩ := to_fail hL hf hc hfr hr
+  obtain ⟨hC, hH0, hH1, hJ, -, -, hP, hAlt, hDc, hRt⟩ := fail_code hF
+  obtain ⟨k, hkdef⟩ : ∃ k, cps.length = k := ⟨_, rfl⟩
+  have hlen : k < L.choices := by have := hr.len; simp [hkdef] at this; omega
+  have hch : L.choices ≤ L.cap :=
+    le_trans (Nat.le_mul_of_pos_right L.choices (by omega : 0 < L.W + 1)) (by unfold Layout.cap; omega)
+  have hcnt : rd (words L (high s₃)) L.W = k + 1 := by
+    rw [rd_words (by omega), hh₃, hr.cnt, toInt32_fromInt32 ⟨by simp; omega, by simp; omega⟩]
+    simp [hkdef]
+  -- the count
+  obtain ⟨s₄, r₄, w₄, i₄, d₄, sm₄⟩ := rt_exp (σ := fun _ => .int 0) hB.rt
+    (fits_mem (j := L.W) (fits_rlit (Alloc.inR (by norm_num) (by omega))) rfl (by omega)
+      (by simp; omega) (length_words L _)) w₃ run₃ (by omega) (by rw [i₃, length_ecode_cnt]; unfold MAXBYTE; omega)
+    (by rw [i₃]; exact hC) d₃ (by simp [depth, STACKSZ])
+  rw [i₃, length_ecode_cnt] at i₄
+  simp only [eval_mem, eval_rlit, Value.toInt_int, hcnt] at d₄
+  -- h0: not zero, go on
+  have hop₄ : high s₄ (getIP s₄) = 0x9C := by rw [i₄, sm₄.high]; exact hH0
+  have hd₄ : high s₄ (getIP s₄ + 1) = 7 := by rw [i₄, sm₄.high]; exact hH1
+  have h7 : sbyte 7 = 7 := by decide
+  obtain ⟨w₅, i₅, d₅, sm₅⟩ := step_h0 s₄ [] _ w₄ (by rw [i₄]; omega) (by rw [i₄]; unfold MAXBYTE; omega)
+    hop₄ (by simpa using d₄) (by rw [hd₄, h7, i₄]; simp only [Int.ofNat_eq_natCast]; omega)
+    (by rw [hd₄, h7, i₄]; simp only [Int.ofNat_eq_natCast]; unfold MAXBYTE; omega)
+  have hne : enc (.int ((k : ℤ) + 1)) ≠ 0 := by
+    simp only [enc]; exact fromInt32_ne_zero ⟨by omega, by omega⟩ (by omega)
+  rw [if_neg hne, i₄] at i₅
+  -- jm to the pop
+  have hJ₅ : CodeAt (high (step s₄)) (getIP (step s₄)) (jmTo (f + 49)) := by
+    rw [i₅, sm₅.high, sm₄.high]; exact hJ.cast (by omega)
+  obtain ⟨w₆, i₆, d₆, sm₆⟩ := run_jm' hL w₅ (by rw [i₅]; omega) (by rw [i₅]; omega) hJ₅ (by omega)
+    (by omega)
+  set s₆ := step (step s₄) with hs₆
+  have run₆ : Running s₆ := sm₆.running (sm₅.running (sm₄.running run₃))
+  have hh₆ : high s₆ = high s := by rw [sm₆.high, sm₅.high, sm₄.high, hh₃]
+  have c₆ : cstack s₆ = [] := by rw [sm₆.cs, sm₅.cs, sm₄.cs, c₃]
+  have r₆ : Steps s₃ s₆ := (r₄.tail ⟨sm₄.running run₃, notIo_of_hop (by rw [i₄]; omega) hop₄, rfl⟩).tail
+    ⟨sm₅.running (sm₄.running run₃), notIo_jm (by rw [i₅]; omega) hJ₅, rfl⟩
+  -- take the choice point back
+  have hcnt₆ : rd (words L (high s₆)) L.W = k + 1 := by rw [hh₆, ← hh₃]; exact hcnt
+  obtain ⟨ms', sv, l', cW, cpy, fr⟩ := pop_runs (d := 0) (σ := fun _ => .int 0) hB.cap
+    (length_words L _) hcnt₆ hlen
+  obtain ⟨s₇, r₇, w₇, run₇, i₇, d₇, wd₇, k₇⟩ := rt_runs hB.rt sv (by rw [l', length_words]) w₆ run₆
+    i₆ (by omega) (by rw [slen_pop]; omega) (by rw [hh₆, ← hh₃]; exact hP) (by rw [d₆, d₅]) c₆
+    (by simp [RT.pop, RT.copy, RT.recAt, sdepth, depth, STACKSZ])
+  rw [slen_pop] at i₇
+  have hR := recN_end L hlen
+  have hRi := recIdx_eq L k
+  have hk₇ : rd (words L (high s₇)) L.W = k := by
+    rw [rd_words (by omega), wd₇ _ (by omega), cW, toInt32_fromInt32 ⟨by omega, by omega⟩]
+  -- the other choice's address
+  obtain ⟨s₈, r₈, w₈, i₈, d₈, sm₈⟩ := rt_exp (σ := fun _ => .int 0) (e := RT.mem (RT.recAt L.W)) hB.rt
+    (fits_mem (j := recIdx L k) (fits_recAt (length_words L _) hB.cap hk₇ hlen.le) (eval_recAt hk₇)
+      (by rw [hRi]; omega) (by rw [hRi, length_words]; omega) (length_words L _)) w₇ run₇
+    (by rw [i₇]; omega) (by rw [i₇, length_ecode_alt]; unfold MAXBYTE; omega)
+    (by rw [i₇]; exact (hAlt.mono (fun i hi => by rw [k₇.low i hi, hh₆, ← hh₃])
+      (by rw [length_ecode_alt]; simp only [Layout.rt]; omega)).cast (by omega)) d₇ (by simp [depth, RT.recAt, STACKSZ])
+  rw [i₇, length_ecode_alt] at i₈
+  -- the choice point
+  have hrec : RecOk L (high s) k cp := by
+    have := hr.recs k (by simp [hkdef])
+    simpa [List.getElem_append_right, hkdef] using this
+  obtain ⟨alt, halt, hWa, hCont, hVar⟩ := hrec
+  have hlo₇ : ∀ i < L.base, high s₇ i = high s i := fun i hi => by rw [k₇.low i hi, hh₆]
+  have hW₇ : ∀ j, L.W + 4 ≤ j → j < L.cap → Wd L (high s₇) j = Wd L (high s) j := fun j h₁ h₂ => by
+    rw [wd₇ j h₂, fr j (by omega), rd_words_toInt h₂, hh₆]
+  have hv : enc ((RT.mem (RT.recAt L.W)).eval (MS (words L (high s₇)) (fun _ => .int 0))) =
+      fromInt32 alt := by
+    rw [eval_mem, eval_recAt hk₇, Value.toInt_int, hRi]
+    simp only [enc]
+    rw [show ((recN L k : ℕ) : ℤ) = ((recN L k : ℕ) : ℤ) from rfl, rd_words (by omega),
+      fromInt32_toInt32, hW₇ _ (by unfold recN; omega) (by omega), hWa]
+  rw [hv] at d₈
+  -- dc
+  have hop₈ : high s₈ (getIP s₈) = 0x90 := by
+    rw [i₈, sm₈.high, hlo₇ _ (by omega), ← hh₃]; exact hDc
+  have c₈ : cstack s₈ = [] := by rw [sm₈.cs, k₇.cs, c₆]
+  obtain ⟨w₉, i₉, d₉, c₉, f₉⟩ := step_dc s₈ [] (fromInt32 alt) w₈ (by rw [i₈]; omega)
+    (by rw [i₈]; omega) hop₈ (by simpa using d₈) (by rw [c₈]; decide)
+  -- rt, to the other choice
+  have hop₉ : high (step s₈) (getIP (step s₈)) = 0x9E := by
+    rw [i₉, i₈, f₉.high, sm₈.high, hlo₇ _ (by omega), ← hh₃]; exact hRt
+  have halt' : (fromInt32 (alt : ℤ)).toNat = alt := by
+    rw [fromInt32_natCast (by omega)]; exact toNat_ofNat_addr (by unfold MAXBYTE; omega)
+  have halo : 256 ≤ alt := hCont.bounds.1
+  obtain ⟨w₁₀, i₁₀, d₁₀, c₁₀, f₁₀⟩ := step_rt (step s₈) [] (fromInt32 alt) w₉ (by rw [i₉, i₈]; omega)
+    hop₉ (by rw [c₉, c₈]) (by rw [halt']; exact halo)
+  rw [halt'] at i₁₀
+  have run₉ : Running (step s₈) := ⟨f₉.st.trans (sm₈.running run₇).1, f₉.db.trans (sm₈.running run₇).2⟩
+  have hh : high (step (step s₈)) = high s₇ := by rw [f₁₀.high, f₉.high, sm₈.high]
+  have hlo : ∀ i < L.base, high (step (step s₈)) i = high s i := fun i hi => by rw [hh, hlo₇ i hi]
+  have ck : getClk (step (step s₈)) = getClk s := by
+    rw [f₁₀.clk, f₉.clk, sm₈.clk, k₇.clk, sm₆.clk, sm₅.clk, sm₄.clk, ck₃]
+  obtain ⟨et, er⟩ := hr.same cp (by simp)
+  refine ⟨step (step s₈), r₃.trans (r₆.trans (r₇.trans ((r₈.tail ⟨sm₈.running run₇,
+    notIo_of_hop (by rw [i₈]; omega) hop₈, rfl⟩).tail ⟨run₉, notIo_of_hop (by rw [i₉, i₈]; omega) hop₉,
+    rfl⟩))), ⟨⟨w₁₀, ⟨f₁₀.st.trans run₉.1, f₁₀.db.trans run₉.2⟩, by rw [d₁₀, d₉], ?_, ?_,
+    by rw [ck, hr.p.clk, et], by rw [et]; exact hr.p.tfit, fun _ => rfl, hr.p.image.mono hlo⟩,
+    ?_, ?_, by simp [hkdef]; omega, ?_, ?_⟩⟩
+  · rw [i₁₀, c₁₀]; exact hCont.mono hlo
+  · refine varsOk_congr hVar fun j hj => ?_
+    rw [wd_shift]
+    unfold Wd; rw [hh]; change Wd L (high s₇) j = _
+    rw [wd₇ j (by omega), cpy j (by omega) (by omega), hRi]
+    rw [show (recN L k : ℤ) + 1 + j = ((recN L k + 1 + j : ℕ) : ℤ) by push_cast; rfl,
+      rd_words_toInt (by omega), hh₆]
+    rfl
+  · unfold Wd; rw [hh]; change Wd L (high s₇) L.W = _
+    rw [wd₇ _ (by omega), cW, ← hkdef]
+  · unfold Wd; rw [hh]; change Wd L (high s₇) (L.W + 4) = _
+    rw [hW₇ _ le_rfl (by omega)]
+    have := hr.flag; unfold Wd at this ⊢; exact this
+  · intro i hi
+    have hi' : i < k := by simpa [hkdef] using hi
+    have : RecOk L (high s) i (cps.reverse[i]'(by simp; omega)) := by
+      have h := hr.recs i (by simp; omega)
+      simpa [List.getElem_append_left, hkdef, hi'] using h
+    refine this.mono' hlo fun j h₁ h₂ => ?_
+    have := recN_mono L hi'
+    unfold Wd; rw [hh]; change Wd L (high s₇) j = Wd L (high s) j
+    exact hW₇ j (by unfold recN at h₁; omega) (by omega)
+  · intro cp' hcp'
+    obtain ⟨e₁, e₂⟩ := hr.same cp' (by simp [hcp'])
+    exact ⟨e₁.trans et.symm, e₂.trans er.symm⟩
+
 end LaPToP.ProgramTheory.CompileBT
