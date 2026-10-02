@@ -28,6 +28,7 @@ import LaPToP.ProgramTheory.NetworkLang
 import LaPToP.ProgramTheory.NetworkBook
 import LaPToP.ProgramTheory.CompileB4
 import LaPToP.ProgramTheory.CompileNet
+import LaPToP.ProgramTheory.CompileNetDeadlock
 import LaPToP.ProgramTheory.B4Lang
 
 open Verso.Genre
@@ -1611,8 +1612,9 @@ $`x′=7 ∧ t′=t+1`, and $`t′=∞` — each shown by running the machine an
 theorems above.
 
 Honest scope. Each process is deterministic: its chunks are in the deterministic
-fragment. In the concrete syntax, a local variable, a choice or a $`\|` may not
-surround communication, and $`\surd c` is not available, since whether a message
+fragment. In the concrete syntax, a choice or a $`\|` may not surround
+communication (a local variable may: it is a scope of the process), and
+$`\surd c` is not available, since whether a message
 is waiting depends on how fast the other processes run. Uniqueness and
 completeness are for behaviours with finite times; with a deadlock the book
 leaves the messages sent at time $`∞` arbitrary, and so does this account.
@@ -1636,7 +1638,7 @@ order. Each step shortens the histories left, so the machine finishes, having
 written exactly the book's scripts.
 :::
 
-:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
+:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, LaPToP.ProgramTheory.CompileB4.Layout.Image, LaPToP.ProgramTheory.CompileB4.Layout.Laid, LaPToP.ProgramTheory.CompileB4.Layout.image_of_laid, LaPToP.ProgramTheory.CompileB4.Layout.Fit, LaPToP.ProgramTheory.CompileB4.Layout.build, LaPToP.ProgramTheory.CompileB4.Layout.build_laid, LaPToP.ProgramTheory.CompileB4.enter_runs, LaPToP.ProgramTheory.CompileB4.restore_runs, LaPToP.ProgramTheory.CompileB4.enc_div, LaPToP.ProgramTheory.CompileB4.enc_mod, B4.step_cl, B4.step_rt, B4.step_dc, B4.step_cd, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
 A compiler from the integer fragment of the language to the b4 virtual machine,
 proved correct. b4 is a small stack machine with byte-addressed memory, its
 registers mapped into the first bytes, and data and control stacks; it has
@@ -1649,16 +1651,25 @@ Variables live in 32-bit cells above the code; an integer is kept as its two's
 complement word and a binary as $`-1` or $`0`. An expression is computed on the
 data stack; an assignment stores the top of the stack in the variable's cell;
 $`\mathbf{if}` and $`\mathbf{while}` complement the condition, test it with a
-conditional hop, and jump with absolute jumps. The theorem: whenever the
+conditional hop, and jump with absolute jumps. Named statements — the
+specifications a program refines, and the ones the parser makes of
+$`\mathbf{do}`/$`\mathbf{exit}` and $`\mathbf{for}` loops — are laid out end
+to end from the start of code, each followed by a return, and a call is b4's
+`cl`, which keeps the return address on the control stack. A local variable
+(as parameters and simultaneous assignments use) keeps the variable's old value
+on the control stack while its scope runs, and puts it back at the end. The theorem: whenever the
 language's execution takes a state $`σ` to $`σ'` with every value evaluated
 fitting in 32 bits, the loaded machine, run long enough, halts with the cells
 holding $`σ'`. Execution in 32 bits is an execution of the language, by the
 semantics of {uses "interpreter_soundness"}[].
 
 Honest scope. The fragment is assignment, sequence, $`\mathbf{if}`,
-$`\mathbf{while}` over integer and binary expressions with
-$`+ - ×`, $`<`, $`=`, negation and $`¬`; time, calls, channels and lists are
-not compiled yet, and the converse direction (that the machine does nothing the
+$`\mathbf{while}`, calls of named statements (so recursion, procedures with
+parameters, and the loops the parser compiles to calls) and local variables,
+over integer and binary expressions with $`+ - ×`, $`\mathbf{div}` and
+$`\mathbf{mod}` by a positive divisor, $`<`, $`=`, negation and $`¬`; time and
+channels are compiled for networks ({uses "interpreter_swarm"}[]); lists are not
+compiled, and the converse direction (that the machine does nothing the
 language does not allow) is not proved.
 :::
 
@@ -1670,12 +1681,16 @@ pushing and popping is shown to append to and remove from a list. An
 expression's code is proved by induction on the expression to push its value,
 changing nothing else. A statement's code is proved by induction on the
 32-bit execution to take the cells from $`σ` to $`σ'` and end at the end of its
-code, keeping everything below the variables — so the code itself — intact,
-which is what lets a loop run its own code again. The loader is shown to set up
-exactly the state the theorem asks for.
+code with the control stack as it found it, keeping everything below the
+variables — so the code itself — intact, which is what lets a loop run its own
+code again and a call find its named statement where it was laid. The
+execution carries the height of the control stack, which a call or a scope
+raises by one, so that the stack never overflows. The loader is shown to set up
+exactly the state the theorem asks for, and the layout to put each named
+statement where its calls go.
 :::
 
-:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees")
+:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.SStep.msteps, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.Cont.frames, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.PB, LaPToP.ProgramTheory.Interpreter.Lang.parseToksShadow, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees, LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.LStep")
 Communicating processes, compiled to b4, run as a swarm of machines, proved to
 compute the network. Each process of a network becomes its own b4 machine; the
 machines run side by side and reach their channels through b4's `io`
@@ -1691,19 +1706,24 @@ the swarm, and when every process has finished, every machine halts with its
 process's final variables in its cells and final time on its clock, and the
 channels hold the scripts the network wrote — which is the book's semantics of
 the network. The compiled statements are those of {uses "interpreter_b4"}[],
-with time and communication added.
+with time and communication added: a process may call named statements and
+keep local variables around its communication (the network machine has a
+scope of its own for that, `NProc.scope`), so a $`\mathbf{for}` loop of
+outputs is a process.
 
-The command line runs programs this way with `interp --b4`: the part of the
-concrete syntax the compiler takes is read into its statements, compiled, and
-run on one machine or a swarm; the self-test checks on the demonstrations that
-the machines compute what the interpreter and the network machine do, and a run
-warns when a value left 32 bits, outside what the theorems cover.
+The command line runs programs this way with `interp --b4`: the language's own
+parser builds the compiler's statements beside each program it reads, and
+reports the first construct the compiler does not take; the program is
+compiled and run on one machine or a swarm. The self-test checks on the
+demonstrations (among them recursion, $`\mathbf{for}`, $`\mathbf{do}` with
+$`\mathbf{exit}`, and simultaneous assignment) that the machines compute what
+the interpreter and the network machine do, and a run warns when a value left
+32 bits, outside what the theorems cover.
 
-Honest scope. Forward simulation only: that the swarm does nothing else, and
-that a swarm that stops corresponds to a deadlock, are not proved. Processes
-use the compiled fragment (no calls, locals or lists). `interp --b4` reads that
-fragment with a parser of its own, sharing the interpreter's tokens, names and
-expressions; that the two parsers agree is checked on the demonstrations, not
+Honest scope. Forward simulation, and the correspondence of deadlocks
+({uses "interpreter_swarm_deadlock"}[]); that the swarm does nothing else
+in general is not proved. That the statements the parser builds beside a
+program are that program (`Stmt.toProg`) is checked on the demonstrations, not
 proved.
 :::
 
@@ -1716,6 +1736,46 @@ hand, by the lemmas for expressions, assignments and conditions of the
 compiler's proof, by a lemma for the clock, or by the swarm's `io` for
 communication; runs of a single machine are runs of the swarm, since they never
 touch `io`. Writes go to the cells above the code, so the code, and with it what
-is left of every process, survives them. At the end each machine follows its
-jumps to `hl` and halts.
+is left of every process, survives them. Returns and the ends of scopes are
+part of what is left, matched entry by entry with the control stack. At the
+end each machine follows its jumps to `hl` and halts.
+:::
+
+:::theorem "interpreter_swarm_deadlock" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency, deadlock, hehner-9.1.8") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileNet.Eff, LaPToP.ProgramTheory.CompileNet.stepAt_eff, LaPToP.ProgramTheory.CompileNet.apply_comm, LaPToP.ProgramTheory.CompileNet.swarm_diamond, LaPToP.ProgramTheory.CompileNet.swarm_confluent, LaPToP.ProgramTheory.CompileNet.Stuck, LaPToP.ProgramTheory.CompileNet.stuck_unique, LaPToP.ProgramTheory.CompileNet.run_spec, LaPToP.ProgramTheory.CompileNet.SNet.Waiting, LaPToP.ProgramTheory.CompileNet.SNet.Waiting.normal, LaPToP.ProgramTheory.CompileNet.waiting_book, LaPToP.ProgramTheory.CompileNet.wait_one, LaPToP.ProgramTheory.CompileNet.stuck_of_waiting, LaPToP.ProgramTheory.CompileNet.never_halts, LaPToP.ProgramTheory.CompileNet.no_finish_of_stuck, LaPToP.ProgramTheory.CompileNet.no_finish_of_run, B4.Swarm.owner")
+A swarm that stops is a network that deadlocks. Each channel of the swarm has
+one writer, its owner; a send by any other machine waits forever. Then steps of
+different machines commute — a send appends to its own channel, and a receive
+that could take a message still finds it after another machine's send — so the
+swarm is confluent, and reaches at most one state in which no machine can move,
+whatever order its machines run in.
+
+The theorems, for a network compiled as in {uses "interpreter_swarm"}[]: when
+the network, in 32 bits, reaches a deadlock — every process finished or waiting
+for input on its channel that has no message at its cursor, and not all
+finished — the swarm reaches a state where no machine can move and some machine
+is still waiting, and every run of the swarm that stops, stops there; the
+network machine of {uses "interpreter_network"}[] is then deadlocked as well,
+so in every behaviour of the book's semantics some process ends at time
+$`∞`. Conversely, when the swarm stops with some machine not halted, the
+network has no run in 32 bits in which every process finishes — which is what
+`interp --b4` reports as a deadlock.
+
+Honest scope. Within 32 bits: a network whose only runs leave 32 bits is not
+covered, and the converse speaks of runs in 32 bits.
+:::
+
+:::proof "interpreter_swarm_deadlock"
+A step of a machine is an effect — replace the machine, and append to a channel
+or replace its cursors — and the step is the same effect in any swarm that has
+the same machine and cursors and whose channels have grown. Two effects of
+different machines commute: replacements of different machines and cursors do,
+and two appends are on different channels, by the owners. So the swarm has the
+diamond property, is confluent by Church–Rosser, and has at most one stuck state
+reachable. From a deadlock of the network, the simulation brings the swarm into
+agreement with it; each machine whose process finished then halts, and each one
+whose process waits runs to its `io` and waits for a message that its channel's
+script, which the swarm holds, does not have: no machine can move. If the
+network could also finish in 32 bits, the simulation would bring the swarm to a
+state with every machine halted, also stuck — the same state, by uniqueness,
+which is a contradiction.
 :::

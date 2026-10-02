@@ -127,12 +127,15 @@ not build it.
 ## Compile to the b4 virtual machine
 
 `LaPToP/ProgramTheory/CompileB4.lean` compiles the integer fragment of the
-language (assignment, sequence, `if`, `while`, over `+ - ×`, `<`, `=`, `¬`) to
-bytecode for [b4](https://github.com/tangentstorm/b4), a small stack machine with
-implementations in many languages. Its Lean implementation (required from git,
-`imp/lean`, with its theory in `B4/Theory.lean`) runs the code, and
-`load_correct` proves the result: whenever the language takes a state to
-another without any value leaving 32 bits, the loaded machine halts with the
+language (assignment, sequence, `if`, `while`, calls of named statements, local
+variables, over `+ - × div mod`, `<`, `=`, `¬`) to bytecode for
+[b4](https://github.com/tangentstorm/b4), a small stack machine with
+implementations in many languages. Named statements are laid out from `0x100`
+and called with b4's `cl`; a local variable keeps its old value on the control
+stack. Its Lean implementation (required from git, `imp/lean`, with its theory
+in `B4/Theory.lean`) runs the code, and `load_correct` proves the result:
+whenever the language takes a state to another without any value leaving 32
+bits (or the control stack overflowing), the loaded machine halts with the
 variables holding the final state. The `sumTo` loop compiles to 86 bytes, and
 b4 computes `s = 55` from `n = 10`.
 
@@ -141,17 +144,26 @@ in b4): each process on its own machine, channels reached through b4's `io`
 (`'s'` sends, `'r'` receives), time in register `T`. `swarm_correct` proves that
 every 32-bit run of the network machine is matched by the swarm, which halts
 with the network's variables, times and scripts — the book's semantics, by
-`swarm_book`. `interp --b4` compiles and runs a program or a network there:
+`swarm_book`. Each channel has one writer, so the swarm is confluent and stops
+in at most one state (`CompileNetDeadlock.lean`): a network that deadlocks is a
+swarm that stops with machines still waiting (`stuck_of_waiting`), and a swarm
+that stops so is a network that cannot finish (`no_finish_of_stuck`).
+`interp --b4` compiles and runs a program or a network there:
 
 ```bash
 lake exe interp --b4 --demo=sumTo --n=10        # => n = 10, i = 10, s = 55, t = 0
 echo '(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)' | lake exe interp --b4
 # => y = 3, x = 4, t = 2
 #    c = [3; 4] sent at [0; 1]
+printf 'Fact(k) ⇐ if k = 0 then r:= 1 else Fact(k-1). r:= r × k fi\nFact(n)' \
+  | lake exe interp --b4 --n=10               # => n = 10, k = 0, r = 3628800, t = 0
 ```
-It takes `ok`, `tick`, `x:= e`, `if`, `while`, `c! e`, `c?` and a `||` of
-processes over 32-bit integers and binaries, and warns when a value leaves 32
-bits; `interp --selftest` checks it against the interpreters on the demonstrations.
+The language's own parser builds the compiler's statements beside each program
+it reads, so `--b4` takes `do`/`exit` and `for` loops, `new`, simultaneous
+assignment, specifications with parameters and recursion, `c! e`, `c?` and a `||`
+of processes, over 32-bit integers and binaries; it names the first construct
+it does not take, and warns when a value leaves 32 bits. `interp --selftest`
+checks it against the interpreters on the demonstrations.
 
 ## Prove a theorem by calculation (`lake exe netty`)
 
