@@ -343,19 +343,23 @@ theorem Swarm.send_eq (w : Swarm) (i : ℕ) (s : State) :
         (getIP (dpop (dpop (dpop s).2).2).2 + 1)),
       fun c => if c = (dpop (dpop s).2).1.toNat then
         w.chans c ++ [((dpop (dpop (dpop s).2).2).1, getClk (dpop (dpop (dpop s).2).2).2)]
-        else w.chans c, w.rd⟩ := rfl
+        else w.chans c, w.rd, w.owner⟩ := rfl
 
 /-- **Send** in the swarm: with the value, the channel and `'s'` on the stack at
 an `io`, the message goes on the channel's script, stamped with the clock. -/
 theorem swarm_send {w : Swarm} {i : ℕ} {s : State} {v : UInt32} {ch : ℕ}
     (hi : w.ms[i]? = some s) (hw : WF s) (hr : Running s) (hlo : 256 ≤ getIP s)
     (hhi : getIP s + 1 < MAXBYTE) (hop : high s (getIP s) = 0xFD)
-    (hd : dstack s = [v, UInt32.ofNat ch, SEND]) (hch : ch < 2 ^ 32) :
+    (hd : dstack s = [v, UInt32.ofNat ch, SEND]) (hch : ch < 2 ^ 32) (ho : w.owner ch = some i) :
     ∃ s', w.stepAt i = some ⟨w.ms.set i s',
-        fun c => if c = ch then w.chans c ++ [(v, getClk s)] else w.chans c, w.rd⟩ ∧
+        fun c => if c = ch then w.chans c ++ [(v, getClk s)] else w.chans c, w.rd, w.owner⟩ ∧
       WF s' ∧ getIP s' = getIP s + 1 ∧ dstack s' = [] ∧ Same s s' := by
   have hio : ioCmd s = some SEND := ioCmd_eq (xs := [v, UInt32.ofNat ch]) hlo hop (by simpa using hd)
-  rw [Swarm.stepAt_send hi ((running_iff _).mpr hr) hio]
+  have hsc : sendChan s = ch := by
+    obtain ⟨_, w₁, -, d₁, -⟩ := dpop_same s [v, UInt32.ofNat ch] SEND hw (by simpa using hd)
+    obtain ⟨e₂, -, -, -, -⟩ := dpop_same _ [v] (UInt32.ofNat ch) w₁ (by simpa using d₁)
+    unfold sendChan; rw [e₂, UInt32.toNat_ofNat']; omega
+  rw [Swarm.stepAt_send hi ((running_iff _).mpr hr) hio (by rw [hsc]; exact ho)]
   obtain ⟨e₁, w₁, i₁, d₁, sm₁⟩ := dpop_same s [v, UInt32.ofNat ch] SEND hw (by simpa using hd)
   obtain ⟨e₂, w₂, i₂, d₂, sm₂⟩ := dpop_same _ [v] (UInt32.ofNat ch) w₁ (by simpa using d₁)
   obtain ⟨e₃, w₃, i₃, d₃, sm₃⟩ := dpop_same _ [] v w₂ (by simpa using d₂)
@@ -413,8 +417,8 @@ theorem swarm_recv {w : Swarm} {i : ℕ} {s : State} {ch : ℕ} {v τ : UInt32}
     (hop : high s (getIP s) = 0xFD) (hd : dstack s = [UInt32.ofNat ch, RECV]) (hch : ch < 2 ^ 32)
     (hm : (w.chans ch)[(w.rd.getD i fun _ => 0) ch]? = some (v, τ)) :
     w.stepAt i = some ⟨w.ms.set i (recvState s v τ), w.chans,
-        w.rd.set i fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1
-          else (w.rd.getD i fun _ => 0) c⟩ := by
+        w.rd.set i (fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1
+          else (w.rd.getD i fun _ => 0) c), w.owner⟩ := by
   have hio : ioCmd s = some RECV := ioCmd_eq (xs := [UInt32.ofNat ch]) hlo hop (by simpa using hd)
   rw [Swarm.stepAt_recv hi ((running_iff _).mpr hr) hio]
   have htn : (UInt32.ofNat ch).toNat = ch := by rw [UInt32.toNat_ofNat']; omega
@@ -616,10 +620,10 @@ theorem swarm_set_set (w : Swarm) (i : ℕ) (s s' : State) :
 theorem send_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch : ℕ} {e : Exp}
     {ks : List Stmt} {st : PSt ℕ Value} {r : ℕ → ℕ} (hi : w.ms[i]? = some s)
     (hp : PRel L (.send ch e :: ks) st s r) (hd : Direct L (high s) (.send ch e :: ks) (getIP s))
-    (hf : Fits L st.mem e) (hch : ch < 2 ^ 32) :
+    (hf : Fits L st.mem e) (hch : ch < 2 ^ 32) (ho : w.owner ch = some i) :
     ∃ s', Swarm.Steps w ⟨w.ms.set i s',
         fun c => if c = ch then w.chans c ++ [(enc (e.eval st.mem), encT st.t)] else w.chans c,
-        w.rd⟩ ∧ PRel L ks (st.sent ch) s' r := by
+        w.rd, w.owner⟩ ∧ PRel L ks (st.sent ch) s' r := by
   have hb := hL.2
   obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
   simp only [slen, sdepth] at h₂ h₃
@@ -644,7 +648,7 @@ theorem send_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
     (i := i) (v := enc (e.eval st.mem)) (ch := ch)
     (by simp [List.getElem?_set_self (List.getElem?_eq_some_iff.mp hi).1]) hA₃.wf hA₃.run hA₃.lo
     (by have := hA₃.hi; simp at this; omega) hop
-    (by rw [d₃, d₂, d₁, hp.stack]; rfl) hch
+    (by rw [d₃, d₂, d₁, hp.stack]; rfl) hch ho
   have hsm := sm₁.trans (sm₂.trans (sm₃.trans sm'))
   refine ⟨s', ?_, ⟨w', hsm.running hp.run, d', ?_, by rw [hsm.high]; exact hp.vars,
     by rw [hsm.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
@@ -664,8 +668,8 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
     (hchan : w.chans ch = encS (Λ ch)) (hm : (Λ ch)[st.r ch]? = some m) (hx : x < L.n)
     (hfit : TFits (max st.t (m.2 + 1))) :
     ∃ s', Swarm.Steps w ⟨w.ms.set i s', w.chans,
-        w.rd.set i fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1
-          else (w.rd.getD i fun _ => 0) c⟩ ∧
+        w.rd.set i (fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1
+          else (w.rd.getD i fun _ => 0) c), w.owner⟩ ∧
       PRel L ks (st.received ch x m)
         s' (fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1 else (w.rd.getD i fun _ => 0) c) := by
   have hb := hL.2
@@ -720,8 +724,8 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
     (Steps.one run₃ (notIo_li hA₃)).tail ⟨run₄, notIo_of_hop hip₄ hop₄, rfl⟩
   refine ⟨step (step s₃), ?_, ⟨w₅, ⟨st₅.trans run₄.1, db₅.trans run₄.2⟩, d₅, ?_, ?_, ?_, hfit, ?_⟩⟩
   · refine (hlift.tail ⟨i, hstep⟩).trans ?_
-    have := swarm_lift (w := ⟨w.ms.set i s₃, w.chans, w.rd.set i fun c => if c = ch then
-      (w.rd.getD i fun _ => 0) ch + 1 else (w.rd.getD i fun _ => 0) c⟩) (i := i) (s := s₃)
+    have := swarm_lift (w := ⟨w.ms.set i s₃, w.chans, w.rd.set i (fun c => if c = ch then
+      (w.rd.getD i fun _ => 0) ch + 1 else (w.rd.getD i fun _ => 0) c), w.owner⟩) (i := i) (s := s₃)
       (by simp [List.getElem?_set_self hlt]) hrun₂
     simpa using this
   · rw [hi₅, sm₄.high, h₃', sm₂.high, sm₁.high, i₅, i₄, i₃, i₂, i₁]
@@ -743,7 +747,7 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
 theorem Rel.setRd {L : Layout} {c : SCfg} {w : Swarm} (hr : Rel L c w) {i : ℕ}
     (hi : i < c.ps.length) {ks : List Stmt} {st : PSt ℕ Value} {s : State} {Λ : Scripts Value}
     {r : ℕ → ℕ} {chans : ℕ → List B4.Msg} (hp : PRel L ks st s r) (hch : ∀ ch, chans ch = encS (Λ ch)) :
-    Rel L ⟨c.ps.set i (ks, st), Λ⟩ ⟨w.ms.set i s, chans, w.rd.set i r⟩ := by
+    Rel L ⟨c.ps.set i (ks, st), Λ⟩ ⟨w.ms.set i s, chans, w.rd.set i r, w.owner⟩ := by
   refine ⟨by simp [hr.len], by simp [hr.rdlen], ?_, hch⟩
   intro j ks' st' s' hc hm
   have hrd : i < w.rd.length := hr.rdlen ▸ hi
@@ -779,8 +783,10 @@ theorem Rel.follow (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {k
 keep them agreeing. -/
 theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
     (hchb : ∀ pr ∈ net.procs, ∀ ch, ch ∈ pr.outs ∨ ch ∈ pr.ins → ch < 2 ^ 32)
-    {c c' : SCfg} (h : SStep L net c c') {w : Swarm} (hr : Rel L c w) :
-    ∃ w', Swarm.Steps w w' ∧ Rel L c' w' := by
+    {c c' : SCfg} (h : SStep L net c c') {w : Swarm} (hr : Rel L c w)
+    (hown : ∀ {i : ℕ} {pr : SProc} {ch : ℕ}, net.procs[i]? = some pr → ch ∈ pr.outs →
+      w.owner ch = some i) :
+    ∃ w', Swarm.Steps w w' ∧ w'.owner = w.owner ∧ Rel L c' w' := by
   obtain ⟨hpr, ha, hact⟩ := h
   rename_i i pr a b Λ
   obtain ⟨ks, st⟩ := a
@@ -793,10 +799,10 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
   -- the actions that do not communicate
   have local_case : ∀ {b' : List Stmt × PSt ℕ Value}, SAct L pr c.L (ks, st) b' c.L →
       (∀ ch e ks', ks ≠ .send ch e :: ks') → (∀ ch x ks', ks ≠ .recv ch x :: ks') →
-      ∃ w', Swarm.Steps w w' ∧ Rel L ⟨c.ps.set i b', c.L⟩ w' := by
+      ∃ w', Swarm.Steps w w' ∧ w'.owner = w.owner ∧ Rel L ⟨c.ps.set i b', c.L⟩ w' := by
     intro b' hb' hs' hr'
     obtain ⟨s₂, r₂, hp₂⟩ := machine_sim L hL hb' hs' hr' hp₁ hd₁
-    refine ⟨{ w with ms := w.ms.set i s₂ }, ?_, ?_⟩
+    refine ⟨{ w with ms := w.ms.set i s₂ }, ?_, rfl, ?_⟩
     · have := swarm_lift hs₁ r₂; simp at this; exact hw₁.trans (by simpa using this)
     · have := hr.set hlt (ks := b'.1) (st := b'.2) (s := s₂) (Λ := c.L) hp₂ hr.chans
       simpa using this
@@ -811,7 +817,8 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
   | loopF hf hc => exact local_case (.loopF hf hc) (by simp) (by simp)
   | @send ks' _ ch e hch hf =>
     obtain ⟨s₂, hw₂, hp₂⟩ := send_sim L hL hs₁ hp₁ hd₁ hf (hchb pr hprm ch (.inl hch))
-    refine ⟨_, hw₁.trans hw₂, ?_⟩
+      (hown hpr hch)
+    refine ⟨_, hw₁.trans hw₂, rfl, ?_⟩
     have := hr.setRd hlt (ks := ks') (st := st.sent ch) (s := s₂)
       (Λ := Function.update c.L ch (c.L ch ++ [(e.eval st.mem, st.t)]))
       (chans := fun c' => if c' = ch then w.chans c' ++ [(enc (e.eval st.mem), encT st.t)]
@@ -831,7 +838,7 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
   | @recv ks' _ ch x m hch hm hx hfit =>
     obtain ⟨s₂, hw₂, hp₂⟩ := recv_sim L hL (Λ := c.L) hs₁ (by simpa using hp₁) hd₁
       (hchb pr hprm ch (.inr hch)) (by simpa using hr.chans ch) hm hx hfit
-    refine ⟨_, hw₁.trans hw₂, ?_⟩
+    refine ⟨_, hw₁.trans hw₂, rfl, ?_⟩
     have := hr.setRd hlt (ks := ks') (st := st.received ch x m) (s := s₂) (Λ := c.L)
       (chans := w.chans) hp₂ hr.chans
     simpa using this
@@ -840,14 +847,16 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
 swarm. -/
 theorem swarm_simulates (L : Layout) (hL : L.Ok) {net : SNet}
     (hchb : ∀ pr ∈ net.procs, ∀ ch, ch ∈ pr.outs ∨ ch ∈ pr.ins → ch < 2 ^ 32)
-    {c c' : SCfg} (h : ReflTransGen (SStep L net) c c') {w : Swarm} (hr : Rel L c w) :
-    ∃ w', Swarm.Steps w w' ∧ Rel L c' w' := by
+    {c c' : SCfg} (h : ReflTransGen (SStep L net) c c') {w : Swarm} (hr : Rel L c w)
+    (hown : ∀ {i : ℕ} {pr : SProc} {ch : ℕ}, net.procs[i]? = some pr → ch ∈ pr.outs →
+      w.owner ch = some i) :
+    ∃ w', Swarm.Steps w w' ∧ w'.owner = w.owner ∧ Rel L c' w' := by
   induction h with
-  | refl => exact ⟨w, .refl, hr⟩
+  | refl => exact ⟨w, .refl, rfl, hr⟩
   | tail _ hs ih =>
-    obtain ⟨w₁, r₁, h₁⟩ := ih
-    obtain ⟨w₂, r₂, h₂⟩ := sim_step L hL hchb hs h₁
-    exact ⟨w₂, r₁.trans r₂, h₂⟩
+    obtain ⟨w₁, r₁, o₁, h₁⟩ := ih
+    obtain ⟨w₂, r₂, o₂, h₂⟩ := sim_step L hL hchb hs h₁ (fun hp hc => o₁ ▸ hown hp hc)
+    exact ⟨w₂, r₁.trans r₂, o₂.trans o₁, h₂⟩
 
 /-! ### Loading the swarm -/
 
@@ -863,7 +872,24 @@ theorem getClk_load (L : Layout) (hL : L.Ok) (p : Stmt) (st : St)
 machine, from the prestate `s`, with the environment's scripts on the channels. -/
 def SNet.load (L : Layout) (net : SNet) (s : St) : Swarm :=
   ⟨net.procs.map fun pr => CompileB4.load L pr.body s, fun ch => encS (net.input ch),
-    net.procs.map fun _ _ => 0⟩
+    net.procs.map (fun _ _ => 0), fun ch => net.procs.findIdx? fun pr => pr.outs.contains ch⟩
+
+/-- In the loaded swarm, each channel's writer is its owner. -/
+theorem load_owner (L : Layout) {net : SNet} (hwf : net.toNet.WF) (s : St) {i : ℕ} {pr : SProc}
+    {ch : ℕ} (hpr : net.procs[i]? = some pr) (hch : ch ∈ pr.outs) :
+    (net.load L s).owner ch = some i := by
+  simp only [SNet.load]
+  rw [List.findIdx?_eq_some_iff_getElem]
+  obtain ⟨hlt, hget⟩ := List.getElem?_eq_some_iff.mp hpr
+  refine ⟨hlt, by simp [hget, hch], fun j hj => ?_⟩
+  have hjlt : j < net.procs.length := by omega
+  simp only [List.contains_iff_mem]
+  intro hj'
+  have h₁ : net.toNet.procs[j]? = some ⟨net.procs[j].body.toNP, net.procs[j].outs, net.procs[j].ins⟩ := by
+    simp [SNet.toNet, hjlt]
+  have h₂ : net.toNet.procs[i]? = some ⟨pr.body.toNP, pr.outs, pr.ins⟩ := by
+    simp [SNet.toNet, hpr]
+  exact hwf.writer (by omega) h₁ h₂ hj' hch
 
 /-- The code of each process fits below the variables, and its stack. -/
 def SNet.Fits (L : Layout) (net : SNet) : Prop :=
@@ -958,14 +984,15 @@ in 32 bits to a configuration where every process has finished, then the swarm
 of compiled processes, loaded from `s`, runs to a state where every machine has
 halted with its process's final variables in its cells and its final time on
 its clock, and the channels hold the scripts the network wrote. -/
-theorem swarm_correct (L : Layout) (hL : L.Ok) {net : SNet} (hfit : net.Fits L)
+theorem swarm_correct (L : Layout) (hL : L.Ok) {net : SNet} (hwf : net.toNet.WF) (hfit : net.Fits L)
     (hchb : ∀ pr ∈ net.procs, ∀ ch, ch ∈ pr.outs ∨ ch ∈ pr.ins → ch < 2 ^ 32) (s : St)
     {c : SCfg} (h : ReflTransGen (SStep L net) (net.init s) c) (hdone : ∀ p ∈ c.ps, p.1 = []) :
     ∃ w, Swarm.Steps (net.load L s) w ∧ w.ms.length = c.ps.length ∧
       (∀ ch, w.chans ch = encS (c.L ch)) ∧
       ∀ {i : ℕ} {ks : List Stmt} {st : PSt ℕ Value}, c.ps[i]? = some (ks, st) →
         ∃ m, w.ms[i]? = some m ∧ Halted L st m := by
-  obtain ⟨w₁, r₁, h₁⟩ := swarm_simulates L hL hchb h (rel_init L hL net hfit s)
+  obtain ⟨w₁, r₁, -, h₁⟩ := swarm_simulates L hL hchb h (rel_init L hL net hfit s)
+    (load_owner L hwf s)
   obtain ⟨w₂, r₂, l₂, c₂, h₂⟩ := halt_upto L hL h₁ hdone c.ps.length
   refine ⟨w₂, r₁.trans r₂, l₂, fun ch => by rw [c₂, h₁.chans], fun hc => ?_⟩
   obtain ⟨m, hm, hh⟩ := h₂ hc
@@ -993,7 +1020,7 @@ theorem swarm_book (L : Layout) (hL : L.Ok) {net : SNet} (hwf : net.toNet.WF) (h
     simp only at this ⊢
     simp [this]
   have hs := netSpec_of_reach hwf hm hd
-  obtain ⟨w, hw, -, hch, hh⟩ := swarm_correct L hL hfit hchb s h hdone
+  obtain ⟨w, hw, -, hch, hh⟩ := swarm_correct L hL hwf hfit hchb s h hdone
   refine ⟨?_, w, hw, hch, hh⟩
   have heq : c.toM.ps.map (·.st) = c.ps.map (·.2) := by simp [SCfg.toM, Function.comp_def]
   rw [← heq]; exact hs
