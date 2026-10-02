@@ -712,4 +712,74 @@ theorem sim_choice {L : Layout} (hB : BTOk L) {ks : List Stmt} {st : PSt ℕ Val
     · exact ⟨rfl, rfl⟩
     · exact hr₁.same cp hcp
 
+/-! ### Simulation: `ensure` -/
+
+theorem length_ensure_rest (L : Layout) (f : ℕ) :
+    (jmTo f ++ jmTo (f + 461) ++ failCode L f).length = 471 := by
+  rw [List.length_append, List.length_append, length_failCode]; rfl
+
+/-- The pieces of an `ensure`'s code. -/
+theorem ensure_code {L : Layout} {m : ℕ → UInt8} {a : ℕ} {c : Exp}
+    (h : CodeAt m a (scode L a (.ensure c))) :
+    CodeAt m a (ecode L c ++ test ++ (jmTo (a + (ecode L c).length + 13) ++
+        jmTo (a + (ecode L c).length + 13 + 461) ++ failCode L (a + (ecode L c).length + 13))) ∧
+      CodeAt m (a + (ecode L c).length + 3) (jmTo (a + (ecode L c).length + 13)) ∧
+      CodeAt m (a + (ecode L c).length + 8) (jmTo (a + (ecode L c).length + 13 + 461)) ∧
+      CodeAt m (a + (ecode L c).length + 13) (failCode L (a + (ecode L c).length + 13)) := by
+  simp only [scode] at h
+  refine ⟨by simpa only [List.append_assoc] using h, ?_⟩
+  rw [CodeAt.append, CodeAt.append, CodeAt.append, CodeAt.append] at h
+  obtain ⟨⟨⟨⟨-, -⟩, hJ⟩, hJ'⟩, hF⟩ := h
+  simp only [List.length_append, length_test, length_jmTo] at hJ hJ' hF
+  exact ⟨hJ.cast (by omega), hJ'.cast (by omega), hF.cast (by omega)⟩
+
+/-- The pieces of the failure code. -/
+theorem fail_code {L : Layout} {m : ℕ → UInt8} {f : ℕ} (h : CodeAt m f (failCode L f)) :
+    CodeAt m f (ecode L.rt (RT.mem (RT.lit L.W))) ∧ m (f + 18) = 0x9C ∧ m (f + 19) = 7 ∧
+      CodeAt m (f + 20) (jmTo (f + 49)) ∧ CodeAt m (f + 25) (scode L.rt (f + 25) (RT.halt L.W)) ∧
+      m (f + 48) = 0xFF ∧ CodeAt m (f + 49) (scode L.rt (f + 49) (RT.pop L.W)) ∧
+      CodeAt m (f + 416) (ecode L.rt (RT.mem (RT.recAt L.W))) ∧ m (f + 459) = 0x90 ∧
+      m (f + 460) = 0x9E := by
+  unfold failCode at h
+  simp only [CodeAt.append] at h
+  obtain ⟨⟨⟨⟨hC, hH⟩, hJ⟩, ⟨hHa, hHl⟩⟩, ⟨⟨hP, hA⟩, hD⟩⟩ := h
+  simp only [List.length_append, length_ecode_cnt, length_ecode_alt, length_jmTo, length_scodeR_halt,
+    length_scodeR_pop, List.length_cons, List.length_nil] at hH hJ hHa hHl hP hA hD
+  rw [scodeR_halt] at hHa; rw [scodeR_pop] at hP
+  refine ⟨hC, by simpa using hH 0 (by simp), by simpa using hH 1 (by simp), hJ.cast (by omega),
+    hHa.cast (by omega), by simpa using hHl 0 (by simp), hP.cast (by omega), hA.cast (by omega),
+    by simpa using hD 0 (by simp), by simpa using hD 1 (by simp)⟩
+
+set_option maxRecDepth 20000 in
+/-- **`ensure c`, `c` true, is steps of the machine**: test, and jump past the
+failure code. -/
+theorem sim_ensureT {L : Layout} (hL : L.Ok) {ks : List Stmt} {st : PSt ℕ Value} {c : Exp}
+    {cps : List (List Stmt × PSt ℕ Value)} (hf : Fits L st.mem c) (hc : c.eval st.mem = .bool true)
+    {s : State} (hr : BRel L ⟨(.ensure c :: ks, st), cps⟩ s) :
+    ∃ s', Steps s s' ∧ BRel L ⟨(ks, st), cps⟩ s' := by
+  have hb : L.base + 4 * L.n + 4 * cellsOf L.arrays + 16 ≤ 65536 := hL.2
+  obtain ⟨s₁, r₁, hr₁, hd₁, -⟩ := hr.follow hL
+  obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd₁.cons_inv (by simp) (by simp)
+  obtain ⟨a, ha⟩ : ∃ a, getIP s₁ = a := ⟨_, rfl⟩
+  rw [ha] at h₁ h₂ h₄ hk
+  simp only [slen, sdepth] at h₂ h₃ hk
+  obtain ⟨hA, -, hJ', -⟩ := ensure_code h₄
+  obtain ⟨s₂, r₂, w₂, run₂, i₂, d₂, sm₂⟩ := run_cond (b := true)
+    (rest := jmTo (a + (ecode L c).length + 13) ++ jmTo (a + (ecode L c).length + 13 + 461) ++
+      failCode L (a + (ecode L c).length + 13)) hL hf hc hr₁.p.wf hr₁.p.run ha h₁
+    (by rw [length_ensure_rest]; omega) hA hr₁.p.vars hr₁.p.stack (by omega)
+  simp only [ite_true] at i₂
+  have hJ₂ : CodeAt (high s₂) (getIP s₂) (jmTo (a + (ecode L c).length + 13 + 461)) := by
+    rw [i₂, sm₂.high]; exact hJ'
+  obtain ⟨w₃, i₃, d₃, sm₃⟩ := run_jm' hL w₂ (by rw [i₂]; omega) (by rw [i₂]; omega) hJ₂ (by omega)
+    (by omega)
+  have sm := sm₂.trans sm₃
+  refine ⟨step s₂, r₁.trans (r₂.tail ⟨run₂, notIo_jm (by rw [i₂]; omega) hJ₂, rfl⟩),
+    ⟨⟨w₃, sm₃.running run₂, by rw [d₃, d₂], ?_, by rw [sm.high]; exact hr₁.p.vars,
+      by rw [sm.clk]; exact hr₁.p.clk, hr₁.p.tfit, hr₁.p.rd, by rw [sm.high]; exact hr₁.p.image⟩,
+    by rw [sm.high]; exact hr₁.cnt, by rw [sm.high]; exact hr₁.flag, hr₁.len,
+    fun i h => by rw [sm.high]; exact hr₁.recs i h, hr₁.same⟩⟩
+  rw [i₃, sm.high, sm.cs]
+  exact hk.cast (by omega)
+
 end LaPToP.ProgramTheory.CompileBT
