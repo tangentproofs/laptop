@@ -44,10 +44,10 @@ can be typed on any keyboard:
 | glyph | ASCII | | glyph | ASCII | | glyph | ASCII |
 | ----- | ----- | - | ----- | ----- | - | ----- | ----- |
 | `¬`   | `~`   | | `≤`   | `=<`  | | `≡`   | `==`  |
-| `∧`   | `/\`  | | `≥`   | `>=`  | | `⟹`   | `==>` |
-| `∨`   | `\/`  | | `×`   | `*`   | | `⟸`   | `<==` |
-| `⇒`   | `=>`  | | `⊤`   | `T`   | | `·`   | `.`   |
-| `⇐`   | `<=`  | | `⊥`   | `F`   | | `⧧`   | `!=`  |
+| `∧`   | `/\`  | | `≥`   | `>=`  | | `⟹`   | `==>` `-->` |
+| `∨`   | `\/`  | | `×`   | `*`   | | `⟸`   | `<==` `<--` |
+| `⇒`   | `=>` `->` | | `⊤`   | `T`   | | `·`   | `.`   |
+| `⇐`   | `<=` `<-` | | `⊥`   | `F`   | | `⧧`   | `!=`  |
 
 `T` and `F` are therefore reserved and cannot be used as identifiers, and so are
 `forall` and `exists`, the ASCII spellings of `∀` and `∃`.
@@ -143,6 +143,8 @@ private def isIdentRest (c : Char) : Bool := c.isAlphanum || c == '_' || c == '\
 and `==` before `=>`. -/
 private def symbols : List (List Char × Tok) :=
   [ ("==>".toList, .bigOp .imp), ("<==".toList, .bigOp .rimp),
+    ("-->".toList, .bigOp .imp), ("<--".toList, .bigOp .rimp),
+    ("->".toList, .op .imp), ("<-".toList, .op .rimp),
     ("==".toList, .bigOp .eq),
     ("=>".toList, .op .imp), ("<=".toList, .op .rimp),
     ("=<".toList, .op .le), (">=".toList, .op .ge), ("!=".toList, .op .ne),

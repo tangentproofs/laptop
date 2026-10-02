@@ -113,7 +113,8 @@ item      := 'exit' integer? ('when' exp)?
            | 'if' exp 'then' body ('else' body)? 'fi'
            | 'do' body 'od'
            | choice
-exp       := disj ('⇒' exp)?
+exp       := imp (('==' | '-->' | '<--') imp)*   -- large = ⇒ ⇐, lowest
+imp       := disj (('⇒' | '->' | '<-') imp)?
 disj      := conj ('∨' conj)*
 conj      := neg (('∧' | 'and') neg)*
 neg       := 'not' neg | cmp

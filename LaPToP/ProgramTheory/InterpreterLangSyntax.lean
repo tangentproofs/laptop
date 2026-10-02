@@ -37,7 +37,8 @@ item      := 'exit' integer? ('when' exp)?
            | 'if' exp 'then' body ('else' body)? 'fi'
            | 'do' body 'od'
            | choice
-exp       := disj ('⇒' exp)?
+exp       := imp (('==' | '-->' | '<--') imp)*   -- large = ⇒ ⇐, lowest
+imp       := disj (('⇒' | '->' | '<-') imp)?
 disj      := conj ('∨' conj)*
 conj      := neg (('∧' | 'and') neg)*
 neg       := 'not' neg | cmp
@@ -94,7 +95,10 @@ variable named `c`, so an input script is given as its initial value.
 Juxtaposition is indexing, as in the book: `A i` is item `i` of `A`, and
 `A i j:= e` assigns an item of a two-dimensional array. Each symbol has an ASCII
 spelling: `<==` `=>` `\/` `/\` `!=` `<=` `>=` `*` `true` `false`, and `⧧` is
-accepted for `≠`. `¬` binds tightest, as in the book, so `¬x = y` is `(¬x) = y`;
+accepted for `≠`. The implications are also `->` and `<-`. The book's large
+`= ⇒ ⇐` — the same operators at the lowest precedence, below every other — are
+`==` `-->` `<--` (or `≡` `⟹` `⟸`), so `a ∧ b == b ∧ a` is `(a ∧ b) = (b ∧ a)`;
+the glyph `⇐` is kept for refinement. `¬` binds tightest, as in the book, so `¬x = y` is `(¬x) = y`;
 the word `not` binds looser than a comparison, so `not x = y` is `¬(x = y)`. A
 comment runs from `--` to the end of the line.
 -/
@@ -128,6 +132,9 @@ private def unicodeTok : Char → Option Tok
   | '⧧' => some (.sym "!=")
   | '⇒' => some (.sym "=>")
   | '⇐' => some (.sym "<==")
+  | '≡' => some (.sym "==")
+  | '⟹' => some (.sym "-->")
+  | '⟸' => some (.sym "<--")
   | '∧' => some (.sym "/\\")
   | '∨' => some (.sym "\\/")
   | '¬' => some (.sym "¬")
@@ -159,7 +166,12 @@ def tokenize : ℕ → List Char → Except String Toks
       do let ts ← tokenize f rest; .ok (.word (String.ofList ws) :: ts)
     else
       match c, cs with
+      | '-', '-' :: '>' :: rest => do let ts ← tokenize f rest; .ok (.sym "-->" :: ts)
       | '-', '-' :: rest => tokenize f (rest.dropWhile (· != '\n'))
+      | '<', '-' :: '-' :: rest => do let ts ← tokenize f rest; .ok (.sym "<--" :: ts)
+      | '<', '-' :: rest => do let ts ← tokenize f rest; .ok (.sym "<-" :: ts)
+      | '-', '>' :: rest => do let ts ← tokenize f rest; .ok (.sym "=>" :: ts)
+      | '=', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym "==" :: ts)
       | ':', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym ":=" :: ts)
       | '|', '|' :: rest => do let ts ← tokenize f rest; .ok (.sym "||" :: ts)
       | '<', '=' :: '=' :: rest => do let ts ← tokenize f rest; .ok (.sym "<==" :: ts)
@@ -454,16 +466,48 @@ private def advance (st : PS) : PS := st.at st.toks.tail
 
 mutual
 
-/-- `exp := disj ('⇒' exp)?`; implication associates to the right. -/
+/-- `exp := imp (('==' | '-->' | '<--') imp)*`: the book's large `= ⇒ ⇐`, the
+same operators at the lowest precedence, associating to the left. -/
 def parseExp (fuel : ℕ) (st : PS) : Except String (Exp × PS) :=
+  match fuel with
+  | 0 => .error "expression too long or too deeply nested"
+  | f + 1 => do
+    let (a, st) ← parseImp f st
+    parseBigTail f a st
+termination_by structural fuel
+
+/-- The rest of a chain of large operators. -/
+def parseBigTail (fuel : ℕ) (a : Exp) (st : PS) : Except String (Exp × PS) :=
+  match fuel with
+  | 0 => .error "expression too long or too deeply nested"
+  | f + 1 =>
+    match headTok st with
+    | some (.sym "==") => do
+      let (b, st) ← parseImp f (advance st)
+      parseBigTail f (.bin .eq a b) st
+    | some (.sym "-->") => do
+      let (b, st) ← parseImp f (advance st)
+      parseBigTail f (.bin .imp a b) st
+    | some (.sym "<--") => do
+      let (b, st) ← parseImp f (advance st)
+      parseBigTail f (.bin .imp b a) st
+    | _ => .ok (a, st)
+termination_by structural fuel
+
+/-- `imp := disj (('⇒' | '⇐') imp)?`; the small implications associate to the
+right. -/
+def parseImp (fuel : ℕ) (st : PS) : Except String (Exp × PS) :=
   match fuel with
   | 0 => .error "expression too long or too deeply nested"
   | f + 1 => do
     let (a, st) ← parseLeft f 1 st
     match headTok st with
     | some (.sym "=>") => do
-      let (b, st) ← parseExp f (advance st)
+      let (b, st) ← parseImp f (advance st)
       .ok (.bin .imp a b, st)
+    | some (.sym "<-") => do
+      let (b, st) ← parseImp f (advance st)
+      .ok (.bin .imp b a, st)
     | _ => .ok (a, st)
 termination_by structural fuel
 
@@ -1277,6 +1321,14 @@ def arraysToks : Toks :=
    .word "i", .sym ":=", .num 2, .sym ".",
    .word "A", .word "i", .sym ":=", .num 4, .sym ".",
    .word "b", .sym ":=", .word "A", .word "i", .sym "=", .word "A", .num 2]
+
+/-- The large operators bind loosest: `b:= ⊤ ∧ ⊥ == ⊥ ∧ ⊤` is `b:= (⊤ ∧ ⊥) = (⊥ ∧ ⊤)`,
+which is `⊤`, whereas the small `=` would bind first. And `⊥ <-- ⊤` is `⊤ ⇒ ⊥`. -/
+theorem big_ops :
+    ((tokenize 100 "b:= true /\\ false == false /\\ true. c:= false <-- true. d:= true -> false --> false".toList).toOption.bind
+      fun ts => (parseToks ts).toOption.bind fun prog => prog.run 10 init).map
+        (fun s => (s 0, s 1, s 2)) = some (.bool true, .bool false, .bool true) := by
+  decide +kernel
 
 /-- `A 2:= 3. i:= 2. A i:= 4. A i = A 2` "should equal ⊤", and does. -/
 theorem arrays_run :
