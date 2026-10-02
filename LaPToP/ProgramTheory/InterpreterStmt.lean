@@ -46,6 +46,10 @@ inductive Stmt where
   | check (c : ℕ) (x : ℕ)
   /-- `A i:= e`, on an array variable `A`. -/
   | store (x : ℕ) (i e : Exp)
+  /-- `P or Q`, the choice of Section 5.4.0, resolved by backtracking. -/
+  | choice (p q : Stmt)
+  /-- `ensure c`: go on if `c`, and otherwise back up to the last choice. -/
+  | ensure (c : Exp)
   deriving Repr
 
 /-- A statement as a program of the language. -/
@@ -60,6 +64,8 @@ def Stmt.toProg : Stmt → P
   -- no behaviour.
   | .send _ _ | .recv _ _ | .check _ _ => .ensure fun _ => false
   | .store x i e => assignIdx x [i] e
+  | .choice p q => .or p.toProg q.toProg
+  | .ensure c => Lang.ensure c
   | .call k => .call k
   | .scope x e p => declare x e p.toProg
   | .ret => .ok

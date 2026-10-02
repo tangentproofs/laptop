@@ -43,6 +43,9 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toNP : Stmt → NProc ℕ Value
   | .restore x v => .restore x v
   | .check ch x => .check ch x .bool
   | .store x i e => .act (assignIdx x [i] e)
+  -- Backtracking is compiled for a lone program (`CompileBT`), not in a network.
+  | .choice p _ => p.toNP
+  | .ensure c => .act (Lang.ensure c)
 
 /-- A statement a program is written in: no return or end of scope, which only
 running makes. -/
@@ -51,6 +54,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.clean : Stmt → Bool
   | .cond _ p q => p.clean && q.clean
   | .loop _ p => p.clean
   | .scope _ _ p => p.clean
+  | .choice p q => p.clean && q.clean
   | .ret => false
   | .restore _ _ => false
   | _ => true

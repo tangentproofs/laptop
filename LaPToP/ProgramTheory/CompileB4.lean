@@ -118,6 +118,8 @@ structure Layout where
   /-- The array variables, each with how many cells it has: their cells follow the
   variables', one array after another. -/
   arrays : List (ℕ × ℕ) := []
+  /-- How many choices backtracking keeps at once. -/
+  choices : ℕ := 0
 
 /-- The address of variable `x`. -/
 def Layout.addr (L : Layout) (x : ℕ) : ℕ := L.base + 4 * x
@@ -135,6 +137,67 @@ def Layout.arrayAt (L : Layout) (x : ℕ) : Option (ℕ × ℕ) := arrFrom (L.ba
 
 /-- Where the cells end: everything from here up is no variable's. -/
 def Layout.top (L : Layout) : ℕ := L.base + 4 * L.n + 4 * cellsOf L.arrays
+
+/-! ### Backtracking's runtime
+
+Backtracking keeps choice points above the cells: a count, three cells a copy
+uses, a failure flag, and the choice points, each the address of the code that
+is the other choice and a copy of every cell. The code that keeps them is itself
+written in the language, over one array `MEM` of the words from the first cell
+up (`Layout.rt`): cell `k` is word `k`, the count is word `W`, and so on. -/
+
+/-- How many words the cells take. -/
+def Layout.W (L : Layout) : ℕ := L.n + cellsOf L.arrays
+
+/-- The layout backtracking's runtime sees: one array, variable `0`, of every word
+from the first cell up to the last choice point. -/
+def Layout.rt (L : Layout) : Layout :=
+  { base := L.base, n := 0, arrays := [(0, L.W + 5 + L.choices * (L.W + 1))] }
+
+namespace RT
+
+/-- Word `e` of memory. -/
+abbrev mem (e : Exp) : Exp := .index (.var 0) e
+/-- An integer literal. -/
+abbrev lit (k : ℤ) : Exp := .lit (.int k)
+/-- `a + b`. -/
+abbrev add (a b : Exp) : Exp := .bin .add a b
+/-- `a - b`. -/
+abbrev sub (a b : Exp) : Exp := .bin .sub a b
+
+/-- Where the last choice point would start (`w` the words the cells take), with
+`k` choice points kept: word `w + 5 + k (w + 1)`. -/
+def recAt (w : ℕ) : Exp := add (lit (w + 5)) (.bin .mul (mem (lit w)) (lit (w + 1)))
+
+/-- Copy `MEM (w+3)` words from `MEM (w+1)` on to `MEM (w+2)` on. -/
+def copy (w : ℕ) : Stmt :=
+  .loop (.bin .lt (lit 0) (mem (lit (w + 3))))
+    (.seq (.store 0 (mem (lit (w + 2))) (mem (mem (lit (w + 1)))))
+    (.seq (.store 0 (lit (w + 1)) (add (mem (lit (w + 1))) (lit 1)))
+    (.seq (.store 0 (lit (w + 2)) (add (mem (lit (w + 2))) (lit 1)))
+      (.store 0 (lit (w + 3)) (sub (mem (lit (w + 3))) (lit 1))))))
+
+/-- Keep a choice point: the other choice at `alt`, and a copy of the cells. -/
+def save (w alt : ℕ) : Stmt :=
+  .seq (.store 0 (recAt w) (lit alt))
+  (.seq (.store 0 (lit (w + 1)) (lit 0))
+  (.seq (.store 0 (lit (w + 2)) (add (recAt w) (lit 1)))
+  (.seq (.store 0 (lit (w + 3)) (lit w))
+  (.seq (copy w)
+    (.store 0 (lit w) (add (mem (lit w)) (lit 1)))))))
+
+/-- Take the last choice point back: its copy into the cells. -/
+def pop (w : ℕ) : Stmt :=
+  .seq (.store 0 (lit w) (sub (mem (lit w)) (lit 1)))
+  (.seq (.store 0 (lit (w + 1)) (add (recAt w) (lit 1)))
+  (.seq (.store 0 (lit (w + 2)) (lit 0))
+  (.seq (.store 0 (lit (w + 3)) (lit w))
+    (copy w))))
+
+/-- No choice is left: say so. -/
+def halt (w : ℕ) : Stmt := .store 0 (lit (w + 4)) (lit (-1))
+
+end RT
 
 /-- The cells lie in high memory. -/
 def Layout.Ok (L : Layout) : Prop :=
@@ -611,6 +674,59 @@ def slen (L : Layout) : Stmt → ℕ
     match L.arrayAt x with
     | some _ => (ecode L e).length + (ecode L i).length + 13
     | none => 0
+  | .choice p q => 415 + slen L p + 5 + slen L q
+  | .ensure c => (ecode L c).length + 474
+
+/-- The code of the statements backtracking's runtime is written in — `ok`,
+assignment, sequence, `if`, `while` and stores — as `scode` makes it
+(`scodeR_eq`). -/
+def scodeR (L : Layout) (a : ℕ) : Stmt → List UInt8
+  | .ok => []
+  | .assign x e => ecode L e ++ (0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95]
+  | .seq p q => scodeR L a p ++ scodeR L (a + slen L p) q
+  | .cond c p q =>
+    let t := a + (ecode L c).length + 8
+    let el := t + slen L p + 5
+    ecode L c ++ test ++ jmTo el ++ scodeR L t p ++ jmTo (el + slen L q) ++ scodeR L el q
+  | .loop c p =>
+    let b := a + (ecode L c).length + 8
+    ecode L c ++ test ++ jmTo (b + slen L p + 5) ++ scodeR L b p ++ jmTo a
+  | .store x i e =>
+    match L.arrayAt x with
+    | some (a₀, _) => ecode L e ++ ecode L i ++ addrCode a₀ ++ [0x95]
+    | none => []
+  | _ => []
+
+@[simp] theorem Layout.rt_arrayAt0 (L : Layout) :
+    L.rt.arrayAt 0 = some (L.base, L.W + 5 + L.choices * (L.W + 1)) := by
+  simp [Layout.rt, Layout.arrayAt, arrFrom]
+
+set_option maxRecDepth 8000 in
+theorem length_scodeR_save (L : Layout) (w alt a : ℕ) : (scodeR L.rt a (RT.save w alt)).length = 415 := by
+  simp [RT.save, RT.copy, RT.recAt, scodeR, ecode, slen, addrCode, jmTo, test]
+
+set_option maxRecDepth 8000 in
+theorem length_scodeR_pop (L : Layout) (w a : ℕ) : (scodeR L.rt a (RT.pop w)).length = 367 := by
+  simp [RT.pop, RT.copy, RT.recAt, scodeR, ecode, slen, addrCode, jmTo, test]
+
+theorem length_scodeR_halt (L : Layout) (w a : ℕ) : (scodeR L.rt a (RT.halt w)).length = 23 := by
+  simp [RT.halt, scodeR, ecode, addrCode]
+
+theorem length_ecode_cnt (L : Layout) (w : ℕ) : (ecode L.rt (RT.mem (RT.lit w))).length = 18 := by
+  simp [ecode, addrCode]
+
+theorem length_ecode_alt (L : Layout) (w : ℕ) : (ecode L.rt (RT.mem (RT.recAt w))).length = 43 := by
+  simp [ecode, addrCode, RT.recAt, binByte]
+
+/-- What a failed `ensure` runs, at `f`: with no choice point kept, set the
+flag and halt; otherwise take the last one back and go to its other choice. -/
+def failCode (L : Layout) (f : ℕ) : List UInt8 :=
+  ecode L.rt (RT.mem (RT.lit L.W)) ++ [0x9C, 7] ++ jmTo (f + 49) ++
+    (scodeR L.rt (f + 25) (RT.halt L.W) ++ [0xFF]) ++
+    (scodeR L.rt (f + 49) (RT.pop L.W) ++ ecode L.rt (RT.mem (RT.recAt L.W)) ++ [0x90, 0x9E])
+
+theorem length_failCode (L : Layout) (f : ℕ) : (failCode L f).length = 461 := by
+  simp [failCode, length_scodeR_halt, length_scodeR_pop, length_ecode_cnt, length_ecode_alt, jmTo]
 
 /-- **The code of a statement** placed at address `a`. -/
 def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
@@ -642,6 +758,13 @@ def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
     match L.arrayAt x with
     | some (a₀, _) => ecode L e ++ ecode L i ++ addrCode a₀ ++ [0x95]
     | none => []
+  | .choice p q =>
+    let b := a + 415
+    let alt := b + slen L p + 5
+    scodeR L.rt a (RT.save L.W alt) ++ scode L b p ++ jmTo (alt + slen L q) ++ scode L alt q
+  | .ensure c =>
+    let f := a + (ecode L c).length + 13
+    ecode L c ++ test ++ jmTo f ++ jmTo (f + 461) ++ failCode L f
 
 theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).length = slen L p
   | .ok, _ => rfl
@@ -660,6 +783,9 @@ theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).leng
   | .check _ _, _ => rfl
   | .store x _ _, _ => by
     cases hx : L.arrayAt x <;> simp [scode, slen, hx]; omega
+  | .choice p q, a => by
+    simp [scode, slen, length_scode L p, length_scode L q, length_scodeR_save, jmTo]; omega
+  | .ensure _, _ => by simp [scode, slen, length_failCode, test, jmTo]
 
 /-- How deep the stack gets in a statement. -/
 def sdepth : Stmt → ℕ
@@ -677,6 +803,8 @@ def sdepth : Stmt → ℕ
   | .restore _ _ => 2
   | .check _ _ => 2
   | .store _ i e => max (depth e) (max (depth i + 1) 3)
+  | .choice p q => max 4 (max (sdepth p) (sdepth q))
+  | .ensure c => max (depth c) 4
 
 /-- The named statements' code, each at its entry and followed by `rt`, below
 the variables. -/
