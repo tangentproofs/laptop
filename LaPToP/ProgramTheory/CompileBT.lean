@@ -965,4 +965,161 @@ theorem sim_ensureF {L : Layout} (hB : BTOk L) {ks : List Stmt} {st : PSt ℕ Va
     obtain ⟨e₁, e₂⟩ := hr.same cp' (by simp [hcp'])
     exact ⟨e₁.trans et.symm, e₂.trans er.symm⟩
 
+/-! ### The ends -/
+
+theorem high_hl {s : State} (hip : 256 ≤ getIP s) (hop : high s (getIP s) = 0xFF) :
+    high (step s) = high s := by
+  rw [step_of s _ hip hop, runOp_hl]; simp
+
+set_option maxRecDepth 20000 in
+/-- **Failure**: a false `ensure` with no choice point left sets the flag and
+halts. -/
+theorem sim_fail {L : Layout} (hB : BTOk L) {ks : List Stmt} {st : PSt ℕ Value} {c : Exp}
+    (hf : Fits L st.mem c) (hc : c.eval st.mem = .bool false) (hfr : frames ks = 0)
+    {s : State} (hr : BRel L ⟨(.ensure c :: ks, st), []⟩ s) :
+    ∃ s', Steps s s' ∧ getRST s' = 0 ∧ Wd L (high s') (L.W + 4) = fromInt32 (-1) := by
+  have hL := hB.ok
+  have hb : L.base + 4 * L.n + 4 * cellsOf L.arrays + 16 ≤ 65536 := hL.2
+  have hcap := hB.cap
+  have hcw : L.W + 5 ≤ L.cap := by unfold Layout.cap; omega
+  obtain ⟨s₃, f, r₃, -, w₃, run₃, i₃, f0, f1, d₃, c₃, hh₃, -, hF⟩ := to_fail hL hf hc hfr hr
+  obtain ⟨hC, hH0, hH1, -, hHa, hHl, -, -, -, -⟩ := fail_code hF
+  have hcnt : rd (words L (high s₃)) L.W = 0 := by
+    rw [rd_words (by omega), hh₃, hr.cnt]; rfl
+  obtain ⟨s₄, r₄, w₄, i₄, d₄, sm₄⟩ := rt_exp (σ := fun _ => .int 0) hB.rt
+    (fits_mem (j := L.W) (fits_rlit (Alloc.inR (by norm_num) (by omega))) rfl (by omega)
+      (by simp; omega) (length_words L _)) w₃ run₃ (by omega)
+    (by rw [i₃, length_ecode_cnt]; unfold MAXBYTE; omega) (by rw [i₃]; exact hC) d₃
+    (by simp [depth, STACKSZ])
+  rw [i₃, length_ecode_cnt] at i₄
+  simp only [eval_mem, eval_rlit, Value.toInt_int, hcnt] at d₄
+  have hop₄ : high s₄ (getIP s₄) = 0x9C := by rw [i₄, sm₄.high]; exact hH0
+  have hd₄ : high s₄ (getIP s₄ + 1) = 7 := by rw [i₄, sm₄.high]; exact hH1
+  have h7 : sbyte 7 = 7 := by decide
+  obtain ⟨w₅, i₅, d₅, sm₅⟩ := step_h0 s₄ [] _ w₄ (by rw [i₄]; omega) (by rw [i₄]; unfold MAXBYTE; omega)
+    hop₄ (by simpa using d₄) (by rw [hd₄, h7, i₄]; simp only [Int.ofNat_eq_natCast]; omega)
+    (by rw [hd₄, h7, i₄]; simp only [Int.ofNat_eq_natCast]; unfold MAXBYTE; omega)
+  rw [ite_eq_left (by decide), hd₄, h7, i₄] at i₅
+  have i₅' : getIP (step s₄) = f + 25 := by rw [i₅]; simp only [Int.ofNat_eq_natCast]; omega
+  have run₅ : Running (step s₄) := sm₅.running (sm₄.running run₃)
+  have hh₅ : high (step s₄) = high s₃ := by rw [sm₅.high, sm₄.high]
+  -- set the flag
+  have sv := sev_rstore (L := L) (d := 0) (σ := fun _ => .int 0) (ms := words L (high (step s₄)))
+    (i := RT.lit (L.W + 4)) (e := RT.lit (-1)) (j := L.W + 4) (k := -1)
+    (fits_rlit (Alloc.inR (by omega) (by omega))) (fits_rlit (Alloc.inR (by norm_num) (by norm_num)))
+    rfl rfl (by omega) (by simp; omega) (length_words L _)
+  obtain ⟨s₆, r₆, w₆, run₆, i₆, d₆, wd₆, k₆⟩ := rt_runs (P := RT.halt L.W) hB.rt sv (by simp)
+    w₅ run₅ i₅' (by omega) (by rw [slen_halt]; omega) (by rw [hh₅]; exact hHa)
+    (by rw [d₅]) (by rw [sm₅.cs, sm₄.cs, c₃]) (by simp [RT.halt, sdepth, depth, STACKSZ])
+  rw [slen_halt] at i₆
+  have hop₆ : high s₆ (getIP s₆) = 0xFF := by rw [i₆, k₆.low _ (by simp only [Layout.rt]; omega), hh₅]; exact hHl
+  refine ⟨step s₆, (r₃.trans ((r₄.tail ⟨sm₄.running run₃, notIo_of_hop (by rw [i₄]; omega) hop₄, rfl⟩).trans
+    r₆)).tail ⟨run₆, notIo_of_hop (by omega) hop₆, rfl⟩, step_hl s₆ w₆ (by omega) hop₆, ?_⟩
+  rw [high_hl (by omega) hop₆, wd₆ _ (by omega)]
+  have := rd_set (ms := words L (high (step s₄))) (k := -1) (j := L.W + 4) (by omega) (by simp; omega)
+    (L.W + 4)
+  rw [ite_eq_left rfl] at this
+  rw [show ((L.W + 4 : ℕ) : ℤ) = (L.W : ℤ) + 4 by push_cast; rfl, this]
+
+/-- **Success**: nothing is left; the machine halts with the cells holding the
+state, and the flag clear. -/
+theorem sim_done {L : Layout} (hL : L.Ok) {st : PSt ℕ Value} {cps : List (List Stmt × PSt ℕ Value)}
+    {s : State} (hr : BRel L ⟨([], st), cps⟩ s) :
+    ∃ s', Steps s s' ∧ getRST s' = 0 ∧ VarsOk L (high s') st.mem ∧
+      Wd L (high s') (L.W + 4) = 0 := by
+  obtain ⟨s₁, r₁, hr₁, hd₁, -⟩ := hr.follow hL
+  obtain ⟨h₁, h₂, h₃⟩ := hd₁.nil_inv
+  refine ⟨step s₁, r₁.tail ⟨hr₁.p.run, notIo_of_hop h₁ h₃, rfl⟩, step_hl s₁ hr₁.p.wf h₁ h₃, ?_, ?_⟩
+  · rw [high_hl h₁ h₃]; exact hr₁.p.vars
+  · rw [high_hl h₁ h₃]; exact hr₁.flag
+
+/-! ### Runs -/
+
+/-- **A step of backtracking is steps of the machine.** -/
+theorem bt_step {L : Layout} (hB : BTOk L) {c c' : BCfg} (h : BStep L c c') {s : State}
+    (hr : BRel L c s) : ∃ s', Steps s s' ∧ BRel L c' s' := by
+  cases h with
+  | act ha ht => exact sim_act hB.ok ha ht hr
+  | choice hfr hlen => exact sim_choice hB hfr hlen hr
+  | ensureT hf hc => exact sim_ensureT hB.ok hf hc hr
+  | ensureF hf hc hfr => exact sim_ensureF hB hf hc hfr hr
+
+/-- **A run of backtracking is a run of the machine.** -/
+theorem bt_steps {L : Layout} (hB : BTOk L) {c c' : BCfg} (h : Relation.ReflTransGen (BStep L) c c')
+    {s : State} (hr : BRel L c s) : ∃ s', Steps s s' ∧ BRel L c' s' := by
+  induction h with
+  | refl => exact ⟨s, .refl, hr⟩
+  | tail _ hs ih =>
+    obtain ⟨s₁, r₁, h₁⟩ := ih
+    obtain ⟨s₂, r₂, h₂⟩ := bt_step hB hs h₁
+    exact ⟨s₂, r₁.trans r₂, h₂⟩
+
+/-- Where backtracking starts: the program, the state, time `0`, no choice point. -/
+def BCfg.init (p : Stmt) (st : St) : BCfg := ⟨([p], ⟨st, 0, fun _ => 0, fun _ => 0⟩), []⟩
+
+theorem high_load (L : Layout) (p : Stmt) (st : St) {a : ℕ} (ha : 256 ≤ a) :
+    high (load L p st) a = (loadMem L p st).get! a := by
+  let s₀ : State := ⟨loadMem L p st, Array.replicate STACKSZ 0, Array.replicate STACKSZ 0, ""⟩
+  have hload : load L p st = setRST (setIP s₀ L.start) 1 := rfl
+  have : high (load L p st) = high s₀ := by rw [hload]; simp
+  rw [this]; simp [high, s₀, ha]
+
+/-- Memory above the cells starts as zeros. -/
+theorem load_top (L : Layout) (hL : L.Ok) (p : Stmt) (st : St) (hfit : L.start + slen L p + 1 ≤ L.base)
+    {i : ℕ} (hi : L.top ≤ i) : high (load L p st) i = 0 := by
+  have h1 := hL.1
+  rw [L.top_eq] at hi
+  rw [high_load L p st (by omega), loadMem, get!_writeVars_out _ _ _ _ _ (Or.inr (by unfold Layout.W at hi; omega)),
+    get!_writeArrs_out _ _ _ _ _ (Or.inr (by unfold Layout.W at hi; omega))]
+  by_cases hm : i < MAXBYTE
+  · rw [get!_writeBytes _ _ _ (by simp; unfold Layout.start at hfit; have := hL.2; omega),
+      ite_eq_right (by unfold Layout.start at hfit; simp; omega), get!_zeros]
+  · simp only [ByteArray.get!]
+    rw [getElem!_neg _ i (by simp [writeBytes] at *; simpa using hm)]; rfl
+
+theorem wd_load (L : Layout) (hL : L.Ok) (p : Stmt) (st : St) (hfit : L.start + slen L p + 1 ≤ L.base)
+    {j : ℕ} (hj : L.W ≤ j) : Wd L (high (load L p st)) j = 0 := by
+  unfold Wd word
+  rw [load_top L hL p st hfit (by rw [L.top_eq]; omega), load_top L hL p st hfit (by rw [L.top_eq]; omega),
+    load_top L hL p st hfit (by rw [L.top_eq]; omega), load_top L hL p st hfit (by rw [L.top_eq]; omega)]
+  rfl
+
+/-- **The loaded machine holds backtracking's start.** -/
+theorem bt_init {L : Layout} (hL : L.Ok) {p : Stmt} (hF : L.Fit p) (hcl : p.clean = true) (st : St) :
+    BRel L (BCfg.init p st) (load L p st) := by
+  have hf₁ := hF.hi
+  obtain ⟨hw, hrun, hip, hc, hv, hd, hcs⟩ := load_ready L hL p st hf₁
+  obtain ⟨hc₁, hc₂⟩ := L.main_of_compile hc
+  have hs : 256 ≤ L.start := by unfold Layout.start; omega
+  refine ⟨⟨hw, hrun, hd, ?_, hv, by rw [getClk_load L hL _ _ hf₁]; rfl, by simp [TFits, BCfg.init],
+    fun _ => rfl, L.image_of_compile hF hc⟩, by rw [wd_load L hL p st hf₁ le_rfl]; rfl,
+    wd_load L hL p st hf₁ (by omega), by simp [BCfg.init], fun i h => by simp [BCfg.init] at h,
+    fun cp h => by simp [BCfg.init] at h⟩
+  rw [hip, hcs]
+  exact .cons hs (by omega) hF.depth hcl hc₁ (.nil (by omega) (by omega) hc₂)
+
+/-- **What backtracking finds, the machine finds**: when backtracking runs to the
+end, the loaded machine halts, the flag clear, with the cells holding the state
+it ends in. -/
+theorem bt_success {L : Layout} (hB : BTOk L) {p : Stmt} (hF : L.Fit p) (hcl : p.clean = true)
+    {st : St} {t : PSt ℕ Value} {cps : List (List Stmt × PSt ℕ Value)}
+    (h : Relation.ReflTransGen (BStep L) (BCfg.init p st) ⟨([], t), cps⟩) :
+    ∃ n, getRST (runN n (load L p st)) = 0 ∧ VarsOk L (high (runN n (load L p st))) t.mem ∧
+      Wd L (high (runN n (load L p st))) (L.W + 4) = 0 := by
+  obtain ⟨s₁, r₁, h₁⟩ := bt_steps hB h (bt_init hB.ok hF hcl st)
+  obtain ⟨s₂, r₂, h₂, v₂, f₂⟩ := sim_done hB.ok h₁
+  obtain ⟨n, hn⟩ := runN_of_steps (r₁.trans r₂)
+  exact ⟨n, by rw [hn]; exact h₂, by rw [hn]; exact v₂, by rw [hn]; exact f₂⟩
+
+/-- **When backtracking fails, the machine says so**: it halts with the flag set. -/
+theorem bt_failure {L : Layout} (hB : BTOk L) {p : Stmt} (hF : L.Fit p) (hcl : p.clean = true)
+    {st : St} {c : BCfg} (h : Relation.ReflTransGen (BStep L) (BCfg.init p st) c) (hfail : BFails L c) :
+    ∃ n, getRST (runN n (load L p st)) = 0 ∧
+      Wd L (high (runN n (load L p st))) (L.W + 4) = fromInt32 (-1) := by
+  obtain ⟨ks, st', e, rfl, hf, hc, hfr⟩ := hfail
+  obtain ⟨s₁, r₁, h₁⟩ := bt_steps hB h (bt_init hB.ok hF hcl st)
+  obtain ⟨s₂, r₂, h₂, f₂⟩ := sim_fail hB hf hc hfr h₁
+  obtain ⟨n, hn⟩ := runN_of_steps (r₁.trans r₂)
+  exact ⟨n, by rw [hn]; exact h₂, by rw [hn]; exact f₂⟩
+
 end LaPToP.ProgramTheory.CompileBT
