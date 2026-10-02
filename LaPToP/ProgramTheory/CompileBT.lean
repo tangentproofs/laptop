@@ -1122,4 +1122,128 @@ theorem bt_failure {L : Layout} (hB : BTOk L) {p : Stmt} (hF : L.Fit p) (hcl : p
   obtain ⟨n, hn⟩ := runN_of_steps (r₁.trans r₂)
   exact ⟨n, by rw [hn]; exact h₂, by rw [hn]; exact f₂⟩
 
+/-! ### What backtracking finds is what the language allows -/
+
+/-- What is left takes `s` to `t`, by the language's semantics. -/
+def EvalK (L : Layout) : List Stmt → St → St → Prop
+  | [], s, t => s = t
+  | p :: ks, s, t => ∃ u, @Eval ℕ Value L.env _ p.toProg s u ∧ EvalK L ks u t
+
+/-- A solution: from what is left, or from a choice point. -/
+def Sol (L : Layout) (c : BCfg) (t : St) : Prop :=
+  EvalK L c.cur.1 c.cur.2.mem t ∨ ∃ cp ∈ c.cps, EvalK L cp.1 cp.2.mem t
+
+/-- A step of the program: what is left after it reaches what it reached
+before, and back. -/
+theorem sact_evalK {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ Value}
+    (h : SAct L lone noScripts a b Λ) (t : St) :
+    EvalK L b.1 b.2.mem t ↔ EvalK L a.1 a.2.mem t := by
+  let _ := L.env
+  cases h with
+  | ok => exact ⟨fun h => ⟨_, .ok, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+  | assign =>
+    exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+  | tick => exact ⟨fun h => ⟨_, .tick, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+  | seq =>
+    exact ⟨fun ⟨u, hu, v, hv, h⟩ => ⟨v, .seq hu hv, h⟩,
+      fun ⟨v, hv, h⟩ => by cases hv with | seq hu hv => exact ⟨_, hu, _, hv, h⟩⟩
+  | condT _ hc =>
+    exact ⟨fun ⟨u, hu, h⟩ => ⟨u, .condTrue (by simp [Exp.test, hc]) hu, h⟩, fun ⟨u, hu, h⟩ => by
+      cases hu with
+      | condTrue _ hu => exact ⟨u, hu, h⟩
+      | condFalse hf _ => simp_all [Exp.test]⟩
+  | condF _ hc =>
+    exact ⟨fun ⟨u, hu, h⟩ => ⟨u, .condFalse (by simp [Exp.test, hc]) hu, h⟩, fun ⟨u, hu, h⟩ => by
+      cases hu with
+      | condTrue ht _ => simp_all [Exp.test]
+      | condFalse _ hu => exact ⟨u, hu, h⟩⟩
+  | loopT _ hc =>
+    exact ⟨fun ⟨u, hu, v, hv, h⟩ => ⟨v, .whileTrue (by simp [Exp.test, hc]) hu hv, h⟩, fun ⟨v, hv, h⟩ => by
+      cases hv with
+      | whileTrue _ hu hv => exact ⟨_, hu, _, hv, h⟩
+      | whileFalse hf => simp_all [Exp.test]⟩
+  | loopF _ hc =>
+    exact ⟨fun h => ⟨_, .whileFalse (by simp [Exp.test, hc]), h⟩, fun ⟨v, hv, h⟩ => by
+      cases hv with
+      | whileTrue ht _ _ => simp_all [Exp.test]
+      | whileFalse _ => exact h⟩
+  | send hch => simp [lone] at hch
+  | recv hch => simp [lone] at hch
+  | call =>
+    exact ⟨fun ⟨u, hu, v, hv, h⟩ => by cases hv; exact ⟨u, .call hu, h⟩,
+      fun ⟨u, hu, h⟩ => by cases hu with | call hu => exact ⟨u, hu, _, .ok, h⟩⟩
+  | ret => exact ⟨fun h => ⟨_, .ok, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+  | scope =>
+    exact ⟨fun ⟨u, hu, v, hv, h⟩ => by cases hv; exact ⟨_, .newLocal hu, h⟩,
+      fun ⟨v, hv, h⟩ => by cases hv with | newLocal hu => exact ⟨_, hu, _, .assign, h⟩⟩
+  | restore => exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+  | store => exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+
+/-- **A step of backtracking keeps the solutions**: the same, before and after. -/
+theorem bstep_sol {L : Layout} {c c' : BCfg} (h : BStep L c c') (t : St) : Sol L c' t ↔ Sol L c t := by
+  let _ := L.env
+  cases h with
+  | act ha _ =>
+    simp only [Sol]; rw [sact_evalK ha]
+  | @choice ks st p q cps _ _ =>
+    simp only [Sol, EvalK, List.mem_cons, exists_eq_or_imp]
+    constructor
+    · rintro (⟨u, hu, h⟩ | ⟨u, hu, h⟩ | h)
+      · exact .inl ⟨u, .orLeft hu, h⟩
+      · exact .inl ⟨u, .orRight hu, h⟩
+      · exact .inr h
+    · rintro (⟨u, hu, h⟩ | h)
+      · cases hu with
+        | orLeft hu => exact .inl ⟨u, hu, h⟩
+        | orRight hu => exact .inr (.inl ⟨u, hu, h⟩)
+      · exact .inr (.inr h)
+  | ensureT _ hc =>
+    simp only [Sol, EvalK]
+    constructor
+    · rintro (h | h)
+      · exact .inl ⟨_, .ensure (by simp [Exp.test, hc]), h⟩
+      · exact .inr h
+    · rintro (⟨u, hu, h⟩ | h)
+      · cases hu; exact .inl h
+      · exact .inr h
+  | ensureF _ hc _ =>
+    simp only [Sol, EvalK, List.mem_cons, exists_eq_or_imp]
+    constructor
+    · rintro (h | h)
+      · exact .inr (.inl h)
+      · exact .inr (.inr h)
+    · rintro (⟨u, hu, h⟩ | h | h)
+      · cases hu; simp_all [Exp.test]
+      · exact .inl h
+      · exact .inr h
+
+theorem bsteps_sol {L : Layout} {c c' : BCfg} (h : Relation.ReflTransGen (BStep L) c c') (t : St) :
+    Sol L c' t ↔ Sol L c t := by
+  induction h with
+  | refl => rfl
+  | tail _ hs ih => exact (bstep_sol hs t).trans ih
+
+/-- **Sound**: what backtracking ends with is a poststate of the program. -/
+theorem bt_sound {L : Layout} {p : Stmt} {st : St} {t : PSt ℕ Value} {cps : List (List Stmt × PSt ℕ Value)}
+    (h : Relation.ReflTransGen (BStep L) (BCfg.init p st) ⟨([], t), cps⟩) :
+    @Eval ℕ Value L.env _ p.toProg st t.mem := by
+  have := (bsteps_sol h t.mem).mp (.inl rfl)
+  simp only [Sol, BCfg.init, EvalK, List.not_mem_nil, false_and, exists_false, or_false] at this
+  obtain ⟨u, hu, rfl⟩ := this
+  exact hu
+
+/-- **Complete about failure**: when backtracking fails, the program has no
+poststate at all. -/
+theorem bt_fail_sound {L : Layout} {p : Stmt} {st : St} {c : BCfg}
+    (h : Relation.ReflTransGen (BStep L) (BCfg.init p st) c) (hfail : BFails L c) (t : St) :
+    ¬ @Eval ℕ Value L.env _ p.toProg st t := by
+  intro he
+  have hs : Sol L (BCfg.init p st) t := .inl ⟨t, he, rfl⟩
+  have := (bsteps_sol h t).mpr hs
+  obtain ⟨ks, st', e, rfl, -, hc, -⟩ := hfail
+  have hb : Exp.test e st'.mem = false := by simp [Exp.test, hc]
+  rcases this with ⟨u, hu, -⟩ | ⟨cp, hcp, -⟩
+  · cases hu; simp_all
+  · simp at hcp
+
 end LaPToP.ProgramTheory.CompileBT
