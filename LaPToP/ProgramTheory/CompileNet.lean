@@ -618,33 +618,33 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     (hsend : ∀ ch e ks, a.1 ≠ .send ch e :: ks) (hrecv : ∀ ch x ks, a.1 ≠ .recv ch x :: ks)
     {s : State} {r : ℕ → ℕ} (hp : PRel L a.1 a.2 s r)
     (hd : Direct L (high s) (cstack s) a.1 (getIP s)) :
-    ∃ s', Steps s s' ∧ PRel L b.1 b.2 s' r := by
+    ∃ s', Steps s s' ∧ PRel L b.1 b.2 s' r ∧ ∀ i, L.top ≤ i → high s' i = high s i := by
   have hb := hL.2
   cases h with
   | @ok ks st =>
     obtain ⟨-, -, -, -, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     exact ⟨s, .refl, ⟨hp.wf, hp.run, hp.stack, by simpa [slen] using hk, hp.vars, hp.clk, hp.tfit,
-      hp.rd, hp.image⟩⟩
+      hp.rd, hp.image⟩, fun _ _ => rfl⟩
   | @assign ks st x e hx ha hf =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     obtain ⟨s', r', w', run', i', d', v', k'⟩ := assign_runs L hL hx ha hf s (getIP s)
       ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
     refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
-      hp.image.mono k'.low⟩⟩
+      hp.image.mono k'.low⟩, k'.top⟩
     rw [i', k'.cs]; exact hk.mono k'.low
   | @store ks st x i e hfi hf =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     obtain ⟨s', r', w', run', i', d', v', k'⟩ := store_runs L hL hfi hf s (getIP s)
       ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
     refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
-      hp.image.mono k'.low⟩⟩
+      hp.image.mono k'.low⟩, k'.top⟩
     rw [i', k'.cs]; exact hk.mono k'.low
   | @tick ks st hfit =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     obtain ⟨s', r', w', run', i', d', c', hi', hcs', -⟩ := tick_runs (L := L) hp.wf hp.run h₁
       (by simp [slen] at h₂; omega) h₄ hp.stack hp.clk hfit
     refine ⟨s', r', ⟨w', run', d', by rw [hi', i', hcs']; simpa [slen] using hk,
-      by rw [hi']; exact hp.vars, c', hfit, hp.rd, by rw [hi']; exact hp.image⟩⟩
+      by rw [hi']; exact hp.vars, c', hfit, hp.rd, by rw [hi']; exact hp.image⟩, fun i _ => by rw [hi']⟩
   | @seq ks st p q =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
     simp only [Stmt.clean, Bool.and_eq_true] at hcl
@@ -653,7 +653,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     simp only [slen, sdepth] at h₂ h₃ hk
     exact ⟨s, .refl, ⟨hp.wf, hp.run, hp.stack, .cons h₁ (by omega) (by omega) hcl.1 h₄.1
       (.cons (by omega) (by omega) (by omega) hcl.2 h₄.2 (by rwa [Nat.add_assoc])), hp.vars, hp.clk,
-      hp.tfit, hp.rd, hp.image⟩⟩
+      hp.tfit, hp.rd, hp.image⟩, fun _ _ => rfl⟩
   | @condT ks st c p q hf hc =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
     simp only [Stmt.clean, Bool.and_eq_true] at hcl
@@ -666,7 +666,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       hp.stack (by omega)
     simp only [ite_true] at i'
     refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
-      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩⟩
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩, fun i _ => by rw [sm'.high]⟩
     rw [i', sm'.high, sm'.cs]
     refine .cons (by omega) (by omega) (by omega) hcl.1 hP (.jump (by omega) (by omega) hJ' ?_)
     convert hk using 1; omega
@@ -682,7 +682,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       hp.stack (by omega)
     simp only [Bool.false_eq_true, ite_false] at i'
     refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
-      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩⟩
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩, fun i _ => by rw [sm'.high]⟩
     rw [i', sm'.high, sm'.cs]
     refine .jump (by omega) (by omega) hJ (.cons (by omega) (by omega) (by omega) hcl.2 hQ ?_)
     convert hk using 1; omega
@@ -699,7 +699,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       hp.stack (by omega)
     simp only [ite_true] at i'
     refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
-      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩⟩
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩, fun i _ => by rw [sm'.high]⟩
     rw [i', sm'.high, sm'.cs]
     exact .cons (by omega) (by omega) (by omega) hcl' hP
       (.jump (by omega) (by omega) hJ' (.cons h₁ h₂' h₃' hcl h₄ hk))
@@ -714,7 +714,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       hp.stack (by omega)
     simp only [Bool.false_eq_true, ite_false] at i'
     refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
-      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩⟩
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [sm'.high]; exact hp.image⟩, fun i _ => by rw [sm'.high]⟩
     rw [i', sm'.high, sm'.cs]
     refine .jump (by omega) (by omega) hJ ?_
     convert hk using 1; omega
@@ -741,7 +741,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     refine ⟨step s, Steps.one hp.run (notIo_of_hop h₁ hop),
       ⟨w₁, ⟨f₁.st.trans hp.run.1, f₁.db.trans hp.run.2⟩, by rw [d₁]; exact hp.stack, ?_,
         by rw [f₁.high]; exact hp.vars, by rw [f₁.clk]; exact hp.clk, hp.tfit, hp.rd,
-        by rw [f₁.high]; exact hp.image⟩⟩
+        by rw [f₁.high]; exact hp.image⟩, fun i _ => by rw [f₁.high]⟩
     rw [i₁, f₁.high, c₁]
     exact .cons he₁ (by omega) he₃ hcl hc₂.1
       (.ret (by omega) (by omega) (by simpa using hc₂.2 0 (by simp)) hk')
@@ -754,7 +754,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     refine ⟨step s, Steps.one hp.run (notIo_of_hop h₁ h₃),
       ⟨w₁, ⟨f₁.st.trans hp.run.1, f₁.db.trans hp.run.2⟩, by rw [d₁]; exact hp.stack,
         by rw [i₁, hbn, f₁.high, c₁]; exact hk, by rw [f₁.high]; exact hp.vars,
-        by rw [f₁.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [f₁.high]; exact hp.image⟩⟩
+        by rw [f₁.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [f₁.high]; exact hp.image⟩, fun i _ => by rw [f₁.high]⟩
   | @scope ks st x e p hx ha hf hfr =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
     have hcsl : (cstack s).length < STACKSZ := by
@@ -783,7 +783,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     simp only [slen] at i₂
     have hhigh : ∀ i < L.base, high s₂ i = high s i := fun i hi => by rw [k₂.low i hi, f₁.high]
     refine ⟨s₂, r₁.trans r₂, ⟨w₂, run₂, d₂, ?_, v₂, by rw [k₂.clk, f₁.clk]; exact hp.clk, hp.tfit,
-      hp.rd, hp.image.mono hhigh⟩⟩
+      hp.rd, hp.image.mono hhigh⟩, fun i hi => by rw [k₂.top i hi, f₁.high]⟩
     rw [i₂, k₂.cs, c₁]
     refine .cons (by omega) (by omega) (by omega) hcl
       (hP.mono hhigh (by rw [length_scode]; omega)) ?_
@@ -791,10 +791,10 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     exact (hk.mono hhigh).cast (by omega)
   | @restore ks st x v =>
     obtain ⟨cs', hcs, h₁, h₂, hx, ha, h₄, hk⟩ := hd.restore_inv
-    obtain ⟨s', r', w', run', i', d', c', v', lo', -, k'⟩ := restore_runs L hL hx ha hp.wf hp.run h₁
+    obtain ⟨s', r', w', run', i', d', c', v', lo', -, k', top'⟩ := restore_runs L hL hx ha hp.wf hp.run h₁
       h₂ h₄ hp.vars hp.stack hcs
     exact ⟨s', r', ⟨w', run', d', by rw [i', c']; exact hk.mono lo', v', by rw [k']; exact hp.clk,
-      hp.tfit, hp.rd, hp.image.mono lo'⟩⟩
+      hp.tfit, hp.rd, hp.image.mono lo'⟩, top'⟩
 
 theorem toNat_encT {t : ℕ∞} (h : TFits t) : (encT t).toNat = t.toNat := by
   have := h.toNat_lt
@@ -1050,7 +1050,7 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
       (∀ ch e ks', ks ≠ .send ch e :: ks') → (∀ ch x ks', ks ≠ .recv ch x :: ks') →
       ∃ w', Swarm.Steps w w' ∧ w'.owner = w.owner ∧ Rel L ⟨c.ps.set i b', c.L⟩ w' := by
     intro b' hb' hs' hr'
-    obtain ⟨s₂, r₂, hp₂⟩ := machine_sim L hL hb' hs' hr' hp₁ hd₁
+    obtain ⟨s₂, r₂, hp₂, -⟩ := machine_sim L hL hb' hs' hr' hp₁ hd₁
     refine ⟨{ w with ms := w.ms.set i s₂ }, ?_, rfl, ?_⟩
     · have := swarm_lift hs₁ r₂; simp at this; exact hw₁.trans (by simpa using this)
     · have := hr.set hlt (ks := b'.1) (st := b'.2) (s := s₂) (Λ := c.L) hp₂ hr.chans

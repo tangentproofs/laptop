@@ -133,6 +133,9 @@ def cellsOf (l : List (ℕ × ℕ)) : ℕ := (l.map (·.2)).sum
 /-- Where array variable `x`'s cells start, and how many there are. -/
 def Layout.arrayAt (L : Layout) (x : ℕ) : Option (ℕ × ℕ) := arrFrom (L.base + 4 * L.n) L.arrays x
 
+/-- Where the cells end: everything from here up is no variable's. -/
+def Layout.top (L : Layout) : ℕ := L.base + 4 * L.n + 4 * cellsOf L.arrays
+
 /-- The cells lie in high memory. -/
 def Layout.Ok (L : Layout) : Prop :=
   256 ≤ L.base ∧ L.base + 4 * L.n + 4 * cellsOf L.arrays + 16 ≤ MAXBYTE
@@ -801,14 +804,23 @@ structure Keeps (L : Layout) (s s' : State) : Prop where
   cs : cstack s' = cstack s
   ob : s'.ob = s.ob
   clk : getClk s' = getClk s
+  /-- And everything above the cells. -/
+  top : ∀ i, L.top ≤ i → high s' i = high s i
 
 theorem Keeps.trans {L : Layout} {s₁ s₂ s₃ : State} (h₁ : Keeps L s₁ s₂) (h₂ : Keeps L s₂ s₃) :
     Keeps L s₁ s₃ :=
   ⟨fun i hi => (h₂.low i hi).trans (h₁.low i hi), h₂.cs.trans h₁.cs, h₂.ob.trans h₁.ob,
-    h₂.clk.trans h₁.clk⟩
+    h₂.clk.trans h₁.clk, fun i hi => (h₂.top i hi).trans (h₁.top i hi)⟩
 
 theorem _root_.B4.Same.keeps {L : Layout} {s s' : State} (h : Same s s') : Keeps L s s' :=
-  ⟨fun i _ => by rw [h.high], h.cs, h.ob, h.clk⟩
+  ⟨fun i _ => by rw [h.high], h.cs, h.ob, h.clk, fun i _ => by rw [h.high]⟩
+
+/-- Writing a variable's cell keeps what is above the cells. -/
+theorem writeWord_top {L : Layout} {m : ℕ → UInt8} {a i : ℕ} {v : UInt32} (ha : a + 4 ≤ L.top)
+    (hi : L.top ≤ i) : writeWord m a v i = m i := by
+  unfold writeWord
+  simp [show i ≠ a by omega, show i ≠ a + 1 by omega, show i ≠ a + 2 by omega,
+    show i ≠ a + 3 by omega]
 
 /-- What every statement lemma assumes of the machine: statement `p`'s code at
 the pointer `a`, below the variables, which hold `st`, and an empty stack. -/
@@ -882,7 +894,9 @@ theorem assign_runs (L : Layout) (hL : L.Ok) {d x : ℕ} {e : Exp} {st : St} (hx
   · rw [i₃, i₂, i₁, h.ip]; simp [slen]; omega
   · rw [hi₃, sm₂.high, sm₁.high]; exact varsOk_write h.vars hx ha
   · refine ⟨fun i hi => ?_, by rw [c₃, sm₂.cs, sm₁.cs], by rw [o₃, sm₂.ob, sm₁.ob],
-      by rw [hclk, sm₂.clk, sm₁.clk]⟩
+      by rw [hclk, sm₂.clk, sm₁.clk], fun i hi => ?_⟩
+    swap
+    · rw [hi₃, sm₂.high, sm₁.high, writeWord_top (by unfold Layout.addr Layout.top; omega) hi]
     rw [hi₃, sm₂.high, sm₁.high]
     unfold writeWord Layout.addr
     have : i < L.base := hi
@@ -962,7 +976,9 @@ theorem store_runs (L : Layout) (hL : L.Ok) {d x : ℕ} {i e : Exp} {st : St}
   · rw [i₄, i₃, i₂, i₁, h.ip]; simp [slen, hx]; omega
   · rw [hi₄, sm.high, hvs, hj, Value.toInt_int, Value.update_single ⟨hj0, hjl⟩]
     exact varsOk_store h.vars hx hvs hjc
-  · refine ⟨fun k hk => ?_, by rw [c₄, sm.cs], by rw [o₄, sm.ob], by rw [hclk, sm.clk]⟩
+  · refine ⟨fun k hk => ?_, by rw [c₄, sm.cs], by rw [o₄, sm.ob], by rw [hclk, sm.clk], fun k hk => ?_⟩
+    swap
+    · rw [hi₄, sm.high, writeWord_top (by unfold Layout.top; omega) hk]
     rw [hi₄, sm.high]
     unfold writeWord
     simp [show k ≠ a₀ + 4 * j.toNat by omega, show k ≠ a₀ + 4 * j.toNat + 1 by omega,
@@ -1034,7 +1050,7 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {d : ℕ} {p : Stmt} {st st' : St}
   induction h with
   | ok =>
     intro s a h
-    exact ⟨s, .refl, h.wf, h.run, by rw [h.ip]; rfl, h.stack, h.vars, ⟨fun _ _ => rfl, rfl, rfl, rfl⟩⟩
+    exact ⟨s, .refl, h.wf, h.run, by rw [h.ip]; rfl, h.stack, h.vars, ⟨fun _ _ => rfl, rfl, rfl, rfl, fun _ _ => rfl⟩⟩
   | assign hx ha hf => exact assign_runs L hL hx ha hf
   | store hfi hf => exact store_runs L hL hfi hf
   | @seq _ p q s t u _ _ ih₁ ih₂ =>
@@ -1172,7 +1188,8 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {d : ℕ} {p : Stmt} {st st' : St}
       ⟨run₂, notIo_of_hop (by rw [i₂]; omega) hop₂, rfl⟩, w₃,
       ⟨f₃.st.trans run₂.1, f₃.db.trans run₂.2⟩, by rw [i₃, hret]; simp [slen],
       by rw [d₃, d₂], by rw [f₃.high]; exact v₂, ⟨fun i hi => by rw [f₃.high, k₂.low i hi, f₁.high],
-        c₃, by rw [f₃.ob, k₂.ob, f₁.ob], by rw [f₃.clk, k₂.clk, f₁.clk]⟩⟩
+        c₃, by rw [f₃.ob, k₂.ob, f₁.ob], by rw [f₃.clk, k₂.clk, f₁.clk],
+        fun i hi => by rw [f₃.high, k₂.top i hi, f₁.high]⟩⟩
   | @scope d x e p s t hx ha hf hd _ ih =>
     intro σ a h
     have hb := hL.2
@@ -1271,7 +1288,11 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {d : ℕ} {p : Stmt} {st st' : St}
     · rw [i₈, i₇, i₆, i₅]; simp [slen]; omega
     · rw [hi₈, sm₇.high, f₆.high]; exact varsOk_write v₅ hx ha
     · refine ⟨fun i hi => ?_, by rw [c₈, sm₇.cs, c₆], by rw [o₈, sm₇.ob, f₆.ob, hk₅.ob, f₃.ob,
-        sm₂.ob, sm₁.ob], by rw [hclk₈, sm₇.clk, f₆.clk, hk₅.clk, f₃.clk, sm₂.clk, sm₁.clk]⟩
+        sm₂.ob, sm₁.ob], by rw [hclk₈, sm₇.clk, f₆.clk, hk₅.clk, f₃.clk, sm₂.clk, sm₁.clk],
+        fun i hi => ?_⟩
+      swap
+      · rw [hi₈, sm₇.high, f₆.high, writeWord_top (by unfold Layout.addr Layout.top; omega) hi,
+          ← hhigh₃, ← hk₅.top i hi]
       rw [hi₈, sm₇.high, f₆.high, ← hhigh₃, ← hk₅.low i hi]
       unfold writeWord Layout.addr
       have : i < L.base := hi
@@ -1324,7 +1345,8 @@ theorem restore_runs (L : Layout) (hL : L.Ok) {s : State} {st : St} {x : ℕ} {v
     (hv : VarsOk L (high s) st) (hd : dstack s = []) (hcs : cstack s = cs ++ [enc v]) :
     ∃ s', Steps s s' ∧ WF s' ∧ Running s' ∧ getIP s' = getIP s + 7 ∧ dstack s' = [] ∧
       cstack s' = cs ∧ VarsOk L (high s') (Function.update st x v) ∧
-      (∀ i < L.base, high s' i = high s i) ∧ s'.ob = s.ob ∧ getClk s' = getClk s := by
+      (∀ i < L.base, high s' i = high s i) ∧ s'.ob = s.ob ∧ getClk s' = getClk s ∧
+      (∀ i, L.top ≤ i → high s' i = high s i) := by
   have hb := hL.2
   have haddr : L.addr x + 3 < MAXBYTE := by unfold Layout.addr; omega
   have haddr' : 256 ≤ (UInt32.ofNat (L.addr x)).toNat := by
@@ -1355,7 +1377,8 @@ theorem restore_runs (L : Layout) (hL : L.Ok) {s : State} {st : St} {x : ℕ} {v
   refine ⟨step (step (step s)), ((Steps.one hr (notIo_of_hop hlo hop₅)).tail
       ⟨run₆, notIo_li hAt₆, rfl⟩).tail ⟨run₇, notIo_of_hop hip₇ hop₇, rfl⟩, w₈,
     ⟨st₈.trans run₇.1, db₈.trans run₇.2⟩, by rw [i₈, i₇, i₆], d₈,
-    by rw [c₈, sm₇.cs, c₆], ?_, ?_, by rw [o₈, sm₇.ob, f₆.ob], by rw [hclk₈, sm₇.clk, f₆.clk]⟩
+    by rw [c₈, sm₇.cs, c₆], ?_, ?_, by rw [o₈, sm₇.ob, f₆.ob], by rw [hclk₈, sm₇.clk, f₆.clk],
+    fun i hi => by rw [hi₈, sm₇.high, f₆.high, writeWord_top (by unfold Layout.addr Layout.top; omega) hi]⟩
   · rw [hi₈, sm₇.high, f₆.high]; exact varsOk_write hv hx ha
   · intro i hi
     rw [hi₈, sm₇.high, f₆.high]
