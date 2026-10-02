@@ -1,4 +1,4 @@
-import B4.Theory
+import B4.Swarm
 import LaPToP.ProgramTheory.InterpreterLang
 import Mathlib.Logic.Relation
 import Mathlib.Data.List.GetD
@@ -385,6 +385,12 @@ inductive Stmt where
   | cond (c : Exp) (p q : Stmt)
   /-- `while c do P od`. -/
   | loop (c : Exp) (p : Stmt)
+  /-- `t:= t+1`. -/
+  | tick
+  /-- `c! e`, on channel number `c`. -/
+  | send (c : ℕ) (e : Exp)
+  /-- `c?. x:= c`: input on channel number `c`, kept in `x`. -/
+  | recv (c : ℕ) (x : ℕ)
 
 /-- A statement as a program of the language. -/
 def Stmt.toProg : Stmt → P
@@ -393,6 +399,10 @@ def Stmt.toProg : Stmt → P
   | .seq p q => .seq p.toProg q.toProg
   | .cond c p q => ifThen c p.toProg q.toProg
   | .loop c p => Lang.loop c p.toProg
+  | .tick => .tick
+  -- Communication means something only in a network (`CompileNet`); alone, it has
+  -- no behaviour.
+  | .send _ _ | .recv _ _ => .ensure fun _ => false
 
 /-- `jm a`. -/
 def jmTo (a : ℕ) : List UInt8 := 0x9A :: le4 (UInt32.ofNat a)
@@ -408,6 +418,9 @@ def slen (L : Layout) : Stmt → ℕ
   | .seq p q => slen L p + slen L q
   | .cond c p q => (ecode L c).length + 8 + slen L p + 5 + slen L q
   | .loop c p => (ecode L c).length + 8 + slen L p + 5
+  | .tick => 8
+  | .send _ e => (ecode L e).length + 11
+  | .recv _ _ => 17
 
 /-- **The code of a statement** placed at address `a`. -/
 def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
@@ -421,6 +434,10 @@ def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
   | .loop c p =>
     let b := a + (ecode L c).length + 8
     ecode L c ++ test ++ jmTo (b + slen L p + 5) ++ scode L b p ++ jmTo a
+  | .tick => [0x34] ++ (0x97 :: le4 1) ++ [0x80, 0x54]
+  | .send c e => ecode L e ++ (0x97 :: le4 (UInt32.ofNat c)) ++ (0x97 :: le4 SEND) ++ [0xFD]
+  | .recv c x => (0x97 :: le4 (UInt32.ofNat c)) ++ (0x97 :: le4 RECV) ++ [0xFD] ++
+      (0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95]
 
 theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).length = slen L p
   | .ok, _ => rfl
@@ -429,6 +446,9 @@ theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).leng
   | .cond c p q, a => by
     simp [scode, slen, length_scode L p, length_scode L q, test, jmTo]; omega
   | .loop c p, a => by simp [scode, slen, length_scode L p, test, jmTo]; omega
+  | .tick, _ => rfl
+  | .send _ _, _ => by simp [scode, slen]
+  | .recv _ _, _ => rfl
 
 /-- How deep the stack gets in a statement. -/
 def sdepth : Stmt → ℕ
@@ -437,6 +457,9 @@ def sdepth : Stmt → ℕ
   | .seq p q => max (sdepth p) (sdepth q)
   | .cond c p q => max (depth c) (max (sdepth p) (sdepth q))
   | .loop c p => max (depth c) (sdepth p)
+  | .tick => 2
+  | .send _ e => max (depth e) 3
+  | .recv _ _ => 2
 
 /-- **Execution in 32 bits**: the language's execution of a statement, in which
 every expression evaluated fits (`Fits`), every assigned variable has a cell, and
@@ -529,13 +552,15 @@ structure Keeps (L : Layout) (s s' : State) : Prop where
   low : ∀ i < L.base, high s' i = high s i
   cs : cstack s' = cstack s
   ob : s'.ob = s.ob
+  clk : getClk s' = getClk s
 
 theorem Keeps.trans {L : Layout} {s₁ s₂ s₃ : State} (h₁ : Keeps L s₁ s₂) (h₂ : Keeps L s₂ s₃) :
     Keeps L s₁ s₃ :=
-  ⟨fun i hi => (h₂.low i hi).trans (h₁.low i hi), h₂.cs.trans h₁.cs, h₂.ob.trans h₁.ob⟩
+  ⟨fun i hi => (h₂.low i hi).trans (h₁.low i hi), h₂.cs.trans h₁.cs, h₂.ob.trans h₁.ob,
+    h₂.clk.trans h₁.clk⟩
 
 theorem _root_.B4.Same.keeps {L : Layout} {s s' : State} (h : Same s s') : Keeps L s s' :=
-  ⟨fun i _ => by rw [h.high], h.cs, h.ob⟩
+  ⟨fun i _ => by rw [h.high], h.cs, h.ob, h.clk⟩
 
 /-- What every statement lemma assumes of the machine: statement `p`'s code at
 the pointer `a`, below the variables, which hold `st`, and an empty stack. -/
@@ -589,6 +614,9 @@ theorem assign_runs (L : Layout) (hL : L.Ok) {x : ℕ} {e : Exp} {st : St} (hx :
     (by rw [d₂, d₁, h.stack]; rfl)
     (by rw [toNat_ofNat_addr (by omega)]; unfold Layout.addr; have := hL.1; omega)
     (by rw [toNat_ofNat_addr (by omega)]; exact haddr)
+  have hclk := step_wi_clk (step s₁) [] (enc (e.eval st)) (UInt32.ofNat (L.addr x)) w₂
+    (by rw [i₂]; have := h₁.lo; omega) hop (by rw [d₂, d₁, h.stack]; rfl)
+    (by rw [toNat_ofNat_addr (by omega)]; unfold Layout.addr; have := hL.1; omega)
   rw [toNat_ofNat_addr (by omega)] at hi₃
   have hr₂ : Running (step s₁) := sm₂.running (sm₁.running h.run)
   refine ⟨step (step s₁), (r₁.tail ⟨sm₁.running h.run, notIo_li h₁, rfl⟩).tail
@@ -596,7 +624,8 @@ theorem assign_runs (L : Layout) (hL : L.Ok) {x : ℕ} {e : Exp} {st : St} (hx :
     ⟨st₃.trans hr₂.1, db₃.trans hr₂.2⟩, ?_, d₃, ?_, ?_⟩
   · rw [i₃, i₂, i₁, h.ip]; simp [slen]; omega
   · rw [hi₃, sm₂.high, sm₁.high]; exact varsOk_write h.vars
-  · refine ⟨fun i hi => ?_, by rw [c₃, sm₂.cs, sm₁.cs], by rw [o₃, sm₂.ob, sm₁.ob]⟩
+  · refine ⟨fun i hi => ?_, by rw [c₃, sm₂.cs, sm₁.cs], by rw [o₃, sm₂.ob, sm₁.ob],
+      by rw [hclk, sm₂.clk, sm₁.clk]⟩
     rw [hi₃, sm₂.high, sm₁.high]
     unfold writeWord Layout.addr
     have : i < L.base := hi
@@ -669,7 +698,7 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {p : Stmt} {st st' : St} (h : SEval L
   induction h with
   | ok =>
     intro s a h
-    exact ⟨s, .refl, h.wf, h.run, by rw [h.ip]; rfl, h.stack, h.vars, ⟨fun _ _ => rfl, rfl, rfl⟩⟩
+    exact ⟨s, .refl, h.wf, h.run, by rw [h.ip]; rfl, h.stack, h.vars, ⟨fun _ _ => rfl, rfl, rfl, rfl⟩⟩
   | assign hx hf => exact assign_runs L hL hx hf
   | @seq p q s t u _ _ ih₁ ih₂ =>
     intro σ a h
