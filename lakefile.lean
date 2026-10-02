@@ -4,6 +4,12 @@ open Lake DSL
 require VersoBlueprint from git
   "https://github.com/tangentforks/verso-blueprint" @ "bump/lean-4.35"
 
+-- The b4 virtual machine, which Hehner's language is compiled to
+-- (`LaPToP.ProgramTheory.CompileB4`). Pinned to a commit of the branch carrying
+-- its formalization until that is merged.
+require b4 from git
+  "https://github.com/tangentstorm/b4" @ "557425c41fcfe3eddb6f80a6b64c7bf5987d8e6a" / "imp/lean"
+
 -- Mathlib last so its transitive pins win for `lake exe cache get` hashes.
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4" @ "09a9e06e4e5ccd5b783f25e52ad3ebecfb1e2d68"
