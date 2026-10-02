@@ -56,7 +56,8 @@ usage: interp [options] [file]
 
   file               read the program from this file (default: standard input)
   --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
-                     listSum, exitLoop, deepExit, forLoop, gcd, swap, sort, even,
+                     listSum, exitLoop, deepExit, forLoop, gcd, swap, sort,
+                     subset, even,
                      channel, parSwap, seqPar, parTime, probEx1, probEx2, rand,
                      and the networks sendRecv, buffer, deadlock, doubler,
                      pipeline, poll
@@ -73,8 +74,9 @@ usage: interp [options] [file]
                      on a swarm of b4 machines): ok, tick, x:= e, if, while,
                      do/exit and for loops, new, simultaneous assignment,
                      specifications with parameters and recursion, c! e, c?,
-                     a || of processes, and arrays (A i, A i:= e, each array
-                     as long as the list it starts with), on 32-bit integers
+                     a || of processes, arrays (A i, A i:= e, each array as
+                     long as the list it starts with), and backtracking (P or
+                     Q, ensure c, in a program without ||), on 32-bit integers
   --net              run as a network of communicating processes (Chapter 9),
                      as is done anyway when the program has channels and a ||:
                      each process has its own variables, communicates only on
@@ -206,6 +208,7 @@ def demoSrc : String → Option String
   | "backtrack" => some Lang.Demo.backtrackSrc
   | "arrays" => some Lang.Demo.arraysSrc
   | "sort" => some Lang.Demo.sortSrc
+  | "subset" => some Lang.Demo.subsetSrc
   | "listSum" => some Lang.Demo.listSumSrc
   | "exitLoop" => some Lang.Demo.exitLoopSrc
   | "deepExit" => some Lang.Demo.deepExitSrc
@@ -281,6 +284,24 @@ def runSelfTest : IO UInt32 := do
        Function.update (heap [6, 3, 0, 0, 0, 0, 11, 2, 0, 0, 0, -1, 6, 1, 0, 0, 0, 0, 0, 0]) 0 (.int 7)),
      ("alloc (none)", ["n", "M"], allocToks,
        Function.update (heap [6, 3, 1, 0, 0, 0, -1, 11, 1, 0, 0, 0, 0, 0, 0, 0, 0]) 0 (.int 2))]
+  -- Backtracking on b4 against the interpreter's search: the first poststate, or none.
+  let subsetStart : ℤ → St := fun t =>
+    Function.update (Function.update (given [(0, 6), (1, t)]) 2 (.list ([3, 34, 4, 12, 5, 2].map .int)))
+      3 (.list (List.replicate 6 (.int 0)))
+  let btTests : List (String × List String × Toks × St) :=
+    [("backtrack", [], Lang.Demo.backtrackToks, given []),
+     ("subset (19)", ["n", "t", "A", "X"], Lang.Demo.subsetToks, subsetStart 19),
+     ("subset (none)", ["n", "t", "A", "X"], Lang.Demo.subsetToks, subsetStart 100)]
+  for (name, names, toks, start) in btTests do
+    match parseToksWith names toks, b4Outcome names toks start 100000 with
+    | .ok prog, .ok b =>
+      let ok := match b.status, prog.runAll 1000 start with
+        | .failed, [] => true
+        | .halted, r :: _ => b.agreesWith prog.names r
+        | _, _ => false
+      if ok then IO.println s!"ok    {name}: b4 backtracks to what the interpreter's search finds"
+      else IO.eprintln s!"FAIL  {name}: b4 and the interpreter's search differ"; bad := bad + 1
+    | .error e, _ | _, .error e => IO.eprintln s!"FAIL  {name}: {e}"; bad := bad + 1
   for (name, names, toks, start) in b4Tests do
     match parseToksWith names toks, b4Outcome names toks start 100000 with
     | .ok prog, .ok b =>
@@ -440,6 +461,13 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
       else if bp.procs.length == 1 && bp.chans.isEmpty then
         match parseToksMode false setNames ts with
         | .ok prog =>
+          if (bp.procs ++ bp.defs.map (·.2)).any (·.backtracks) then
+            -- backtracking finds the first poststate of the search
+            match out.status, prog.runAll o.fuel st with
+            | .failed, [] => true
+            | .halted, r :: _ => out.agreesWith prog.names r
+            | _, _ => false
+          else
           let arr : Array Value := Array.ofFn (n := prog.names.length) fun i => st i.1
           match prog.runFast o.fuel arr with
           | some r => out.agreesWith prog.names (toFun r)
@@ -453,6 +481,9 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
       IO.eprintln "interp --b4: warning: some value left 32 bits or some index left its array, \
         so the machine's result is not the language's (the compiler is proved correct only \
         within 32 bits and within the arrays)"
+    if out.status == .failed then
+      IO.println "no poststate: every choice ends in an ensure that fails"
+      return 2
     let shown := fun (w : String) (v : ℤ) =>
       match bp.names.idxOf? w with
       | some x => if bp.isBinVar x then (if v == 0 then "⊥" else "⊤") else toString v
@@ -476,6 +507,7 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     | .running =>
       IO.eprintln s!"interp --b4: the machines were still running after {o.fuel} rounds (--fuel)"
       return 2
+    | .failed => return 2
 
 def main (args : List String) : IO UInt32 := do
   match parseArgs args {} with

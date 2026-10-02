@@ -928,9 +928,13 @@ theorem run_test {s : State} {b : Bool} (hw : WF s) (hr : Running s) (hlo : 256 
 /-- What a statement's run keeps: the code and everything else below the
 variables, the control stack and the output. -/
 structure Keeps (L : Layout) (s s' : State) : Prop where
+  /-- Memory below the cells: the code. -/
   low : ∀ i < L.base, high s' i = high s i
+  /-- The control stack. -/
   cs : cstack s' = cstack s
+  /-- The output. -/
   ob : s'.ob = s.ob
+  /-- The clock. -/
   clk : getClk s' = getClk s
   /-- And everything above the cells. -/
   top : ∀ i, L.top ≤ i → high s' i = high s i

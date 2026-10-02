@@ -277,6 +277,9 @@ def loop (c : Exp) (a : PB) : PB := ⟨Lang.loop c a.p, do .ok [.loop c (← a.o
 /-- `new x := e in P end`. -/
 def declare (x : ℕ) (e : Exp) (a : PB) : PB := ⟨Lang.declare x e a.p, do .ok [.scope x e (← a.one)]⟩
 
+/-- `P or Q`. -/
+def choice (a b : PB) : PB := ⟨.or a.p b.p, do .ok [.choice (← a.one) (← b.one)]⟩
+
 /-- `P || Q`. -/
 def par (a b : PB) : PB := ⟨.par (fun _ => false) a.p b.p, do .ok ((← a.s) ++ (← b.s))⟩
 
@@ -776,7 +779,7 @@ def parseChoice (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
     match st.toks with
     | .word "or" :: ts₁ => do
       let (q, st) ← parseChoice f (st.at ts₁)
-      .ok (PB.no (.or p.p q.p) "a choice ('or')", st)
+      .ok (PB.choice p q, st)
     | _ => .ok (p, st)
 termination_by structural fuel
 
@@ -869,7 +872,7 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
     | .word "tick" :: ts => .ok (PB.of .tick .tick, st.at ts)
     | .word "ensure" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
-      .ok (st.withChecks (PB.no (ensure c) "'ensure'"))
+      .ok (st.withChecks (PB.of (ensure c) (.ensure c)))
     | .word "assert" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
       .ok (st.withChecks (PB.no (assert c) "'assert'"))
@@ -1397,6 +1400,19 @@ theorem sort_run :
       some (.list ([1, 2, 3, 4, 5, 9].map .int)) := by
   decide +kernel
 
+/-- Subset sum, by backtracking: choose for each item of `A` whether it is in
+(`X i = 1`), and `ensure` the chosen ones add up to `t`. -/
+def subsetSrc : String :=
+  "i:= 0. s:= 0. while i < n do (X i:= 0 or (X i:= 1. s:= s + A i)). i:= i + 1 od. ensure s = t"
+
+def subsetToks : Toks :=
+  [.word "i", .sym ":=", .num 0, .sym ".", .word "s", .sym ":=", .num 0, .sym ".",
+   .word "while", .word "i", .sym "<", .word "n", .word "do", .sym "(", .word "X", .word "i",
+   .sym ":=", .num 0, .word "or", .sym "(", .word "X", .word "i", .sym ":=", .num 1, .sym ".",
+   .word "s", .sym ":=", .word "s", .sym "+", .word "A", .word "i", .sym ")", .sym ")", .sym ".",
+   .word "i", .sym ":=", .word "i", .sym "+", .num 1, .word "od", .sym ".", .word "ensure",
+   .word "s", .sym "=", .word "t"]
+
 /-- `gcd(1071, 462) = 21`. -/
 theorem gcd_run :
     ((parseToksWith ["x", "y"] gcdToks).toOption.bind fun prog =>
@@ -1565,7 +1581,7 @@ def selfTests : List (String × String × Toks) :=
    ("arrays", arraysSrc, arraysToks), ("listSum", listSumSrc, listSumToks),
    ("exitLoop", exitLoopSrc, exitLoopToks), ("deepExit", deepExitSrc, deepExitToks),
    ("forLoop", forLoopSrc, forLoopToks), ("gcd", gcdSrc, gcdToks), ("swap", swapSrc, swapToks),
-   ("sort", sortSrc, sortToks),
+   ("sort", sortSrc, sortToks), ("subset", subsetSrc, subsetToks),
    ("even", evenSrc, evenToks), ("channel", channelSrc, channelToks),
    ("parSwap", parSwapSrc, parSwapToks), ("seqPar", seqParSrc, seqParToks),
    ("parTime", parTimeSrc, parTimeToks), ("probEx1", probEx1Src, probEx1Toks),

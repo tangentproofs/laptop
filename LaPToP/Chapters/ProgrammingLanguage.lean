@@ -1832,3 +1832,45 @@ search loop is proved by induction on the number of blocks, each round taking
 a used block or a merged free block that is too small into the blocks before.
 Every expression is shown to fit in 32 bits from the heap's bound.
 :::
+
+:::theorem "interpreter_backtrack" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, backtracking, hehner-5.4.0") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileBT.BCfg, LaPToP.ProgramTheory.CompileBT.BStep, LaPToP.ProgramTheory.CompileBT.BFails, LaPToP.ProgramTheory.CompileBT.RecOk, LaPToP.ProgramTheory.CompileBT.BRel, LaPToP.ProgramTheory.CompileBT.copy_runs, LaPToP.ProgramTheory.CompileBT.save_runs, LaPToP.ProgramTheory.CompileBT.pop_runs, LaPToP.ProgramTheory.CompileBT.rt_runs, LaPToP.ProgramTheory.CompileBT.sim_act, LaPToP.ProgramTheory.CompileBT.sim_choice, LaPToP.ProgramTheory.CompileBT.sim_ensureT, LaPToP.ProgramTheory.CompileBT.sim_ensureF, LaPToP.ProgramTheory.CompileBT.sim_fail, LaPToP.ProgramTheory.CompileBT.sim_done, LaPToP.ProgramTheory.CompileBT.bt_step, LaPToP.ProgramTheory.CompileBT.bt_steps, LaPToP.ProgramTheory.CompileBT.bt_init, LaPToP.ProgramTheory.CompileBT.bt_success, LaPToP.ProgramTheory.CompileBT.bt_failure, LaPToP.ProgramTheory.CompileBT.EvalK, LaPToP.ProgramTheory.CompileBT.Sol, LaPToP.ProgramTheory.CompileBT.bstep_sol, LaPToP.ProgramTheory.CompileBT.bt_sound, LaPToP.ProgramTheory.CompileBT.bt_fail_sound, LaPToP.ProgramTheory.CompileB4.Layout.rt, LaPToP.ProgramTheory.CompileB4.RT.copy, LaPToP.ProgramTheory.CompileB4.RT.save, LaPToP.ProgramTheory.CompileB4.RT.pop, LaPToP.ProgramTheory.CompileB4.failCode, LaPToP.ProgramTheory.CompileB4.Keeps")
+Backtracking — $`P\ \mathbf{or}\ Q` and $`\mathbf{ensure}\ c` of Section 5.4.0 —
+compiled to b4 and proved. A choice keeps a *choice point* above the variables'
+cells: the address of the code of the other choice, and a copy of every cell;
+then it runs the first choice. A false $`\mathbf{ensure}` takes the last
+choice point back — the copy into the cells — and jumps to the other choice;
+with none left, it sets a flag and halts. The code that keeps choice points is
+itself written in the language, over one array of memory's words, and compiled
+by the verified compiler; only the indirect jump to the other choice is
+written by hand.
+
+The language's backtracking is an abstract machine: what is left to run, its
+state, and the choice points, each what is left and the state to go back to.
+The theorems: the loaded machine simulates it step for step, so when
+backtracking runs to the end, the machine halts with the flag clear and the
+cells holding the state it ends in, and when backtracking fails, the machine
+halts with the flag set. What backtracking ends with is a poststate of the
+program, by the semantics of {uses "interpreter_soundness"}[], and when it
+fails the program has no poststate at all. `interp --b4` runs it, and its
+self-test checks it against the interpreter's search.
+
+Honest scope. Choices and failing $`\mathbf{ensure}`s are covered outside
+calls and local scopes, for a lone program (no channels, no $`\|`), without
+time, and in 32 bits; a search that never ends, or keeps more choice points
+than fit, is not.
+:::
+
+:::proof "interpreter_backtrack"
+The runtime's three programs — copy words, keep a choice point, take one back
+— are proved as programs, by induction on the words left to copy, about a list
+of integers; the verified compiler runs them on the machine's words. Statement
+runs are shown to leave memory above the cells alone, and below the base the
+code, so choice points survive the program's own steps, which are simulated as
+for a network's process. A choice is the runtime's save, then the first
+choice's code; a false $`\mathbf{ensure}` jumps to the failure code, which
+reads the count, takes the copy back and jumps, through the control stack, to
+the other choice's code — which, kept with the choice point, runs what is left.
+Every step of the abstract machine keeps the set of solutions — what is left
+and every choice point — exactly, so its end is a solution of the start, and a
+failure, with nothing left, shows the start has none.
+:::

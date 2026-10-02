@@ -1,5 +1,6 @@
 import LaPToP.ProgramTheory.CompileNet
 import LaPToP.ProgramTheory.NetworkLang
+import LaPToP.ProgramTheory.CompileBT
 
 /-!
 # Running the language on b4 (`interp --b4`)
@@ -53,6 +54,8 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toB4 : Stmt → Except String Stm
   | .send ch e => do .ok (.send ch (← e.toB4))
   | .scope x e p => do .ok (.scope x (← e.toB4) (← p.toB4))
   | .store x i e => do .ok (.store x (← i.toB4) (← e.toB4))
+  | .choice p q => do .ok (.choice (← p.toB4) (← q.toB4))
+  | .ensure c => do .ok (.ensure (← c.toB4))
   | s => .ok s
 
 /-- A program for b4: its processes (one, if there is no `||`), the named
@@ -83,7 +86,7 @@ A scope hides its own variable. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.writes (look : ℕ → List ℕ) : Stmt → List ℕ
   | .assign x _ | .store x _ _ => [x]
   | .recv _ x | .check _ x => [x]
-  | .seq p q | .cond _ p q => p.writes look ++ q.writes look
+  | .seq p q | .cond _ p q | .choice p q => p.writes look ++ q.writes look
   | .loop _ p => p.writes look
   | .scope x _ p => (p.writes look).filter (· != x)
   | .call k => look k
@@ -95,7 +98,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.comms (look : ℕ → List (Bool 
     Stmt → List (Bool × ℕ)
   | .send c _ => [(true, c)]
   | .recv c _ | .check c _ => [(false, c)]
-  | .seq p q | .cond _ p q => p.comms look ++ q.comms look
+  | .seq p q | .cond _ p q | .choice p q => p.comms look ++ q.comms look
   | .loop _ p | .scope _ _ p => p.comms look
   | .call k => look k
   | _ => []
@@ -129,7 +132,7 @@ def Exp.isBin : Exp → Bool
 /-- The expressions a statement assigns to `x`. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.assignsTo (x : ℕ) : Stmt → List Exp
   | .assign y e => if x = y then [e] else []
-  | .seq p q | .cond _ p q => p.assignsTo x ++ q.assignsTo x
+  | .seq p q | .cond _ p q | .choice p q => p.assignsTo x ++ q.assignsTo x
   | .loop _ p | .scope _ _ p => p.assignsTo x
   | _ => []
 
@@ -154,13 +157,15 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.arrs : Stmt → List ℕ
   | .cond c p q => c.arrs ++ p.arrs ++ q.arrs
   | .loop c p => c.arrs ++ p.arrs
   | .scope _ e p => e.arrs ++ p.arrs
+  | .choice p q => p.arrs ++ q.arrs
+  | .ensure c => c.arrs
   | _ => []
 
 /-- The variables a statement gives a whole new value: by assignment, input, or
 a scope. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.wholes : Stmt → List ℕ
   | .assign x _ | .recv _ x | .check _ x => [x]
-  | .seq p q | .cond _ p q => p.wholes ++ q.wholes
+  | .seq p q | .cond _ p q | .choice p q => p.wholes ++ q.wholes
   | .loop _ p => p.wholes
   | .scope x _ p => x :: p.wholes
   | _ => []
@@ -197,6 +202,8 @@ inductive B4Status where
   | deadlock
   /-- The fuel ran out. -/
   | running
+  /-- Backtracking failed: every choice ends in a false `ensure`. -/
+  | failed
   deriving DecidableEq, Repr
 
 /-- A word as an integer. -/
@@ -217,15 +224,56 @@ structure B4Outcome where
   arrays : List (String × List ℤ) := []
   deriving DecidableEq, Repr
 
+/-- Whether a statement backtracks (`or`, `ensure`). -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.backtracks : Stmt → Bool
+  | .choice _ _ | .ensure _ => true
+  | .seq p q | .cond _ p q => p.backtracks || q.backtracks
+  | .loop _ p | .scope _ _ p => p.backtracks
+  | _ => false
+
 /-- A value as b4 holds it, read back as an integer: a binary is `-1` or `0`. -/
 def Value.b4Int : Value → ℤ
   | .int k => k
   | .bool b => if b then -1 else 0
   | .list _ => 0
 
+/-- Run a program that backtracks: on one machine, with as many choice points
+as fit above the cells (`CompileBT`). -/
+def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outcome := do
+  let p ← match bp.procs with
+    | [p] => pure p
+    | _ => throw "backtracking ('or', 'ensure') is compiled only for a program without ||"
+  if !bp.chans.isEmpty then throw "backtracking ('or', 'ensure') is compiled only for a program without channels"
+  let L₀ := bp.layout s
+  let name := fun x => bp.names.getD x "?"
+  for (x, _) in L₀.arrays do
+    match s x with
+    | .list _ => pure ()
+    | _ => throw s!"{name x} is used as an array, so it must start as a list"
+    if (bp.procs ++ bp.defs.map (·.2)).any (·.wholes.contains x) then
+      throw s!"the b4 compiler changes the array {name x} only item by item, not as a whole"
+  let used := L₀.base + 4 * (L₀.W + 5) + 16
+  if used > MAXBYTE then throw "the program and its variables do not fit in b4's 64 KB"
+  let k := min 64 ((MAXBYTE - used) / (4 * (L₀.W + 1)))
+  if k = 0 then throw "no room in b4's 64 KB to keep a choice point"
+  let L := { L₀ with choices := k }
+  let m := runN (fuel * 10000) (load L p s)
+  let flag := toInt32 (getVal m.mem (L.base + 4 * (L.W + 4)))
+  let st := if getRST m != 0 then B4Status.running else if flag == -1 then .failed else .halted
+  let isArr := fun k => L.arrays.any (·.1 == k)
+  let value := fun x => B4Program.value (getVal m.mem (L.addr x))
+  let cells := fun x => match L.arrayAt x with
+    | some (a₀, cap) => (List.range cap).map fun j => B4Program.value (getVal m.mem (a₀ + 4 * j))
+    | none => []
+  .ok ⟨st, 0,
+    (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && !isArr k).map fun (n, k) => (n, value k),
+    [], (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && isArr k).map
+      fun (n, k) => (n, cells k)⟩
+
 /-- Run on b4: compile and load each process, run the swarm (a lone process is a
 swarm of one), and read back the result. -/
 def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outcome := do
+  if (bp.procs ++ bp.defs.map (·.2)).any (·.backtracks) then return ← bp.runBT s fuel
   let L := bp.layout s
   let name := fun x => bp.names.getD x "?"
   for (x, _) in L.arrays do
