@@ -165,6 +165,22 @@ of processes, over 32-bit integers and binaries; it names the first construct
 it does not take, and warns when a value leaves 32 bits. `interp --selftest`
 checks it against the interpreters on the demonstrations.
 
+Arrays — a variable holding a list, read as `A i` and written as `A i:= e` —
+get a cell per item after the variables (`run_addr`, `store_runs`). On them,
+`Alloc.lean` writes the memory allocator of b4's `mm.b4a` in the language and
+proves it against its model of blocks (`alloc_sEval`, `free_sEval`), on b4 as
+well (`alloc_on_b4`). Backtracking — `P or Q`, `ensure c` — runs too
+(`CompileBT.lean`): a choice keeps a choice point above the cells, a failed
+`ensure` takes the last one back, and the machine is proved to do what the
+language's backtracking does, finding a poststate the program has
+(`bt_success`, `bt_sound`) or, when the search fails, none at all
+(`bt_failure`, `bt_fail_sound`):
+```sh
+echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --b4          # => s = 1, t = 0
+lake exe interp --b4 --demo=subset --n=6 --t=19 '--A=[3;34;4;12;5;2]' '--X=[0;0;0;0;0;0]'
+# => ... X = [0; 0; 0; 1; 1; 1], i = 6, s = 19, t = 0
+```
+
 ## Prove a theorem by calculation (`lake exe netty`)
 
 Netty is a prover's assistant for calculational proofs — the tool described in
