@@ -40,7 +40,8 @@ def Exp.toB4 : Exp → Except String Exp
     | .gt => .ok (.bin .lt b a)
     | .ge => .ok (.un .not (.bin .lt a b))
     | _ => .error "the b4 compiler takes only + - × div mod = ≠ < ≤ > ≥ ¬ on integers and binaries"
-  | _ => .error "the b4 compiler takes only integers, binaries and variables, not lists"
+  | .index (.var x) i => do .ok (.index (.var x) (← i.toB4))
+  | _ => .error "the b4 compiler takes only integers, binaries, variables and items of arrays"
 
 /-- A statement's expressions in the operators the compiler takes, or why not. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toB4 : Stmt → Except String Stmt
@@ -50,6 +51,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toB4 : Stmt → Except String Stm
   | .loop c p => do .ok (.loop (← c.toB4) (← p.toB4))
   | .send ch e => do .ok (.send ch (← e.toB4))
   | .scope x e p => do .ok (.scope x (← e.toB4) (← p.toB4))
+  | .store x i e => do .ok (.store x (← i.toB4) (← e.toB4))
   | s => .ok s
 
 /-- A program for b4: its processes (one, if there is no `||`), the named
@@ -78,7 +80,7 @@ def parseB4 (names : List String) (ts : Toks) : Except String B4Program := do
 /-- The variables a statement may assign, given those each named statement may.
 A scope hides its own variable. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.writes (look : ℕ → List ℕ) : Stmt → List ℕ
-  | .assign x _ => [x]
+  | .assign x _ | .store x _ _ => [x]
   | .recv _ x | .check _ x => [x]
   | .seq p q | .cond _ p q => p.writes look ++ q.writes look
   | .loop _ p => p.writes look
@@ -135,11 +137,43 @@ def B4Program.isBinVar (bp : B4Program) (x : ℕ) : Bool :=
   let es := (bp.procs ++ bp.defs.map (·.2)).flatMap (·.assignsTo x)
   !es.isEmpty && es.all Exp.isBin
 
+/-- The variables an expression indexes. -/
+def Exp.arrs : Exp → List ℕ
+  | .index (.var x) i => x :: i.arrs
+  | .index a i => a.arrs ++ i.arrs
+  | .bin _ a b => a.arrs ++ b.arrs
+  | .un _ a => a.arrs
+  | _ => []
+
+/-- The variables a statement uses as arrays. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.arrs : Stmt → List ℕ
+  | .assign _ e | .send _ e => e.arrs
+  | .store x i e => x :: i.arrs ++ e.arrs
+  | .seq p q => p.arrs ++ q.arrs
+  | .cond c p q => c.arrs ++ p.arrs ++ q.arrs
+  | .loop c p => c.arrs ++ p.arrs
+  | .scope _ e p => e.arrs ++ p.arrs
+  | _ => []
+
+/-- The variables a statement gives a whole new value: by assignment, input, or
+a scope. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.wholes : Stmt → List ℕ
+  | .assign x _ | .recv _ x | .check _ x => [x]
+  | .seq p q | .cond _ p q => p.wholes ++ q.wholes
+  | .loop _ p => p.wholes
+  | .scope x _ p => x :: p.wholes
+  | _ => []
+
+/-- The array variables, each with as many cells as its list starts with. -/
+def B4Program.arrays (bp : B4Program) (s : St) : List (ℕ × ℕ) :=
+  ((bp.procs ++ bp.defs.map (·.2)).flatMap Stmt.arrs).eraseDups.map fun x => (x, (s x).toList.length)
+
 /-- The layout: the named statements from `0x100`, each process's code after
-them, and the cells above the longest. -/
-def B4Program.layout (bp : B4Program) : Layout :=
-  let L₀ := Layout.build 0 bp.names.length bp.defs
+them, the variables' cells above the longest, then the arrays'. -/
+def B4Program.layout (bp : B4Program) (s : St) : Layout :=
+  let L₀ := Layout.build 0 bp.names.length bp.defs (bp.arrays s)
   Layout.build (L₀.start + (bp.procs.map (slen L₀ ·)).foldl max 0 + 16) bp.names.length bp.defs
+    (bp.arrays s)
 
 /-- The network the processes make, with the command line's input on the
 channels no process writes. -/
@@ -178,13 +212,28 @@ structure B4Outcome where
   vars : List (String × ℤ)
   /-- The scripts, values with the times they were sent. -/
   scripts : List (String × List (ℤ × ℕ))
+  /-- The arrays. -/
+  arrays : List (String × List ℤ) := []
   deriving DecidableEq, Repr
+
+/-- A value as b4 holds it, read back as an integer: a binary is `-1` or `0`. -/
+def Value.b4Int : Value → ℤ
+  | .int k => k
+  | .bool b => if b then -1 else 0
+  | .list _ => 0
 
 /-- Run on b4: compile and load each process, run the swarm (a lone process is a
 swarm of one), and read back the result. -/
 def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outcome := do
-  let L := bp.layout
-  if !(L.base + 4 * L.n + 16 ≤ MAXBYTE) then
+  let L := bp.layout s
+  let name := fun x => bp.names.getD x "?"
+  for (x, _) in L.arrays do
+    match s x with
+    | .list _ => pure ()
+    | _ => throw s!"{name x} is used as an array, so it must start as a list"
+    if (bp.procs ++ bp.defs.map (·.2)).any (·.wholes.contains x) then
+      throw s!"the b4 compiler changes the array {name x} only item by item, not as a whole"
+  if !(L.base + 4 * L.n + 4 * cellsOf L.arrays + 16 ≤ MAXBYTE) then
     throw "the program and its variables do not fit in b4's 64 KB"
   let net := bp.toSNet s
   for c in [0:bp.chans.length] do
@@ -198,21 +247,26 @@ def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outco
   let value := fun x => match owner x with
     | some i => ((w.ms[i]?).map fun m => B4Program.value (getVal m.mem (L.addr x))).getD 0
     | none => (s x).toInt
+  let cells := fun x => match L.arrayAt x, owner x with
+    | some (a₀, cap), some i => ((w.ms[i]?).map fun m =>
+        (List.range cap).map fun j => B4Program.value (getVal m.mem (a₀ + 4 * j))).getD []
+    | _, _ => (s x).toList.map Value.b4Int
+  let isArr := fun k => L.arrays.any (·.1 == k)
   .ok ⟨st, (w.ms.map fun m => (getClk m).toNat).foldl max 0,
-    (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && !bp.chans.any (·.2.1 == k)).map
-      fun (n, k) => (n, value k),
+    (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && !bp.chans.any (·.2.1 == k) &&
+      !isArr k).map fun (n, k) => (n, value k),
     bp.chans.zipIdx.map fun ((n, _, _), c) =>
-      (n, (w.chans c).map fun (v, t) => (B4Program.value v, t.toNat))⟩
+      (n, (w.chans c).map fun (v, t) => (B4Program.value v, t.toNat)),
+    (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && isArr k).map
+      fun (n, k) => (n, cells k)⟩
 
 /-- Parse and run on b4. -/
 def b4Outcome (names : List String) (ts : Toks) (s : St) (fuel : ℕ) : Except String B4Outcome := do
   (← parseB4 names ts).run s fuel
 
-/-- A value as b4 holds it, read back as an integer: a binary is `-1` or `0`. -/
-def Value.b4Int : Value → ℤ
-  | .int k => k
-  | .bool b => if b then -1 else 0
-  | .list _ => 0
+/-- Whether the arrays a run on b4 shows are the lists `look` gives. -/
+def B4Outcome.arraysAre (b : B4Outcome) (look : String → Option Value) : Bool :=
+  b.arrays.all fun (n, l) => (look n).any fun v => l == v.toList.map Value.b4Int
 
 /-- Whether a run on b4 shows what the network machine computed. -/
 def B4Outcome.agrees (b : B4Outcome) (o : NetOutcome) : Bool :=
@@ -220,13 +274,17 @@ def B4Outcome.agrees (b : B4Outcome) (o : NetOutcome) : Bool :=
     | .done, .halted => b.time == o.time.toNat && o.time != ⊤
     | .deadlock, .deadlock => true
     | _, _ => false) &&
-  b.vars == o.vars.map (fun (n, v) => (n, v.b4Int)) &&
+  b.vars == (o.vars.filter fun (n, _) => !b.arrays.any (·.1 == n)).map
+    (fun (n, v) => (n, v.b4Int)) &&
+  b.arraysAre (fun n => o.vars.lookup n) &&
   b.scripts == o.scripts.map (fun (n, l) => (n, l.map fun (v, t) => (v.b4Int, t.toNat)))
 
 /-- Whether a run of a single program on b4 shows what the interpreter computed. -/
 def B4Outcome.agreesWith (b : B4Outcome) (names : List String) (s : St) : Bool :=
   b.status == .halted &&
-    b.vars == (names.zipIdx.filter fun (n, _) => !n.startsWith "#").map fun (n, k) => (n, (s k).b4Int)
+    b.vars == (names.zipIdx.filter fun (n, _) => !n.startsWith "#" && !b.arrays.any (·.1 == n)).map
+      (fun (n, k) => (n, (s k).b4Int)) &&
+    b.arraysAre fun n => (names.idxOf? n).map s
 
 namespace Demo
 

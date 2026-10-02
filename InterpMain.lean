@@ -55,7 +55,7 @@ usage: interp [options] [file]
 
   file               read the program from this file (default: standard input)
   --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
-                     listSum, exitLoop, deepExit, forLoop, gcd, swap, even,
+                     listSum, exitLoop, deepExit, forLoop, gcd, swap, sort, even,
                      channel, parSwap, seqPar, parTime, probEx1, probEx2, rand,
                      and the networks sendRecv, buffer, deadlock, doubler,
                      pipeline, poll
@@ -71,8 +71,9 @@ usage: interp [options] [file]
   --b4               compile to the b4 virtual machine and run there (a network
                      on a swarm of b4 machines): ok, tick, x:= e, if, while,
                      do/exit and for loops, new, simultaneous assignment,
-                     specifications with parameters and recursion, c! e, c?
-                     and a || of processes, on 32-bit integers
+                     specifications with parameters and recursion, c! e, c?,
+                     a || of processes, and arrays (A i, A i:= e, each array
+                     as long as the list it starts with), on 32-bit integers
   --net              run as a network of communicating processes (Chapter 9),
                      as is done anyway when the program has channels and a ||:
                      each process has its own variables, communicates only on
@@ -203,6 +204,7 @@ def demoSrc : String → Option String
   | "sumTo" => some Lang.Demo.sumToSrc
   | "backtrack" => some Lang.Demo.backtrackSrc
   | "arrays" => some Lang.Demo.arraysSrc
+  | "sort" => some Lang.Demo.sortSrc
   | "listSum" => some Lang.Demo.listSumSrc
   | "exitLoop" => some Lang.Demo.exitLoopSrc
   | "deepExit" => some Lang.Demo.deepExitSrc
@@ -260,7 +262,9 @@ def runSelfTest : IO UInt32 := do
      ("deepExit", [], Lang.Demo.deepExitToks, given []),
      ("forLoop", ["n"], Lang.Demo.forLoopToks, given [(0, 10)]),
      ("gcd", ["x", "y"], Lang.Demo.gcdToks, given [(0, 12), (1, 18)]),
-     ("swap", ["x", "y"], Lang.Demo.swapToks, given [(0, 1), (1, 2)])]
+     ("swap", ["x", "y"], Lang.Demo.swapToks, given [(0, 1), (1, 2)]),
+     ("sort", ["n", "A"], Lang.Demo.sortToks, Function.update (given [(0, 6)]) 1
+       (.list ([5, 3, 9, 1, 4, 2].map .int)))]
   for (name, names, toks, start) in b4Tests do
     match parseToksWith names toks, b4Outcome names toks start 100000 with
     | .ok prog, .ok b =>
@@ -430,13 +434,18 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
         | .ok n => n.status == .running || out.status == .running || out.agrees n
         | .error _ => true
     if !agrees then
-      IO.eprintln "interp --b4: warning: some value left 32 bits, so the machine's result is \
-        not the language's (the compiler is proved correct only within 32 bits)"
+      IO.eprintln "interp --b4: warning: some value left 32 bits or some index left its array, \
+        so the machine's result is not the language's (the compiler is proved correct only \
+        within 32 bits and within the arrays)"
     let shown := fun (w : String) (v : ℤ) =>
       match bp.names.idxOf? w with
       | some x => if bp.isBinVar x then (if v == 0 then "⊥" else "⊤") else toString v
       | none => toString v
-    let vars := ", ".intercalate (out.vars.map fun (w, v) => s!"{w} = {shown w v}")
+    let vars := ", ".intercalate (bp.names.filterMap fun w =>
+      match out.vars.lookup w, out.arrays.lookup w with
+      | some v, _ => some s!"{w} = {shown w v}"
+      | none, some l => some s!"{w} = [{"; ".intercalate (l.map toString)}]"
+      | none, none => none)
     let time := if out.status == .deadlock then "∞" else toString out.time
     IO.println (if vars.isEmpty then s!"t = {time}" else s!"{vars}, t = {time}")
     for (w, sc) in out.scripts do

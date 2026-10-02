@@ -992,7 +992,8 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           let (e, st) ← parseExp f st
           match idx with
           | [] => .ok (st.withChecks (PB.assign x e))
-          | _ => .ok (st.withChecks (PB.no (assignIdx x idx e) "an indexed assignment"))
+          | [i] => .ok (st.withChecks (PB.of (assignIdx x [i] e) (.store x i e)))
+          | _ => .ok (st.withChecks (PB.no (assignIdx x idx e) "an assignment at more than one index"))
     | t :: _ => .error s!"expected a statement, found '{t.render}'"
     | [] => .error "expected a statement, found the end of the program"
 termination_by structural fuel
@@ -1372,6 +1373,30 @@ def gcdToks : Toks :=
    .word "b", .sym ")", .word "fi", .word "Gcd", .sym "(", .word "x", .sym ",", .word "y",
    .sym ")"]
 
+/-- Insertion sort of an array `A` of `n` items, item by item: a program the b4
+compiler takes, arrays and all. -/
+def sortSrc : String :=
+  "i:= 1. while i < n do j:= i. while 0 < j do if A (j-1) > A j then t:= A j. A j:= A (j-1). \
+  A (j-1):= t. j:= j-1 else j:= 0 fi od. i:= i+1 od"
+
+def sortToks : Toks :=
+  [.word "i", .sym ":=", .num 1, .sym ".", .word "while", .word "i", .sym "<", .word "n",
+   .word "do", .word "j", .sym ":=", .word "i", .sym ".", .word "while", .num 0, .sym "<",
+   .word "j", .word "do", .word "if", .word "A", .sym "(", .word "j", .sym "-", .num 1, .sym ")",
+   .sym ">", .word "A", .word "j", .word "then", .word "t", .sym ":=", .word "A", .word "j",
+   .sym ".", .word "A", .word "j", .sym ":=", .word "A", .sym "(", .word "j", .sym "-", .num 1,
+   .sym ")", .sym ".", .word "A", .sym "(", .word "j", .sym "-", .num 1, .sym ")", .sym ":=",
+   .word "t", .sym ".", .word "j", .sym ":=", .word "j", .sym "-", .num 1, .word "else",
+   .word "j", .sym ":=", .num 0, .word "fi", .word "od", .sym ".", .word "i", .sym ":=",
+   .word "i", .sym "+", .num 1, .word "od"]
+
+/-- It sorts `[5; 3; 9; 1; 4; 2]`. -/
+theorem sort_run :
+    ((parseToksWith ["n", "A"] sortToks).toOption.bind fun prog =>
+      prog.run 1000 (initWith [(0, .int 6), (1, .list ([5, 3, 9, 1, 4, 2].map .int))])).map (· 1) =
+      some (.list ([1, 2, 3, 4, 5, 9].map .int)) := by
+  decide +kernel
+
 /-- `gcd(1071, 462) = 21`. -/
 theorem gcd_run :
     ((parseToksWith ["x", "y"] gcdToks).toOption.bind fun prog =>
@@ -1540,6 +1565,7 @@ def selfTests : List (String × String × Toks) :=
    ("arrays", arraysSrc, arraysToks), ("listSum", listSumSrc, listSumToks),
    ("exitLoop", exitLoopSrc, exitLoopToks), ("deepExit", deepExitSrc, deepExitToks),
    ("forLoop", forLoopSrc, forLoopToks), ("gcd", gcdSrc, gcdToks), ("swap", swapSrc, swapToks),
+   ("sort", sortSrc, sortToks),
    ("even", evenSrc, evenToks), ("channel", channelSrc, channelToks),
    ("parSwap", parSwapSrc, parSwapToks), ("seqPar", seqParSrc, seqParToks),
    ("parTime", parTimeSrc, parTimeToks), ("probEx1", probEx1Src, probEx1Toks),
