@@ -83,10 +83,19 @@ theorem word_le4 {m : ℕ → UInt8} {a : ℕ} {v : UInt32} (h : CodeAt m a (le4
 
 /-! ### Running -/
 
-/-- The machine goes from `s` to `s'`, running all the way. -/
-def Steps (s s' : State) : Prop := ReflTransGen (fun a b => Running a ∧ b = step a) s s'
+/-- The next instruction is not `io`: the machine's own step, which a swarm
+lets it take as it is. -/
+def NotIo (s : State) : Prop := s.mem.get! (getIP s) ≠ 0xFD
 
-theorem Steps.one {s : State} (h : Running s) : Steps s (step s) := .single ⟨h, rfl⟩
+theorem notIo_of_hop {s : State} {op : UInt8} (hlo : 256 ≤ getIP s) (hop : high s (getIP s) = op)
+    (hne : op ≠ 0xFD := by decide) : NotIo s := by
+  unfold NotIo; rw [get!_ip s hlo, hop]; exact hne
+
+/-- The machine goes from `s` to `s'`, running all the way, and never at an `io`. -/
+def Steps (s s' : State) : Prop := ReflTransGen (fun a b => Running a ∧ NotIo a ∧ b = step a) s s'
+
+theorem Steps.one {s : State} (h : Running s) (hn : NotIo s) : Steps s (step s) :=
+  .single ⟨h, hn, rfl⟩
 
 theorem _root_.B4.Same.running {s s' : State} (h : Same s s') (hr : Running s) : Running s' :=
   ⟨h.st.trans hr.1, h.db.trans hr.2⟩
@@ -240,7 +249,7 @@ theorem At.left {L : Layout} {st : St} {s : State} {bs₁ bs₂ : List UInt8} {d
 theorem run_bin (L : Layout) (st : St) (op : BinOp) (a b : Exp) (byte : UInt8)
     (f : UInt32 → UInt32 → UInt32)
     (hr : ∀ s, runOp s byte = (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (f x y)))
-    (hb : binByte op = byte)
+    (hb : binByte op = byte) (hne : byte ≠ 0xFD)
     (hval : f (enc (a.eval st)) (enc (b.eval st)) = enc ((Exp.bin op a b).eval st))
     (iha : ERuns L st a) (ihb : ERuns L st b) (fa : Fits L st a) (fb : Fits L st b)
     (s : State) (h : At L st s (ecode L (.bin op a b)) (depth (.bin op a b))) :
@@ -256,7 +265,7 @@ theorem run_bin (L : Layout) (st : St) (op : BinOp) (a b : Exp) (byte : UInt8)
     have := h₂.code 0 (by simp); simpa [hb] using this
   obtain ⟨w₃, i₃, d₃, sm₃⟩ := step_binop' s₂ byte f (dstack s) (enc (a.eval st)) (enc (b.eval st))
     w₂ h₂.lo (by have := h₂.hi; simp at this; unfold MAXBYTE at this; omega) hop (by rw [d₂, d₁]; simp) hr
-  refine ⟨step s₂, r₁.trans (r₂.trans (Steps.one h₂.run)), w₃, ?_, by rw [d₃, hval],
+  refine ⟨step s₂, r₁.trans (r₂.trans (Steps.one h₂.run (notIo_of_hop h₂.lo hop hne))), w₃, ?_, by rw [d₃, hval],
     sm₁.trans (sm₂.trans sm₃)⟩
   rw [i₃, i₂, i₁]; simp; omega
 
@@ -273,6 +282,10 @@ theorem run_li {L : Layout} {st : St} {s : State} {v : UInt32} {rest : List UInt
     (by have := h.hi; simp at this; omega) hop rfl (by have := h.stack; omega)
   exact ⟨w, i, by rw [d', hw], sm⟩
 
+theorem notIo_li {L : Layout} {st : St} {s : State} {v : UInt32} {rest : List UInt8} {d : ℕ}
+    (h : At L st s ((0x97 :: le4 v) ++ rest) d) : NotIo s :=
+  notIo_of_hop (op := 0x97) h.lo (by simpa using h.code 0 (by simp)) (by decide)
+
 /-- **Expressions**: the code of an expression that fits pushes its value, and
 changes nothing else. -/
 theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e := by
@@ -282,7 +295,8 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
     intro s _ h
     simp only [ecode] at h
     obtain ⟨w, i, d, sm⟩ := run_li (rest := []) (by rw [List.append_nil]; exact h) (by simp [depth])
-    exact ⟨step s, Steps.one h.run, w, by rw [i]; simp [ecode], by rw [d]; rfl, sm⟩
+    exact ⟨step s, Steps.one h.run (notIo_li (rest := []) (by rw [List.append_nil]; exact h)), w,
+      by rw [i]; simp [ecode], by rw [d]; rfl, sm⟩
   | var x =>
     intro s hf h
     simp only [Fits] at hf
@@ -296,7 +310,8 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
       (by rw [i₁]; have := h.lo; omega) (by rw [i₁]; have := h.hi; unfold MAXBYTE at this; simp at this; omega)
       hop d₁ (by rw [toNat_ofNat_addr (by omega)]; unfold Layout.addr; have := hL.1; omega)
       (by rw [toNat_ofNat_addr (by omega)]; exact haddr)
-    refine ⟨step (step s), (Steps.one h.run).tail ⟨sm₁.running h.run, rfl⟩, w₂,
+    refine ⟨step (step s), (Steps.one h.run (notIo_li h)).tail
+      ⟨sm₁.running h.run, notIo_of_hop (by rw [i₁]; have := h.lo; omega) hop, rfl⟩, w₂,
       by rw [i₂, i₁]; simp, ?_, sm₁.trans sm₂⟩
     rw [d₂, toNat_ofNat_addr (by omega), sm₁.high, h.vars x hf]
     rfl
@@ -304,19 +319,19 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
     intro s hf h
     cases op <;> simp only [Fits] at hf
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩, _⟩ := hf
-      exact run_bin L st _ a b 0x80 (fun x y => fromInt32 (toInt32 x + toInt32 y)) runOp_ad rfl
+      exact run_bin L st _ a b 0x80 (fun x y => fromInt32 (toInt32 x + toInt32 y)) runOp_ad rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_add ra rb) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩, _⟩ := hf
-      exact run_bin L st _ a b 0x81 (fun x y => fromInt32 (toInt32 x - toInt32 y)) runOp_sb rfl
+      exact run_bin L st _ a b 0x81 (fun x y => fromInt32 (toInt32 x - toInt32 y)) runOp_sb rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_sub ra rb) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩, _⟩ := hf
-      exact run_bin L st _ a b 0x82 (fun x y => fromInt32 (toInt32 x * toInt32 y)) runOp_ml rfl
+      exact run_bin L st _ a b 0x82 (fun x y => fromInt32 (toInt32 x * toInt32 y)) runOp_ml rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_mul ra rb) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩⟩ := hf
-      exact run_bin L st _ a b 0x8A (fun x y => if x == y then 0xFFFFFFFF else 0) runOp_eq rfl
+      exact run_bin L st _ a b 0x8A (fun x y => if x == y then 0xFFFFFFFF else 0) runOp_eq rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_eq ra rb) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩⟩ := hf
-      exact run_bin L st _ a b 0x8B (fun x y => if toInt32 x < toInt32 y then 0xFFFFFFFF else 0) runOp_lt rfl
+      exact run_bin L st _ a b 0x8B (fun x y => if toInt32 x < toInt32 y then 0xFFFFFFFF else 0) runOp_lt rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_lt ra rb) iha ihb fa fb s h
   | un op a iha =>
     intro s hf h
@@ -336,7 +351,8 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
       obtain ⟨w₃, i₃, d₃, sm₃⟩ := step_binop' s₂ 0x81 (fun x y => fromInt32 (toInt32 x - toInt32 y)) (dstack s) 0 (enc (a.eval st))
         w₂ h₂.lo (by have := h₂.hi; simp at this; unfold MAXBYTE at this; omega) hop
         (by rw [d₂, d₁]; simp) runOp_sb
-      refine ⟨step s₂, ((Steps.one h.run).trans r₂).tail ⟨h₂.run, rfl⟩, w₃, ?_, ?_,
+      refine ⟨step s₂, ((Steps.one h.run (notIo_li h)).trans r₂).tail
+        ⟨h₂.run, notIo_of_hop h₂.lo hop, rfl⟩, w₃, ?_, ?_,
         sm₁.trans (sm₂.trans sm₃)⟩
       · rw [i₃, i₂, i₁]; simp; omega
       · rw [d₃]; congr 2; simp only [Exp.eval]; rw [ea, enc_int]; exact enc_neg ra
@@ -347,7 +363,7 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
       have hop : high s₁ (getIP s₁) = 0x89 := by have := h₁.code 0 (by simp); simpa using this
       obtain ⟨w₂, i₂, d₂, sm₂⟩ := step_nt s₁ (dstack s) (enc (a.eval st)) w₁ h₁.lo
         (by have := h₁.hi; simp at this; unfold MAXBYTE at this; omega) hop d₁
-      refine ⟨step s₁, r₁.tail ⟨h₁.run, rfl⟩, w₂, by rw [i₂, i₁]; simp; omega, ?_,
+      refine ⟨step s₁, r₁.tail ⟨h₁.run, notIo_of_hop h₁.lo hop, rfl⟩, w₂, by rw [i₂, i₁]; simp; omega, ?_,
         sm₁.trans sm₂⟩
       rw [d₂]; simp only [Exp.eval]; rw [eb, enc_not b]
   | nil => intro s hf; exact hf.elim
@@ -476,6 +492,13 @@ theorem run_jm {s : State} {t : ℕ} (hw : WF s) (hlo : 256 ≤ getIP s) (hhi : 
   obtain ⟨w, i, d, sm⟩ := step_jm s hw hlo (by omega) hop (by rw [hword, htn]; exact ht)
   exact ⟨w, by rw [i, hword, htn], d, sm⟩
 
+theorem notIo_jm {s : State} {t : ℕ} (hlo : 256 ≤ getIP s)
+    (hc : CodeAt (high s) (getIP s) (jmTo t)) : NotIo s :=
+  notIo_of_hop (op := 0x9A) hlo (by
+    have := hc 0 (by simp [jmTo])
+    simpa only [jmTo, List.getD_eq_getElem?_getD, List.getElem?_cons_zero, Option.getD_some,
+      Nat.add_zero] using this) (by decide)
+
 /-- The test: from the condition's value `b` on the stack, go on to the `jm`
 after it if `b` is false, and past it if `b` is true. -/
 theorem run_test {s : State} {b : Bool} (hw : WF s) (hr : Running s) (hlo : 256 ≤ getIP s)
@@ -495,7 +518,8 @@ theorem run_test {s : State} {b : Bool} (hw : WF s) (hr : Running s) (hlo : 256 
     (by rw [i₁]; omega) hop₂ (by simpa using d₁)
     (by rw [hd₂, h7, i₁]; simp only [Int.ofNat_eq_natCast]; omega)
     (by rw [hd₂, h7, i₁]; simp only [Int.ofNat_eq_natCast]; omega)
-  refine ⟨step (step s), (Steps.one hr).tail ⟨sm₁.running hr, rfl⟩, w₂, ?_, d₂, sm₁.trans sm₂⟩
+  refine ⟨step (step s), (Steps.one hr (notIo_of_hop hlo hop₁)).tail
+    ⟨sm₁.running hr, notIo_of_hop (by rw [i₁]; omega) hop₂, rfl⟩, w₂, ?_, d₂, sm₁.trans sm₂⟩
   rw [i₂, hd₂, h7, i₁]
   cases b <;> simp [enc]; omega
 
@@ -567,7 +591,8 @@ theorem assign_runs (L : Layout) (hL : L.Ok) {x : ℕ} {e : Exp} {st : St} (hx :
     (by rw [toNat_ofNat_addr (by omega)]; exact haddr)
   rw [toNat_ofNat_addr (by omega)] at hi₃
   have hr₂ : Running (step s₁) := sm₂.running (sm₁.running h.run)
-  refine ⟨step (step s₁), (r₁.tail ⟨sm₁.running h.run, rfl⟩).tail ⟨hr₂, rfl⟩, w₃,
+  refine ⟨step (step s₁), (r₁.tail ⟨sm₁.running h.run, notIo_li h₁, rfl⟩).tail
+    ⟨hr₂, notIo_of_hop (by rw [i₂]; have := h₁.lo; omega) hop, rfl⟩, w₃,
     ⟨st₃.trans hr₂.1, db₃.trans hr₂.2⟩, ?_, d₃, ?_, ?_⟩
   · rw [i₃, i₂, i₁, h.ip]; simp [slen]; omega
   · rw [hi₃, sm₂.high, sm₁.high]; exact varsOk_write h.vars
@@ -678,7 +703,7 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {p : Stmt} {st st' : St} (h : SEval L
       rw [i₂]; exact (hJ'.mono (fun i hi => by rw [k₂.low i hi, sm₁.high]) (by simp; omega))
     obtain ⟨w₃, i₃, d₃, sm₃⟩ := run_jm' hL w₂ (by rw [i₂]; omega) (by rw [i₂]; omega) hJ₂
       (by omega) (by omega)
-    refine ⟨step σ₂, (r₁.trans r₂).tail ⟨run₂, rfl⟩, w₃, sm₃.running run₂, by rw [i₃]; simp [slen]; omega,
+    refine ⟨step σ₂, (r₁.trans r₂).tail ⟨run₂, notIo_jm (by rw [i₂]; omega) hJ₂, rfl⟩, w₃, sm₃.running run₂, by rw [i₃]; simp [slen]; omega,
       by rw [d₃, d₂], by rw [sm₃.high]; exact v₂, sm₁.keeps.trans (k₂.trans sm₃.keeps)⟩
   | @condF c p q s t hf hc _ ih =>
     intro σ a h
@@ -692,12 +717,14 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {p : Stmt} {st st' : St} (h : SEval L
       (by simp [length_scode]; omega) (by simpa only [List.append_assoc] using hcode) h.vars
       h.stack (by omega)
     simp only [Bool.false_eq_true, ite_false] at i₁
+    have hJ₁ := (show CodeAt (high σ₁) (getIP σ₁) (jmTo (a + (ecode L c).length + 8 + slen L p + 5)) by
+      rw [i₁, sm₁.high]; exact hJ)
     obtain ⟨w₂, i₂, d₂, sm₂⟩ := run_jm' hL w₁ (by rw [i₁]; omega) (by rw [i₁]; omega)
-      (by rw [i₁, sm₁.high]; exact hJ) (by omega) (by omega)
+      hJ₁ (by omega) (by omega)
     obtain ⟨σ₃, r₃, w₃, run₃, i₃, d₃, v₃, k₃⟩ := ih (step σ₁) _
       ⟨w₂, sm₂.running run₁, i₂, by omega, by omega, by rw [sm₂.high, sm₁.high]; exact hQ,
         by rw [sm₂.high, sm₁.high]; exact h.vars, by rw [d₂, d₁], by omega⟩
-    refine ⟨σ₃, (r₁.tail ⟨run₁, rfl⟩).trans r₃, w₃, run₃, by rw [i₃]; simp [slen]; omega,
+    refine ⟨σ₃, (r₁.tail ⟨run₁, notIo_jm (by rw [i₁]; omega) hJ₁, rfl⟩).trans r₃, w₃, run₃, by rw [i₃]; simp [slen]; omega,
       d₃, v₃, sm₁.keeps.trans (sm₂.keeps.trans k₃)⟩
   | @loopT c p s t u hf hc _ _ ih₁ ih₂ =>
     intro σ a h
@@ -722,7 +749,7 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {p : Stmt} {st st' : St} (h : SEval L
     obtain ⟨σ₄, r₄, w₄, run₄, i₄, d₄, v₄, k₄⟩ := ih₂ (step σ₂) a
       ⟨w₃, sm₃.running run₂, i₃, hlo, h.hi, h.code.mono (fun i hi => k₃.low i hi)
         (by rw [length_scode]; exact h.hi), by rw [sm₃.high]; exact v₂, by rw [d₃, d₂], h.depth⟩
-    exact ⟨σ₄, ((r₁.trans r₂).tail ⟨run₂, rfl⟩).trans r₄, w₄, run₄, i₄, d₄, v₄, k₃.trans k₄⟩
+    exact ⟨σ₄, ((r₁.trans r₂).tail ⟨run₂, notIo_jm (by rw [i₂]; omega) hJ₂, rfl⟩).trans r₄, w₄, run₄, i₄, d₄, v₄, k₃.trans k₄⟩
   | @loopF c p s hf hc =>
     intro σ a h
     obtain ⟨hE, hT, hJ, hP, hJ'⟩ := loop_code h.code
@@ -735,9 +762,11 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {p : Stmt} {st st' : St} (h : SEval L
       (by simp [length_scode]; omega) (by simpa only [List.append_assoc] using hcode) h.vars
       h.stack (by omega)
     simp only [Bool.false_eq_true, ite_false] at i₁
+    have hJ₁ := (show CodeAt (high σ₁) (getIP σ₁) (jmTo (a + (ecode L c).length + 8 + slen L p + 5)) by
+      rw [i₁, sm₁.high]; exact hJ)
     obtain ⟨w₂, i₂, d₂, sm₂⟩ := run_jm' hL w₁ (by rw [i₁]; omega) (by rw [i₁]; omega)
-      (by rw [i₁, sm₁.high]; exact hJ) (by omega) (by omega)
-    exact ⟨step σ₁, r₁.tail ⟨run₁, rfl⟩, w₂, sm₂.running run₁, by rw [i₂]; simp [slen]; omega,
+      hJ₁ (by omega) (by omega)
+    exact ⟨step σ₁, r₁.tail ⟨run₁, notIo_jm (by rw [i₁]; omega) hJ₁, rfl⟩, w₂, sm₂.running run₁, by rw [i₂]; simp [slen]; omega,
       by rw [d₂, d₁], by rw [sm₂.high, sm₁.high]; exact h.vars, sm₁.keeps.trans sm₂.keeps⟩
 
 /-! ### Whole programs -/
@@ -747,7 +776,7 @@ theorem runN_of_steps {s s' : State} (h : Steps s s') : ∃ n, runN n s = s' := 
   induction h using ReflTransGen.head_induction_on with
   | refl => exact ⟨0, rfl⟩
   | head hab _ ih =>
-    obtain ⟨hr, rfl⟩ := hab
+    obtain ⟨hr, -, rfl⟩ := hab
     obtain ⟨n, hn⟩ := ih
     exact ⟨n + 1, by rw [runN_succ_of_running _ _ hr, hn]⟩
 
@@ -779,7 +808,7 @@ theorem compile_correct (L : Layout) (hL : L.Ok) {p : Stmt} {st st' : St} (h : S
   have hst : getRST (step s') = 0 := step_hl s' w' (by rw [i']; omega) hop
   have hhigh : high (step s') = high s' := by
     rw [step_of s' _ (by rw [i']; omega) hop, runOp_hl]; simp
-  obtain ⟨n, hn⟩ := runN_of_steps (r'.tail ⟨run', rfl⟩)
+  obtain ⟨n, hn⟩ := runN_of_steps (r'.tail ⟨run', notIo_of_hop (by rw [i']; omega) hop, rfl⟩)
   exact ⟨n, by rw [hn]; exact hst, by rw [hn, hhigh]; exact v'⟩
 
 /-! ### Loading -/
