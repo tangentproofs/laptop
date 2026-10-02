@@ -452,6 +452,7 @@ def slen (L : Layout) : Stmt → ℕ
   | .scope _ e p => 7 + ((ecode L e).length + 6) + slen L p + 7
   | .ret => 1
   | .restore _ _ => 7
+  | .check _ _ => 17
 
 /-- **The code of a statement** placed at address `a`. -/
 def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
@@ -477,6 +478,8 @@ def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
       scode L b p ++ ([0x91] ++ (0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])
   | .ret => [0x9E]
   | .restore x _ => [0x91] ++ (0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95]
+  | .check c x => (0x97 :: le4 (UInt32.ofNat c)) ++ (0x97 :: le4 CHECK) ++ [0xFD] ++
+      (0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95]
 
 theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).length = slen L p
   | .ok, _ => rfl
@@ -492,6 +495,7 @@ theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).leng
   | .scope _ _ p, a => by simp [scode, slen, length_scode L p]; omega
   | .ret, _ => rfl
   | .restore _ _, _ => rfl
+  | .check _ _, _ => rfl
 
 /-- How deep the stack gets in a statement. -/
 def sdepth : Stmt → ℕ
@@ -507,6 +511,7 @@ def sdepth : Stmt → ℕ
   | .scope _ e p => max 2 (max (depth e + 1) (sdepth p))
   | .ret => 0
   | .restore _ _ => 2
+  | .check _ _ => 2
 
 /-- The named statements' code, each at its entry and followed by `rt`, below
 the variables. -/

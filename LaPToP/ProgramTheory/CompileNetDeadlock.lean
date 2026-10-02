@@ -114,10 +114,32 @@ theorem stepAt_eff {w w' : Swarm} {i : ℕ} (h : w.stepAt i = some w') :
             rw [hx.rd, getElem?_of_prefix (hx.chans _) hm]
             rfl
         · rw [ite_eq_right hR] at h
-          cases h
-          refine ⟨.other (step s), rfl, trivial, fun w₁ hx => ?_⟩
-          rw [Swarm.stepAt_eq (by rw [hx.ms, hs]) hr, ite_eq_right hS, ite_eq_right hR]
-          rfl
+          by_cases hK : ioCmd s = some CHECK
+          · rw [ite_eq_left hK] at h
+            unfold Swarm.check at h
+            simp only at h
+            split at h
+            · cases h
+            · rename_i m hm
+              simp only [Option.some.injEq] at h
+              subst h
+              refine ⟨.other (setIP (dpush (dpop (dpop s).2).2
+                  (if decide (m.2.toNat < (getClk s).toNat) then 0xFFFFFFFF else 0))
+                  (getIP (dpush (dpop (dpop s).2).2
+                    (if decide (m.2.toNat < (getClk s).toNat) then 0xFFFFFFFF else 0)) + 1)),
+                rfl, trivial, fun w₁ hx => ?_⟩
+              rw [Swarm.stepAt_eq (by rw [hx.ms, hs]) hr, ite_eq_right hS, ite_eq_right hR,
+                ite_eq_left hK]
+              unfold Swarm.check
+              simp only
+              rw [hx.rd, getElem?_of_prefix (hx.chans _) hm]
+              rfl
+          · rw [ite_eq_right hK] at h
+            cases h
+            refine ⟨.other (step s), rfl, trivial, fun w₁ hx => ?_⟩
+            rw [Swarm.stepAt_eq (by rw [hx.ms, hs]) hr, ite_eq_right hS, ite_eq_right hR,
+              ite_eq_right hK]
+            rfl
     · simp [Swarm.stepAt, hs, hr] at h
 
 /-- Another machine's effect extends the swarm, for machine `i`. -/

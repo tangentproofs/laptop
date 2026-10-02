@@ -19,9 +19,11 @@ between them becomes a chunk run in one step. The network is then run by
 semantics (`Network.runNet_correct`), whatever the order the processes run in.
 
 A local variable around input or output (as a `for` loop's index is) stays a
-scope of the process (`NProc.scope`). Not yet expressible in a network: a choice,
-or a `||` around input or output, and `√c` (whether a message is waiting depends on the speed of
-the other processes).
+scope of the process (`NProc.scope`). `√c` is the book's timed check, `T r + 1 ≤ t`:
+the parser puts a check (`NProc.check`) before the statement that reads it, which
+keeps the answer in a hidden variable; the check waits until the answer is
+settled, whatever the speed of the other processes. Not yet expressible in a
+network: a choice, or a `||` around input or output.
 -/
 
 namespace LaPToP.ProgramTheory.Interpreter.Lang
@@ -37,60 +39,63 @@ def recvChan (chans : List (String × ℕ × ℕ)) (x : ℕ) : Option ℕ := cha
 
 /-- The communication a program does, directly or through the specifications it
 calls (`look`): each channel it outputs on (`true`) or inputs from (`false`). -/
-def comms (chans : List (String × ℕ × ℕ)) (look : ℕ → List (Bool × ℕ)) : P → List (Bool × ℕ)
+def comms (chans : List (String × ℕ × ℕ)) (rdy : List ℕ) (look : ℕ → List (Bool × ℕ)) :
+    P → List (Bool × ℕ)
   | .newLocal x _ p =>
-    (match sendChan chans x, recvChan chans x, p with
-      | some c, _, .ok => [(true, c)]
-      | _, some c, .ok => [(false, c)]
-      | _, _, _ => []) ++ comms chans look p
-  | .seq p q => comms chans look p ++ comms chans look q
-  | .cond _ p q => comms chans look p ++ comms chans look q
-  | .or p q => comms chans look p ++ comms chans look q
-  | .par _ p q => comms chans look p ++ comms chans look q
-  | .prob _ p q => comms chans look p ++ comms chans look q
-  | .whileDo _ p => comms chans look p
+    (match sendChan chans x, recvChan chans x, rdy.idxOf? x, p with
+      | some c, _, _, .ok => [(true, c)]
+      | _, some c, _, .ok => [(false, c)]
+      | _, _, some c, .ok => [(false, c)]
+      | _, _, _, _ => []) ++ comms chans rdy look p
+  | .seq p q => comms chans rdy look p ++ comms chans rdy look q
+  | .cond _ p q => comms chans rdy look p ++ comms chans rdy look q
+  | .or p q => comms chans rdy look p ++ comms chans rdy look q
+  | .par _ p q => comms chans rdy look p ++ comms chans rdy look q
+  | .prob _ p q => comms chans rdy look p ++ comms chans rdy look q
+  | .whileDo _ p => comms chans rdy look p
   | .call k => look k
   | _ => []
 
 /-- The communication each specification does, through the calls it makes: the
 least solution, by iteration from nothing. -/
-def commsOfDefs (chans : List (String × ℕ × ℕ)) (defs : List (ℕ × P)) :
+def commsOfDefs (chans : List (String × ℕ × ℕ)) (rdy : List ℕ) (defs : List (ℕ × P)) :
     ℕ → List (ℕ × List (Bool × ℕ)) → List (ℕ × List (Bool × ℕ))
   | 0, w => w
   | f + 1, w =>
     let look := fun k => (w.lookup k).getD []
-    let w' := defs.map fun (k, b) => (k, (comms chans look b).eraseDups)
-    if w' == w then w else commsOfDefs chans defs f w'
+    let w' := defs.map fun (k, b) => (k, (comms chans rdy look b).eraseDups)
+    if w' == w then w else commsOfDefs chans rdy defs f w'
 
 /-- A program as a process: the marks become output and input, the structure
 around them stays, and what does not communicate is a chunk. -/
-def toNP (chans : List (String × ℕ × ℕ)) (look : ℕ → List (Bool × ℕ)) :
+def toNP (chans : List (String × ℕ × ℕ)) (rdy : List ℕ) (look : ℕ → List (Bool × ℕ)) :
     P → Except String (NProc ℕ Value)
   | .newLocal x e p =>
-    match sendChan chans x, recvChan chans x, p with
-    | some c, _, .ok => .ok (.send c e)
-    | _, some c, .ok => .ok (.recv c x)
-    | _, _, p =>
-      if (comms chans look p).isEmpty then .ok (.act (.newLocal x e p))
-      else do .ok (.scope x e (← toNP chans look p))
+    match sendChan chans x, recvChan chans x, rdy.idxOf? x, p with
+    | some c, _, _, .ok => .ok (.send c e)
+    | _, some c, _, .ok => .ok (.recv c x)
+    | _, _, some c, .ok => .ok (.check c x .bool)
+    | _, _, _, p =>
+      if (comms chans rdy look p).isEmpty then .ok (.act (.newLocal x e p))
+      else do .ok (.scope x e (← toNP chans rdy look p))
   | .seq p q =>
-    if (comms chans look (.seq p q)).isEmpty then .ok (.act (.seq p q))
-    else do .ok (.seq (← toNP chans look p) (← toNP chans look q))
+    if (comms chans rdy look (.seq p q)).isEmpty then .ok (.act (.seq p q))
+    else do .ok (.seq (← toNP chans rdy look p) (← toNP chans rdy look q))
   | .cond b p q =>
-    if (comms chans look (.cond b p q)).isEmpty then .ok (.act (.cond b p q))
-    else do .ok (.cond b (← toNP chans look p) (← toNP chans look q))
+    if (comms chans rdy look (.cond b p q)).isEmpty then .ok (.act (.cond b p q))
+    else do .ok (.cond b (← toNP chans rdy look p) (← toNP chans rdy look q))
   | .whileDo b p =>
-    if (comms chans look p).isEmpty then .ok (.act (.whileDo b p))
-    else do .ok (.loop b (← toNP chans look p))
+    if (comms chans rdy look p).isEmpty then .ok (.act (.whileDo b p))
+    else do .ok (.loop b (← toNP chans rdy look p))
   | .call k => .ok (if (look k).isEmpty then .act (.call k) else .call k)
   | .or p q =>
-    if (comms chans look (.or p q)).isEmpty then .ok (.act (.or p q))
+    if (comms chans rdy look (.or p q)).isEmpty then .ok (.act (.or p q))
     else .error "a choice ('or') around input or output is not supported in a network"
   | .prob r p q =>
-    if (comms chans look (.prob r p q)).isEmpty then .ok (.act (.prob r p q))
+    if (comms chans rdy look (.prob r p q)).isEmpty then .ok (.act (.prob r p q))
     else .error "a probabilistic choice around input or output is not supported in a network"
   | .par own p q =>
-    if (comms chans look (.par own p q)).isEmpty then .ok (.act (.par own p q))
+    if (comms chans rdy look (.par own p q)).isEmpty then .ok (.act (.par own p q))
     else .error "a || of communicating processes must be the whole main program: \
       parenthesize each process, as in (c! 1. c! 2) || (c?. x:= c)"
   | p => .ok (.act p)
@@ -113,12 +118,14 @@ structure NetProgram where
 input on the channels no process writes. -/
 def toNet (prog : Program) (chans : List (String × ℕ × ℕ)) (s : St) :
     Except String NetProgram := do
-  let w := commsOfDefs chans prog.defs (prog.defs.length * (2 * chans.length + 1) + 1) []
+  -- the variable that keeps each channel's `√c`
+  let rdy := chans.map fun (c, _, _) => prog.names.idxOf ("#" ++ c ++ ".ready")
+  let w := commsOfDefs chans rdy prog.defs (prog.defs.length * (2 * chans.length + 1) + 1) []
   let look := fun k => (w.lookup k).getD []
-  let defs ← prog.defs.mapM fun (k, b) => do .ok (k, ← toNP chans look b)
+  let defs ← prog.defs.mapM fun (k, b) => do .ok (k, ← toNP chans rdy look b)
   let ps := procsOf prog.main
-  let bodies ← ps.mapM (toNP chans look)
-  let cs := ps.map (comms chans look)
+  let bodies ← ps.mapM (toNP chans rdy look)
+  let cs := ps.map (comms chans rdy look)
   let outs := cs.map fun l => (l.filterMap fun (b, c) => if b then some c else none).eraseDups
   let ins := cs.map fun l => (l.filterMap fun (b, c) => if b then none else some c).eraseDups
   let name := fun (c : ℕ) => (chans[c]?.map (·.1)).getD "?"
@@ -280,11 +287,33 @@ theorem pipeline_net :
         [("c", [(.int 1, 0), (.int 2, 0)]), ("d", [(.int 11, 1), (.int 12, 1)])]⟩ := by
   decide +kernel
 
+/-- Polling with `√c` (§9.1.4): the reader, from time `4`, takes the messages
+that have arrived — sent at `1` and `2`, both before `4` — and stops at the first
+`√c` that is false. -/
+def pollSrc : String :=
+  "(tick. c! 5. tick. c! 6) || (tick. tick. tick. tick. n:= 0. while √c do c?. n:= n + c od)"
+
+/-- Its tokens. -/
+def pollToks : Toks :=
+  [.sym "(", .word "tick", .sym ".", .word "c", .sym "!", .num 5, .sym ".", .word "tick",
+   .sym ".", .word "c", .sym "!", .num 6, .sym ")", .sym "||",
+   .sym "(", .word "tick", .sym ".", .word "tick", .sym ".", .word "tick", .sym ".",
+   .word "tick", .sym ".", .word "n", .sym ":=", .num 0, .sym ".", .word "while", .sym "√",
+   .word "c", .word "do", .word "c", .sym "?", .sym ".", .word "n", .sym ":=", .word "n",
+   .sym "+", .word "c", .word "od", .sym ")"]
+
+/-- `n = 11` at time `4`: whether a message has arrived is settled by the times,
+whatever the speed of the processes. -/
+theorem poll_net :
+    netOutcome false [] pollToks init 100 100 =
+      .ok ⟨.done, 4, [("n", .int 11)], [("c", [(.int 5, 1), (.int 6, 2)])]⟩ := by
+  decide +kernel
+
 /-- The networks the self-test checks the tokenizer on. -/
 def netSelfTests : List (String × String × Toks) :=
   [("sendRecv", sendRecvSrc, sendRecvToks), ("buffer", bufferSrc, bufferToks),
    ("deadlock", deadlockSrc, deadlockToks), ("doubler", doublerSrc, doublerToks),
-   ("pipeline", pipelineSrc, pipelineToks)]
+   ("pipeline", pipelineSrc, pipelineToks), ("poll", pollSrc, pollToks)]
 
 end Demo
 

@@ -42,6 +42,8 @@ inductive Stmt where
   | ret
   /-- The end of a scope (in a running process: `x` gets back `v`). -/
   | restore (x : ℕ) (v : Value)
+  /-- `x:= √c`, on channel number `c`: whether the next message has arrived. -/
+  | check (c : ℕ) (x : ℕ)
 
 /-- A statement as a program of the language. -/
 def Stmt.toProg : Stmt → P
@@ -53,7 +55,7 @@ def Stmt.toProg : Stmt → P
   | .tick => .tick
   -- Communication means something only in a network (`CompileNet`); alone, it has
   -- no behaviour.
-  | .send _ _ | .recv _ _ => .ensure fun _ => false
+  | .send _ _ | .recv _ _ | .check _ _ => .ensure fun _ => false
   | .call k => .call k
   | .scope x e p => declare x e p.toProg
   | .ret => .ok

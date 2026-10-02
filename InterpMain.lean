@@ -58,7 +58,7 @@ usage: interp [options] [file]
                      listSum, exitLoop, deepExit, forLoop, gcd, swap, even,
                      channel, parSwap, seqPar, parTime, probEx1, probEx2, rand,
                      and the networks sendRecv, buffer, deadlock, doubler,
-                     pipeline
+                     pipeline, poll
   --NAME=EXP         the initial value of variable NAME, an expression such as
                      --n=10 or --L=[3;1;2] (every other variable starts at 0)
   --fuel=K           execution fuel (default 1000)
@@ -222,6 +222,7 @@ def demoSrc : String → Option String
   | "deadlock" => some Lang.Demo.deadlockSrc
   | "doubler" => some Lang.Demo.doublerSrc
   | "pipeline" => some Lang.Demo.pipelineSrc
+  | "poll" => some Lang.Demo.pollSrc
   | _ => none
 
 /-- Read the program text. -/

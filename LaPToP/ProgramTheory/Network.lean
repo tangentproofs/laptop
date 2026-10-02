@@ -92,6 +92,9 @@ inductive NProc (Var : Type u) (Val : Type v) : Type (max u v) where
   | scope (x : Var) (e : Spec.State Var Val → Val) (p : NProc Var Val)
   /-- The end of a local variable's scope: `x` gets back the value `v` it had. -/
   | restore (x : Var) (v : Val)
+  /-- `x:= √c`: whether the next message on `c` has arrived, as the value `b` makes
+  of a binary. -/
+  | check (c : ℕ) (x : Var) (b : Bool → Val)
 
 /-- A message: its value, and the time it was sent. -/
 abbrev Msg (Val : Type v) := Val × ℕ∞
@@ -161,6 +164,18 @@ def PSt.received (st : PSt Var Val) (c : ℕ) (x : Var) (m : Msg Val) : PSt Var 
 def PSt.never (st : PSt Var Val) (c : ℕ) : PSt Var Val :=
   { st with t := ⊤, r := Function.update st.r c (st.r c + 1) }
 
+/-- `√c` against a script `l`, at read cursor `r` and time `t`: the book's
+`T r + 1 ≤ t`, that is, the next message was sent before `t`. A message never
+written is never there. -/
+def ready (l : List (Msg Val)) (r : ℕ) (t : ℕ∞) : Bool :=
+  match l[r]? with
+  | some m => decide (m.2 < t)
+  | none => false
+
+/-- After `x:= √c`, with `v` the value made of the answer. -/
+def PSt.checked (st : PSt Var Val) (x : Var) (v : Val) : PSt Var Val :=
+  { st with mem := Function.update st.mem x v }
+
 /-- The steps of a process that do not touch a channel. -/
 inductive LStep (defs : ℕ → NProc Var Val) : PCfg Var Val → PCfg Var Val → Prop
   /-- A chunk runs, by the timed semantics. It must be deterministic: a network
@@ -220,6 +235,10 @@ inductive PStep (defs : ℕ → NProc Var Val) (pr : Proc Var Val) (S : Scripts 
   | never {c : ℕ} {x : Var} {k : List (NProc Var Val)} {st : PSt Var Val} :
       c ∈ pr.ins → (S c)[st.r c]? = none →
         PStep defs pr S ⟨.recv c x :: k, st⟩ ⟨k, st.never c⟩
+  /-- `x:= √c`, by the script. -/
+  | check {c : ℕ} {x : Var} {b : Bool → Val} {k : List (NProc Var Val)} {st : PSt Var Val} :
+      c ∈ pr.ins →
+        PStep defs pr S ⟨.check c x b :: k, st⟩ ⟨k, st.checked x (b (ready (S c) (st.r c) st.t))⟩
 
 /-- **The book's semantics of a network**: there are scripts `S` such that every
 process runs to completion against them, ending in its final state in `fin`,
@@ -259,37 +278,75 @@ scripts. -/
 def Net.init (net : Net Var Val) (s : Spec.State Var Val) (t : ℕ∞) : MCfg Var Val :=
   ⟨net.procs.map fun pr => pr.start s t, net.input⟩
 
-/-- **What process `i` can do** when the scripts so far are `L`: a step that does
-not touch a channel; output, which appends its message, stamped with the sender's
-time, to the channel's script; or input of the message at its read cursor, if it
-is there — if not, the process waits. -/
-inductive Act (net : Net Var Val) (i : ℕ) :
+/-- A process **can send nothing before time `t`**, with the scripts so far `L`:
+it has finished, or its clock is at `t`, or it waits for input whose next
+message, if there is one yet, makes its clock `t` or more. -/
+def PCfg.QuietAt (L : Scripts Val) (t : ℕ∞) (pc : PCfg Var Val) : Prop :=
+  pc.k = [] ∨ t ≤ pc.st.t ∨
+    ∃ ch x k, pc.k = .recv ch x :: k ∧ ∀ m, (L ch)[pc.st.r ch]? = some m → t ≤ m.2 + 1
+
+/-- **No process can send before time `t`** — nor will any, as long as each waits
+for messages sent at `t` or later (`MStep.quiet`). -/
+def MCfg.Quiet (c : MCfg Var Val) (t : ℕ∞) : Prop := ∀ pc ∈ c.ps, pc.QuietAt c.L t
+
+/-- **What process `i` can do** when the scripts so far are `L`, and `Q t` says no
+process can send before `t`: a step that does not touch a channel; output, which
+appends its message, stamped with the sender's time, to the channel's script;
+input of the message at its read cursor, if it is there — if not, the process
+waits; or `√c`, once it is settled: the next message is there, or no process can
+send one before now. -/
+inductive Act (net : Net Var Val) (i : ℕ) (Q : ℕ∞ → Prop) :
     Scripts Val → PCfg Var Val → PCfg Var Val → Scripts Val → Prop
   /-- A step that does not touch a channel. -/
-  | loc {L : Scripts Val} {a b : PCfg Var Val} : LStep net.defs a b → Act net i L a b L
+  | loc {L : Scripts Val} {a b : PCfg Var Val} : LStep net.defs a b → Act net i Q L a b L
   /-- Output. -/
   | send {L L' : Scripts Val} {pr : Proc Var Val} {ch : ℕ} {e : Spec.State Var Val → Val}
       {k : List (NProc Var Val)} {st : PSt Var Val} :
       net.procs[i]? = some pr → ch ∈ pr.outs →
         L' = Function.update L ch (L ch ++ [(e st.mem, st.t)]) →
-        Act net i L ⟨.send ch e :: k, st⟩ ⟨k, st.sent ch⟩ L'
+        Act net i Q L ⟨.send ch e :: k, st⟩ ⟨k, st.sent ch⟩ L'
   /-- Input of a message that is there. -/
   | recv {L : Scripts Val} {pr : Proc Var Val} {ch : ℕ} {x : Var} {k : List (NProc Var Val)}
       {st : PSt Var Val} {m : Msg Val} :
       net.procs[i]? = some pr → ch ∈ pr.ins → (L ch)[st.r ch]? = some m →
-        Act net i L ⟨.recv ch x :: k, st⟩ ⟨k, st.received ch x m⟩ L
+        Act net i Q L ⟨.recv ch x :: k, st⟩ ⟨k, st.received ch x m⟩ L
+  /-- `x:= √c`, settled. -/
+  | check {L : Scripts Val} {pr : Proc Var Val} {ch : ℕ} {x : Var} {b : Bool → Val}
+      {k : List (NProc Var Val)} {st : PSt Var Val} :
+      net.procs[i]? = some pr → ch ∈ pr.ins → ((L ch)[st.r ch]?.isSome ∨ Q st.t) →
+        Act net i Q L ⟨.check ch x b :: k, st⟩ ⟨k, st.checked x (b (ready (L ch) (st.r ch) st.t))⟩ L
 
 /-- **A step of the machine**: one process acts. -/
 inductive MStep (net : Net Var Val) : MCfg Var Val → MCfg Var Val → Prop
   /-- Process `i`, in `a`, acts. -/
   | mk {c : MCfg Var Val} {i : ℕ} {a b : PCfg Var Val} {L' : Scripts Val} :
-      c.ps[i]? = some a → Act net i c.L a b L' → MStep net c ⟨c.ps.set i b, L'⟩
+      c.ps[i]? = some a → Act net i c.Quiet c.L a b L' → MStep net c ⟨c.ps.set i b, L'⟩
 
 /-- Every process has finished. -/
 def MCfg.Done (c : MCfg Var Val) : Prop := ∀ pc ∈ c.ps, pc.k = []
 
 /-- No step is possible. -/
 def Normal (net : Net Var Val) (c : MCfg Var Val) : Prop := ∀ c', ¬ MStep net c c'
+
+/-- A message in a script stays there as the script grows. -/
+theorem getElem?_of_prefix {α : Type*} {l₁ l₂ : List α} (h : l₁ <+: l₂) {n : ℕ} {m : α}
+    (hm : l₁[n]? = some m) : l₂[n]? = some m := by
+  obtain ⟨u, rfl⟩ := h
+  rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp hm).1]
+  exact hm
+
+/-- The scripts only grow. -/
+theorem Act.prefix {net : Net Var Val} {i : ℕ} {Q : ℕ∞ → Prop} {L L' : Scripts Val}
+    {a b : PCfg Var Val} (h : Act net i Q L a b L') (c : ℕ) : L c <+: L' c := by
+  cases h with
+  | loc => exact List.prefix_rfl
+  | send _ _ hL =>
+    subst hL
+    by_cases hc : c = ‹ℕ›
+    · subst hc; rw [Function.update_self]; exact List.prefix_append _ _
+    · rw [Function.update_of_ne hc]
+  | recv => exact List.prefix_rfl
+  | check => exact List.prefix_rfl
 
 /-- A machine where every process has finished takes no step. -/
 theorem normal_of_done {net : Net Var Val} {c : MCfg Var Val} (h : c.Done) : Normal net c := by
@@ -300,6 +357,132 @@ theorem normal_of_done {net : Net Var Val} {c : MCfg Var Val} (h : c.Done) : Nor
   | loc hl => cases hl <;> simp_all
   | send => simp_all
   | recv => simp_all
+  | check => simp_all
+
+/-- What `Q` allows, a weaker `Q'` allows too. -/
+theorem Act.mono {net : Net Var Val} {i : ℕ} {Q Q' : ℕ∞ → Prop} {L L' : Scripts Val}
+    {a b : PCfg Var Val} (h : Act net i Q L a b L') (hQ : ∀ t, Q t → Q' t) :
+    Act net i Q' L a b L' := by
+  cases h with
+  | loc hl => exact .loc hl
+  | send hpr hch hL => exact .send hpr hch hL
+  | recv hpr hch hm => exact .recv hpr hch hm
+  | check hpr hch hen => exact .check hpr hch (hen.imp id (hQ _))
+
+/-- Time does not go backward. -/
+theorem Act.t_le {net : Net Var Val} {i : ℕ} {Q : ℕ∞ → Prop} {L L' : Scripts Val}
+    {a b : PCfg Var Val} (h : Act net i Q L a b L') : a.st.t ≤ b.st.t := by
+  cases h with
+  | loc hl =>
+    cases hl with
+    | act _ he => exact time_le_of_evalT he
+    | _ => exact le_rfl
+  | send => exact le_rfl
+  | recv => exact le_max_left _ _
+  | check => exact le_rfl
+
+/-- The messages `L'` adds to `L` were sent at `t` or later, whenever `Q t`. -/
+def NewAfter (Q : ℕ∞ → Prop) (L L' : Scripts Val) : Prop :=
+  ∀ ch n (m : Msg Val) t, (L ch).length ≤ n → (L' ch)[n]? = some m → Q t → t ≤ m.2
+
+theorem newAfter_rfl (Q : ℕ∞ → Prop) (L : Scripts Val) : NewAfter Q L L := by
+  intro ch n m t hn hm _
+  rw [List.getElem?_eq_none hn] at hm; cases hm
+
+/-- **`√c` is settled**: once the next message is there, or no process can send
+one before now, more messages do not change the answer. -/
+theorem ready_stable {l l' : List (Msg Val)} {r : ℕ} {t : ℕ∞} {Q : ℕ∞ → Prop} (hpre : l <+: l')
+    (hnew : ∀ n (m : Msg Val), l.length ≤ n → l'[n]? = some m → Q t → t ≤ m.2)
+    (hen : l[r]?.isSome ∨ Q t) : ready l' r t = ready l r t := by
+  unfold ready
+  cases hl : l[r]? with
+  | some m => rw [getElem?_of_prefix hpre hl]
+  | none =>
+    have hr : l.length ≤ r := List.getElem?_eq_none_iff.mp hl
+    rw [hl] at hen
+    have hq : Q t := by simpa using hen
+    cases hl' : l'[r]? with
+    | none => rfl
+    | some m =>
+      have := hnew r m hr hl' hq
+      simp only [decide_eq_false_iff_not, not_lt]
+      exact this
+
+/-- **A process that can send nothing before `t` still can't after its step**,
+and sends nothing before `t`. -/
+theorem Act.quiet_after {net : Net Var Val} {i : ℕ} {Q : ℕ∞ → Prop} {L L' : Scripts Val}
+    {a b : PCfg Var Val} (h : Act net i Q L a b L') {t : ℕ∞} (hq : a.QuietAt L t) :
+    t ≤ b.st.t ∧ ∀ ch n (m : Msg Val), (L ch).length ≤ n → (L' ch)[n]? = some m → t ≤ m.2 := by
+  have same : L' = L → ∀ ch n (m : Msg Val), (L ch).length ≤ n → (L' ch)[n]? = some m → t ≤ m.2 :=
+    fun e ch n m hn hm => by subst e; rw [List.getElem?_eq_none hn] at hm; cases hm
+  rcases hq with hk | ht | ⟨ch, x, k, hk, hm⟩
+  · cases h with
+    | loc hl => cases hl <;> simp at hk
+    | send => simp at hk
+    | recv => simp at hk
+    | check => simp at hk
+  · refine ⟨ht.trans h.t_le, ?_⟩
+    cases h with
+    | loc => exact same rfl
+    | @send L' pr ch' e k st hpr hch hL =>
+      subst hL
+      intro c n m hn hm
+      by_cases hc : c = ch'
+      · subst hc
+        rw [Function.update_self] at hm
+        rw [List.getElem?_append_right hn] at hm
+        have hlt := (List.getElem?_eq_some_iff.mp hm).1
+        simp only [List.length_singleton] at hlt
+        rw [show n - (L c).length = 0 by omega] at hm
+        simp only [List.getElem?_cons_zero, Option.some.injEq] at hm
+        subst hm; exact ht
+      · rw [Function.update_of_ne hc] at hm
+        rw [List.getElem?_eq_none hn] at hm; cases hm
+    | recv => exact same rfl
+    | check => exact same rfl
+  · cases h with
+    | loc hl => cases hl <;> simp at hk
+    | send => simp at hk
+    | @recv pr ch' x' k' st m' hpr hch hm' =>
+      simp only [List.cons.injEq, NProc.recv.injEq] at hk
+      obtain ⟨⟨rfl, rfl⟩, rfl⟩ := hk
+      exact ⟨(hm m' hm').trans (le_max_right _ _), same rfl⟩
+    | check => simp at hk
+
+omit [DecidableEq Var] [Defs Var Val] in
+/-- Quiet before a step, quiet after it. -/
+theorem PCfg.QuietAt.mono {pc : PCfg Var Val} {L L' : Scripts Val} {t : ℕ∞}
+    (hq : pc.QuietAt L t) (hpre : ∀ ch, L ch <+: L' ch)
+    (hnew : ∀ ch n (m : Msg Val), (L ch).length ≤ n → (L' ch)[n]? = some m → t ≤ m.2) :
+    pc.QuietAt L' t := by
+  rcases hq with hk | ht | ⟨ch, x, k, hk, hm⟩
+  · exact .inl hk
+  · exact .inr (.inl ht)
+  · refine .inr (.inr ⟨ch, x, k, hk, fun m hm' => ?_⟩)
+    cases hl : (L ch)[pc.st.r ch]? with
+    | some m₀ =>
+      rw [getElem?_of_prefix (hpre ch) hl] at hm'; cases hm'
+      exact hm _ hl
+    | none =>
+      exact (hnew ch _ m (List.getElem?_eq_none_iff.mp hl) hm').trans le_self_add
+
+/-- **Quietness lasts**: when no process can send before `t`, after any step still
+none can, and the step sent nothing before `t`. -/
+theorem MStep.quiet {net : Net Var Val} {c c' : MCfg Var Val} (h : MStep net c c') {t : ℕ∞}
+    (hq : c.Quiet t) :
+    c'.Quiet t ∧ ∀ ch n (m : Msg Val), (c.L ch).length ≤ n → (c'.L ch)[n]? = some m → t ≤ m.2 := by
+  obtain ⟨hi, ha⟩ := h
+  rename_i i a b L'
+  obtain ⟨hb, hnew⟩ := ha.quiet_after (hq a (List.mem_of_getElem? hi))
+  refine ⟨fun pc hpc => ?_, hnew⟩
+  obtain ⟨j, hj⟩ := List.mem_iff_getElem?.mp hpc
+  have hilt : i < c.ps.length := (List.getElem?_eq_some_iff.mp hi).1
+  by_cases hij : i = j
+  · subst hij
+    rw [List.getElem?_set_self hilt] at hj; cases hj
+    exact .inr (.inl hb)
+  · rw [List.getElem?_set_ne hij] at hj
+    exact (hq pc (List.mem_of_getElem? hj)).mono ha.prefix hnew
 
 /-! ### Determinacy -/
 
@@ -326,15 +509,16 @@ theorem lstep_det [DetDefs Var Val] {defs : ℕ → NProc Var Val} {a b b' : PCf
   | restore => cases h'; rfl
 
 /-- What a process does is determined. -/
-theorem act_det [DetDefs Var Val] {net : Net Var Val} {i : ℕ} {L L₁ L₂ : Scripts Val}
-    {a b₁ b₂ : PCfg Var Val} (h₁ : Act net i L a b₁ L₁) (h₂ : Act net i L a b₂ L₂) :
-    b₁ = b₂ ∧ L₁ = L₂ := by
+theorem act_det [DetDefs Var Val] {net : Net Var Val} {i : ℕ} {Q : ℕ∞ → Prop}
+    {L L₁ L₂ : Scripts Val} {a b₁ b₂ : PCfg Var Val} (h₁ : Act net i Q L a b₁ L₁)
+    (h₂ : Act net i Q L a b₂ L₂) : b₁ = b₂ ∧ L₁ = L₂ := by
   cases h₁ with
   | loc hl =>
     cases h₂ with
     | loc hl' => exact ⟨lstep_det hl hl', rfl⟩
     | send => cases hl
     | recv => cases hl
+    | check => cases hl
   | send _ _ hL =>
     cases h₂ with
     | loc hl => cases hl
@@ -343,24 +527,40 @@ theorem act_det [DetDefs Var Val] {net : Net Var Val} {i : ℕ} {L L₁ L₂ : S
     cases h₂ with
     | loc hl => cases hl
     | recv _ _ hm' => rw [hm] at hm'; cases hm'; exact ⟨rfl, rfl⟩
+  | check =>
+    cases h₂ with
+    | loc hl => cases hl
+    | check => exact ⟨rfl, rfl⟩
 
-/-- A message in a script stays there as the script grows. -/
-theorem getElem?_of_prefix {α : Type*} {l₁ l₂ : List α} (h : l₁ <+: l₂) {n : ℕ} {m : α}
-    (hm : l₁[n]? = some m) : l₂[n]? = some m := by
-  obtain ⟨u, rfl⟩ := h
-  rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp hm).1]
-  exact hm
+/-- A settled `√c` gives the same answer after another process's action. -/
+theorem Act.check_after {net : Net Var Val} {i : ℕ} {Q Q' : ℕ∞ → Prop} {L L' : Scripts Val}
+    {pr : Proc Var Val} {ch : ℕ} {x : Var} {b : Bool → Val} {k : List (NProc Var Val)}
+    {st : PSt Var Val} (hpr : net.procs[i]? = some pr) (hch : ch ∈ pr.ins)
+    (hen : (L ch)[st.r ch]?.isSome ∨ Q st.t) (hpre : ∀ c, L c <+: L' c) (hQ : ∀ t, Q t → Q' t)
+    (hn : NewAfter Q L L') :
+    Act net i Q' L' ⟨.check ch x b :: k, st⟩ ⟨k, st.checked x (b (ready (L ch) (st.r ch) st.t))⟩ L' := by
+  have hr := ready_stable (hpre ch) (fun n m h₁ h₂ h₃ => hn ch n m _ h₁ h₂ h₃) hen
+  rw [← hr]
+  refine .check hpr hch ?_
+  rcases hen with h | h
+  · left
+    obtain ⟨m, hm⟩ := Option.isSome_iff_exists.mp h
+    rw [getElem?_of_prefix (hpre ch) hm]; rfl
+  · exact .inr (hQ _ h)
 
 /-- **Two processes' actions commute.** Output on a channel only appends to it,
 so it does not disturb another process's input; two outputs are on different
-channels, as each channel has one writer. -/
+channels, as each channel has one writer; and a settled `√c` stays settled. -/
 theorem act_comm {net : Net Var Val} (hwf : net.WF) {i j : ℕ} (hij : i ≠ j)
-    {L L₁ L₂ : Scripts Val} {a a' b b' : PCfg Var Val}
-    (ha : Act net i L a a' L₁) (hb : Act net j L b b' L₂) :
-    ∃ L₃, Act net j L₁ b b' L₃ ∧ Act net i L₂ a a' L₃ := by
+    {Q Q₁ Q₂ : ℕ∞ → Prop} {L L₁ L₂ : Scripts Val} {a a' b b' : PCfg Var Val}
+    (ha : Act net i Q L a a' L₁) (hb : Act net j Q L b b' L₂)
+    (hQ₁ : ∀ t, Q t → Q₁ t) (hQ₂ : ∀ t, Q t → Q₂ t)
+    (hn₁ : NewAfter Q L L₁) (hn₂ : NewAfter Q L L₂) :
+    ∃ L₃, Act net j Q₁ L₁ b b' L₃ ∧ Act net i Q₂ L₂ a a' L₃ := by
   cases ha with
-  | loc hl => exact ⟨L₂, hb, .loc hl⟩
+  | loc hl => exact ⟨L₂, hb.mono hQ₁, .loc hl⟩
   | @send _ pr ch e k st hpr hch hL =>
+    have hpre₁ : ∀ c, L c <+: L₁ c := (Act.send (Q := Q) (k := k) hpr hch hL).prefix
     subst hL
     cases hb with
     | loc hl => exact ⟨_, .loc hl, .send hpr hch rfl⟩
@@ -376,6 +576,8 @@ theorem act_comm {net : Net Var Val} (hwf : net.WF) {i j : ℕ} (hij : i ≠ j)
       by_cases h : ch' = ch
       · subst h; rw [Function.update_self]; exact getElem?_of_prefix (List.prefix_append _ _) hm'
       · rw [Function.update_of_ne h]; exact hm'
+    | check hpr' hch' hen =>
+      exact ⟨_, Act.check_after hpr' hch' hen hpre₁ hQ₁ hn₁, .send hpr hch rfl⟩
   | @recv pr ch x k st m hpr hch hm =>
     cases hb with
     | loc hl => exact ⟨_, .loc hl, .recv hpr hch hm⟩
@@ -386,12 +588,24 @@ theorem act_comm {net : Net Var Val} (hwf : net.WF) {i j : ℕ} (hij : i ≠ j)
       · subst h; rw [Function.update_self]; exact getElem?_of_prefix (List.prefix_append _ _) hm
       · rw [Function.update_of_ne h]; exact hm
     | recv hpr' hch' hm' => exact ⟨_, .recv hpr' hch' hm', .recv hpr hch hm⟩
+    | check hpr' hch' hen => exact ⟨_, .check hpr' hch' (hen.imp id (hQ₁ _)), .recv hpr hch hm⟩
+  | check hpr hch hen =>
+    exact ⟨L₂, hb.mono hQ₁, Act.check_after hpr hch hen hb.prefix hQ₂ hn₂⟩
+
+/-- The messages a step adds were sent no earlier than any time before which no
+process could send. -/
+theorem MStep.newAfter {net : Net Var Val} {c c' : MCfg Var Val} (h : MStep net c c') :
+    NewAfter c.Quiet c.L c'.L := fun ch n m _ hn hm hq => (h.quiet hq).2 ch n m hn hm
 
 /-- **The diamond**: two steps from one configuration are the same step, or each
 can be completed by the other. -/
 theorem mstep_diamond [DetDefs Var Val] {net : Net Var Val} (hwf : net.WF)
     {c c₁ c₂ : MCfg Var Val} (h₁ : MStep net c c₁) (h₂ : MStep net c c₂) :
     c₁ = c₂ ∨ ∃ d, MStep net c₁ d ∧ MStep net c₂ d := by
+  have hQ₁ : ∀ t, c.Quiet t → c₁.Quiet t := fun _ hq => (h₁.quiet hq).1
+  have hQ₂ : ∀ t, c.Quiet t → c₂.Quiet t := fun _ hq => (h₂.quiet hq).1
+  have hn₁ := h₁.newAfter
+  have hn₂ := h₂.newAfter
   obtain ⟨hi, ha⟩ := h₁
   rename_i i a a' L₁
   obtain ⟨hj, hb⟩ := h₂
@@ -402,7 +616,7 @@ theorem mstep_diamond [DetDefs Var Val] {net : Net Var Val} (hwf : net.WF)
     obtain ⟨rfl, rfl⟩ := act_det ha hb
     exact .inl rfl
   · right
-    obtain ⟨L₃, hb₃, ha₃⟩ := act_comm hwf hij ha hb
+    obtain ⟨L₃, hb₃, ha₃⟩ := act_comm hwf hij ha hb hQ₁ hQ₂ hn₁ hn₂
     refine ⟨⟨(c.ps.set i a').set j b', L₃⟩, .mk ?_ hb₃, ?_⟩
     · simpa [List.getElem?_set_ne hij] using hj
     · rw [List.set_comm _ _ hij]
@@ -439,21 +653,9 @@ theorem LStep.w_eq {defs : ℕ → NProc Var Val} {a b : PCfg Var Val} (h : LSte
     b.st.w = a.st.w := by
   cases h <;> rfl
 
-/-- The scripts only grow. -/
-theorem Act.prefix {net : Net Var Val} {i : ℕ} {L L' : Scripts Val} {a b : PCfg Var Val}
-    (h : Act net i L a b L') (c : ℕ) : L c <+: L' c := by
-  cases h with
-  | loc => exact List.prefix_rfl
-  | send _ _ hL =>
-    subst hL
-    by_cases hc : c = ‹ℕ›
-    · subst hc; rw [Function.update_self]; exact List.prefix_append _ _
-    · rw [Function.update_of_ne hc]
-  | recv => exact List.prefix_rfl
-
 /-- A process changes only the scripts of the channels it writes. -/
-theorem Act.eq_of_not_out {net : Net Var Val} {i : ℕ} {L L' : Scripts Val} {a b : PCfg Var Val}
-    (h : Act net i L a b L') {c : ℕ} (hc : ∀ pr, net.procs[i]? = some pr → c ∉ pr.outs) :
+theorem Act.eq_of_not_out {net : Net Var Val} {i : ℕ} {Q : ℕ∞ → Prop} {L L' : Scripts Val}
+    {a b : PCfg Var Val} (h : Act net i Q L a b L') {c : ℕ} (hc : ∀ pr, net.procs[i]? = some pr → c ∉ pr.outs) :
     L' c = L c := by
   cases h with
   | loc => rfl
@@ -461,13 +663,16 @@ theorem Act.eq_of_not_out {net : Net Var Val} {i : ℕ} {L L' : Scripts Val} {a 
     subst hL
     exact Function.update_of_ne (fun h => hc _ hpr (by subst h; exact hch)) _ _
   | recv => rfl
+  | check => rfl
 
-/-- **An action is a step against any scripts that extend what has been written**,
+/-- **An action is a step against any scripts that extend what has been written**
+with messages sent no earlier than any time before which no process could send,
 provided the process's write cursors count what it has written. -/
-theorem Act.pstep {net : Net Var Val} {i : ℕ} {L L' : Scripts Val} {a b : PCfg Var Val}
-    (h : Act net i L a b L') {pr : Proc Var Val} (hpr : net.procs[i]? = some pr)
-    (hw : ∀ c ∈ pr.outs, a.st.w c = (L c).length) {S : Scripts Val}
-    (hS : ∀ c, L' c <+: S c) : PStep net.defs pr S a b := by
+theorem Act.pstep {net : Net Var Val} {i : ℕ} {Q : ℕ∞ → Prop} {L L' : Scripts Val}
+    {a b : PCfg Var Val} (h : Act net i Q L a b L') {pr : Proc Var Val}
+    (hpr : net.procs[i]? = some pr) (hw : ∀ c ∈ pr.outs, a.st.w c = (L c).length)
+    {S : Scripts Val} (hS : ∀ c, L' c <+: S c) (hSQ : NewAfter Q L S) :
+    PStep net.defs pr S a b := by
   cases h with
   | loc hl => exact .loc hl
   | @send _ pr' ch e k st hpr' hch hL =>
@@ -479,6 +684,11 @@ theorem Act.pstep {net : Net Var Val} {i : ℕ} {L L' : Scripts Val} {a b : PCfg
   | recv hpr' hch hm =>
     rw [hpr] at hpr'; cases hpr'
     exact .recv hch (getElem?_of_prefix (hS _) hm)
+  | check hpr' hch hen =>
+    rw [hpr] at hpr'; cases hpr'
+    have hr := ready_stable (hS _) (fun n m h₁ h₂ h₃ => hSQ _ n m _ h₁ h₂ h₃) hen
+    rw [← hr]
+    exact .check hch
 
 /-- What holds of every configuration the machine reaches. -/
 structure Inv (net : Net Var Val) (s : Spec.State Var Val) (t : ℕ∞) (c : MCfg Var Val) :
@@ -491,9 +701,11 @@ structure Inv (net : Net Var Val) (s : Spec.State Var Val) (t : ℕ∞) (c : MCf
   /-- A channel no process writes keeps what the environment supplied. -/
   input : ∀ ch, (∀ (i : ℕ) (pr : Proc Var Val), net.procs[i]? = some pr → ch ∉ pr.outs) →
     c.L ch = net.input ch
-  /-- Against any scripts that extend what has been written, each process got where it
+  /-- Against any scripts that extend what has been written, with messages sent no
+  earlier than any time before which no process can send, each process got where it
   is by the book's steps. -/
-  path : ∀ S : Scripts Val, (∀ ch, c.L ch <+: S ch) → ∀ {i : ℕ} {pr : Proc Var Val}
+  path : ∀ S : Scripts Val, (∀ ch, c.L ch <+: S ch) → NewAfter c.Quiet c.L S →
+    ∀ {i : ℕ} {pr : Proc Var Val}
     {pc : PCfg Var Val}, net.procs[i]? = some pr → c.ps[i]? = some pc →
     ReflTransGen (PStep net.defs pr S) (pr.start s t) pc
 
@@ -508,7 +720,7 @@ theorem inv_init {net : Net Var Val} (hwf : net.WF) (s : Spec.State Var Val) (t 
     simp [Proc.start, Net.init, hwf.input hpr hch]
   input := fun _ _ => rfl
   path := by
-    intro S _ i pr pc hpr hpc
+    intro S _ _ i pr pc hpr hpc
     simp only [Net.init, List.getElem?_map, hpr, Option.map_some, Option.some.injEq] at hpc
     subst hpc
     exact .refl
@@ -516,6 +728,7 @@ theorem inv_init {net : Net Var Val} (hwf : net.WF) (s : Spec.State Var Val) (t 
 /-- The invariant is kept by every step. -/
 theorem Inv.step {net : Net Var Val} (hwf : net.WF) {s : Spec.State Var Val} {t : ℕ∞}
     {c c' : MCfg Var Val} (hc : Inv net s t c) (h : MStep net c c') : Inv net s t c' := by
+  have hstep := h
   obtain ⟨hi, ha⟩ := h
   rename_i i a b L'
   have hilt : i < c.ps.length := (List.getElem?_eq_some_iff.mp hi).1
@@ -543,6 +756,7 @@ theorem Inv.step {net : Net Var Val} (hwf : net.WF) {s : Spec.State Var Val} {t 
         · subst hcc; simpa [PSt.sent] using hw ch hch
         · simpa [PSt.sent, Function.update_of_ne hcc] using hw ch hch
       | recv => exact hc.w hpr hi ch hch
+      | check => exact hc.w hpr hi ch hch
     · rw [List.getElem?_set_ne hij] at hpc
       rcases hnot ch with ⟨pr', hpr', hch'⟩ | heq
       · exact (hwf.writer hij hpr' hpr hch' hch).elim
@@ -551,15 +765,22 @@ theorem Inv.step {net : Net Var Val} (hwf : net.WF) {s : Spec.State Var Val} {t 
     rcases hnot ch with ⟨pr', hpr', hch'⟩ | heq
     · exact (hch i pr' hpr' hch').elim
     · dsimp only; rw [heq]; exact hc.input ch hch
-  · intro S hS j pr pc hpr hpc
+  · intro S hS hSQ j pr pc hpr hpc
     have hS' : ∀ ch, c.L ch <+: S ch := fun ch => (ha.prefix ch).trans (hS ch)
+    have hSQ' : NewAfter c.Quiet c.L S := by
+      intro ch n m τ hn hm hq
+      by_cases hn' : n < (L' ch).length
+      · obtain ⟨u, hu⟩ := hS ch
+        rw [← hu, List.getElem?_append_left hn'] at hm
+        exact (hstep.quiet hq).2 ch n m hn hm
+      · exact hSQ ch n m τ (by simpa using hn') hm (hstep.quiet hq).1
     by_cases hij : i = j
     · subst hij
       simp only [List.getElem?_set_self hilt, Option.some.injEq] at hpc
       subst hpc
-      exact (hc.path S hS' hpr hi).tail (ha.pstep hpr (hc.w hpr hi) hS)
+      exact (hc.path S hS' hSQ' hpr hi).tail (ha.pstep hpr (hc.w hpr hi) hS hSQ')
     · rw [List.getElem?_set_ne hij] at hpc
-      exact hc.path S hS' hpr hpc
+      exact hc.path S hS' hSQ' hpr hpc
 
 /-- The invariant holds of every configuration the machine reaches. -/
 theorem inv_of_reach {net : Net Var Val} (hwf : net.WF) {s : Spec.State Var Val} {t : ℕ∞}
@@ -583,7 +804,7 @@ theorem netSpec_of_reach {net : Net Var Val} (hwf : net.WF) {s : Spec.State Var 
   have hpc' : pc = ⟨[], pc.st⟩ := by ext1 <;> simp [hk]
   refine ⟨?_, hc.w hpr hpc⟩
   rw [← hpc']
-  exact hc.path c.L (fun _ => List.prefix_rfl) hpr hpc
+  exact hc.path c.L (fun _ => List.prefix_rfl) (newAfter_rfl _ _) hpr hpc
 
 /-! ### Running a network -/
 
@@ -611,6 +832,34 @@ theorem det_of_detB : ∀ {p : Prog Var Val}, detB p = true → Det p := by
   | par _ _ _ ihp ihq => simp only [detB, Bool.and_eq_true] at h; exact ⟨ihp h.1, ihq h.2⟩
   | prob => simp [detB] at h
   | _ => trivial
+
+omit [DecidableEq Var] [Defs Var Val] in
+/-- `QuietAt`, as a test. -/
+def PCfg.quietB (L : Scripts Val) (t : ℕ∞) (pc : PCfg Var Val) : Bool :=
+  pc.k.isEmpty || decide (t ≤ pc.st.t) ||
+    match pc.k with
+    | .recv ch _ :: _ =>
+      match (L ch)[pc.st.r ch]? with
+      | some m => decide (t ≤ m.2 + 1)
+      | none => true
+    | _ => false
+
+omit [DecidableEq Var] [Defs Var Val] in
+/-- The test is right. -/
+theorem PCfg.quietAt_of_quietB {L : Scripts Val} {t : ℕ∞} {pc : PCfg Var Val}
+    (h : pc.quietB L t = true) : pc.QuietAt L t := by
+  obtain ⟨k, st⟩ := pc
+  simp only [PCfg.quietB, Bool.or_eq_true, List.isEmpty_iff, decide_eq_true_eq] at h
+  rcases h with (h | h) | h
+  · exact .inl h
+  · exact .inr (.inl h)
+  · split at h
+    · rename_i ch x k'
+      refine .inr (.inr ⟨ch, x, k', rfl, fun m hm => ?_⟩)
+      simp only at hm
+      rw [hm] at h
+      simpa using h
+    · cases h
 
 /-- Process `i` takes a step, if it can; a chunk is run with fuel `f`. -/
 def stepAt (net : Net Var Val) (f : ℕ) (c : MCfg Var Val) (i : ℕ) : Option (MCfg Var Val) :=
@@ -641,6 +890,14 @@ def stepAt (net : Net Var Val) (f : ℕ) (c : MCfg Var Val) (i : ℕ) : Option (
       | some pr =>
         if ch ∈ pr.ins then
           ((c.L ch)[st.r ch]?).map fun m => ⟨c.ps.set i ⟨k, st.received ch x m⟩, c.L⟩
+        else none
+      | none => none
+  | some ⟨.check ch x b :: k, st⟩ =>
+      match net.procs[i]? with
+      | some pr =>
+        if ch ∈ pr.ins ∧
+            ((c.L ch)[st.r ch]?.isSome || c.ps.all (·.quietB c.L st.t)) = true then
+          some ⟨c.ps.set i ⟨k, st.checked x (b (ready (c.L ch) (st.r ch) st.t))⟩, c.L⟩
         else none
       | none => none
   | _ => none
@@ -681,6 +938,18 @@ theorem mstep_of_stepAt {net : Net Var Val} {f : ℕ} {c c' : MCfg Var Val} {i :
       split_ifs at h with hch
       obtain ⟨m, hm, rfl⟩ := Option.map_eq_some_iff.mp h
       exact .mk hps (.recv hpr hch hm)
+    · cases h
+  · rename_i ch x b k st hps
+    split at h
+    · rename_i pr hpr
+      split_ifs at h with hcond
+      cases h
+      refine .mk hps (.check hpr hcond.1 ?_)
+      have h2 := hcond.2
+      simp only [Bool.or_eq_true, List.all_eq_true] at h2
+      rcases h2 with h2 | h2
+      · exact .inl h2
+      · exact .inr fun pc hpc => PCfg.quietAt_of_quietB (h2 pc hpc)
     · cases h
   · cases h
 
@@ -777,6 +1046,11 @@ theorem pstep_det [DetDefs Var Val] {defs : ℕ → NProc Var Val} {pr : Proc Va
     | send => cases hl
     | recv => cases hl
     | never => cases hl
+    | check => cases hl
+  | check =>
+    cases h' with
+    | loc hl => cases hl
+    | check => rfl
   | send =>
     cases h' with
     | loc hl => cases hl
@@ -829,6 +1103,7 @@ theorem PStep.t_le {defs : ℕ → NProc Var Val} {pr : Proc Var Val} {S : Scrip
   | send => exact le_rfl
   | recv => exact le_max_left _ _
   | never => exact le_top
+  | check => exact le_rfl
 
 /-- Time does not go backward. -/
 theorem Path.t_le {defs : ℕ → NProc Var Val} {pr : Proc Var Val} {S : Scripts Val} {n : ℕ}
@@ -871,6 +1146,9 @@ theorem Path.stamp {defs : ℕ → NProc Var Val} {pr : Proc Var Val} {S : Scrip
     | never =>
       obtain ⟨m, hm, h₃, h₄⟩ := ih h₁ h₂
       exact ⟨m, hm, ht.trans h₃, h₄⟩
+    | check =>
+      obtain ⟨m, hm, h₃, h₄⟩ := ih h₁ h₂
+      exact ⟨m, hm, ht.trans h₃, h₄⟩
 
 omit [DecidableEq Var] [Defs Var Val] in
 /-- A message added at the end of a prefix, as the script goes on. -/
@@ -886,8 +1164,9 @@ theorem prefix_snoc {α : Type*} {l s : List α} {x : α} (h : l <+: s) (hx : s[
 
 /-- A machine action that is the book's step keeps the scripts written a prefix
 of the book's. -/
-theorem Act.pre {net : Net Var Val} {i : ℕ} {L L' : Scripts Val} {a b : PCfg Var Val}
-    (h : Act net i L a b L') {pr : Proc Var Val} (hpr : net.procs[i]? = some pr)
+theorem Act.pre {net : Net Var Val} {i : ℕ} {Q : ℕ∞ → Prop} {L L' : Scripts Val}
+    {a b : PCfg Var Val} (h : Act net i Q L a b L') {pr : Proc Var Val}
+    (hpr : net.procs[i]? = some pr)
     (hw : ∀ c ∈ pr.outs, a.st.w c = (L c).length) {S : Scripts Val}
     (hs : PStep net.defs pr S a b) (hpre : ∀ c, L c <+: S c) : ∀ c, L' c <+: S c := by
   cases h with
@@ -905,6 +1184,7 @@ theorem Act.pre {net : Net Var Val} {i : ℕ} {L L' : Scripts Val} {a b : PCfg V
         exact prefix_snoc (hpre c) (by rw [← hw c hch]; exact hS)
       · rw [Function.update_of_ne hc]; exact hpre c
   | recv => exact hpre
+  | check => exact hpre
 
 /-- Process `i` waits at an input whose message — in the scripts `S` — has not
 been written yet; it was sent at time `τ`. -/
@@ -912,6 +1192,20 @@ def Blocked (net : Net Var Val) (S : Scripts Val) (c : MCfg Var Val) (i : ℕ) (
   ∃ (pr : Proc Var Val) (ch : ℕ) (x : Var) (k : List (NProc Var Val)) (st : PSt Var Val)
     (m : Msg Val), net.procs[i]? = some pr ∧ c.ps[i]? = some ⟨.recv ch x :: k, st⟩ ∧
     ch ∈ pr.ins ∧ (S ch)[st.r ch]? = some m ∧ m.2 = τ ∧ (c.L ch)[st.r ch]? = none
+
+/-- Process `i`, at time `τ`, waits at a `√c` that is not settled as the scripts
+`S` say: the next message is not written yet, and either it is there in `S` in
+time, or some process could still send before `τ`. -/
+def CBlocked (net : Net Var Val) (S : Scripts Val) (c : MCfg Var Val) (i : ℕ) (τ : ℕ∞) : Prop :=
+  ∃ (pr : Proc Var Val) (ch : ℕ) (x : Var) (b : Bool → Val) (k : List (NProc Var Val))
+    (st : PSt Var Val), net.procs[i]? = some pr ∧ c.ps[i]? = some ⟨.check ch x b :: k, st⟩ ∧
+    ch ∈ pr.ins ∧ (c.L ch)[st.r ch]? = none ∧ st.t = τ ∧
+    (¬ c.Quiet st.t ∨ ready (S ch) (st.r ch) st.t = true)
+
+/-- Process `i` waits, until time `κ` at least: for a message sent at `κ - 1`, or
+at a `√c` at time `κ`. -/
+def Waits (net : Net Var Val) (S : Scripts Val) (c : MCfg Var Val) (i : ℕ) (κ : ℕ∞) : Prop :=
+  (∃ τ, Blocked net S c i τ ∧ κ = τ + 1) ∨ CBlocked net S c i κ
 
 section Complete
 
@@ -947,13 +1241,13 @@ theorem exists_fin (hspec : NetSpec net s t fin S) {i : ℕ} {pr : Proc Var Val}
 
 omit [DetDefs Var Val] in
 /-- A process that has not finished can take the book's next step on the
-machine, or is blocked. -/
+machine, or waits. -/
 theorem step_or_blocked (hspec : NetSpec net s t fin S) (hfin : ∀ f ∈ fin, f.t ≠ ⊤)
     (hc : Inv net s t c) (hpre : ∀ ch, c.L ch <+: S ch) {len : ℕ → ℕ}
     (hpath : Follows net fin S c len) {i : ℕ} {pc : PCfg Var Val} (hi : c.ps[i]? = some pc)
     (hk : pc.k ≠ []) :
-    (∃ b L', Act net i c.L pc b L' ∧ ∀ pr, net.procs[i]? = some pr → PStep net.defs pr S pc b) ∨
-      ∃ τ, Blocked net S c i τ := by
+    (∃ b L', Act net i c.Quiet c.L pc b L' ∧ ∀ pr, net.procs[i]? = some pr → PStep net.defs pr S pc b) ∨
+      ∃ κ, Waits net S c i κ := by
   obtain ⟨pr, hpr⟩ := exists_proc hc hi
   obtain ⟨f, hf⟩ := exists_fin hspec hpr
   have hp := hpath hpr hi hf
@@ -969,7 +1263,7 @@ theorem step_or_blocked (hspec : NetSpec net s t fin S) (hfin : ∀ f ∈ fin, f
       exact .inl ⟨_, _, .send hpr hch rfl, fun _ h => by rw [same h]; exact .send hch hS⟩
     | @recv ch x k st m hch hm =>
       cases hL : (c.L ch)[st.r ch]? with
-      | none => exact .inr ⟨_, pr, ch, x, k, st, m, hpr, hi, hch, hm, rfl, hL⟩
+      | none => exact .inr ⟨_, .inl ⟨_, ⟨pr, ch, x, k, st, m, hpr, hi, hch, hm, rfl, hL⟩, rfl⟩⟩
       | some m' =>
         have := getElem?_of_prefix (hpre ch) hL
         rw [hm] at this; cases this
@@ -977,62 +1271,123 @@ theorem step_or_blocked (hspec : NetSpec net s t fin S) (hfin : ∀ f ∈ fin, f
     | never =>
       have := hrest.t_le
       exact (hfin f (List.mem_of_getElem? hf) (top_le_iff.mp this)).elim
+    | @check ch x b k st hch =>
+      cases hL : (c.L ch)[st.r ch]? with
+      | some m' =>
+        have hr : ready (S ch) (st.r ch) st.t = ready (c.L ch) (st.r ch) st.t := by
+          unfold ready; rw [hL, getElem?_of_prefix (hpre ch) hL]
+        refine .inl ⟨_, _, .check hpr hch (.inl (by rw [hL]; rfl)), fun _ h => ?_⟩
+        rw [same h, ← hr]; exact .check hch
+      | none =>
+        by_cases hq : c.Quiet st.t ∧ ready (S ch) (st.r ch) st.t = false
+        · have hr : ready (S ch) (st.r ch) st.t = ready (c.L ch) (st.r ch) st.t := by
+            rw [hq.2]; unfold ready; rw [hL]
+          refine .inl ⟨_, _, .check hpr hch (.inr hq.1), fun _ h => ?_⟩
+          rw [same h, ← hr]; exact .check hch
+        · refine .inr ⟨_, .inr ⟨pr, ch, x, b, k, st, hpr, hi, hch, hL, rfl, ?_⟩⟩
+          rw [not_and_or, Bool.not_eq_false] at hq
+          exact hq
 
-/-- **The time-ordering argument.** If every unfinished process is blocked, the
-writer of the message a blocked process waits for is itself blocked, waiting for
-a message sent strictly earlier: it receives that message before it sends the
-one awaited, and a message is received one unit after it is sent. -/
-theorem blocked_descent (hspec : NetSpec net s t fin S)
-    (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (hc : Inv net s t c)
-    {len : ℕ → ℕ} (hpath : Follows net fin S c len)
-    (hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ τ, Blocked net S c j τ)
-    {i : ℕ} {τ : ℕ∞} (hb : Blocked net S c i τ) : ∃ j τ', Blocked net S c j τ' ∧ τ' < τ := by
-  obtain ⟨pr, ch, x, k, st, m, hpr, hi, hch, hm, rfl, hL⟩ := hb
+/-- **The writer of a message not yet written waits until before it was sent**,
+if every unfinished process waits: it is finished (and so has written it), or
+waits for a message it receives before sending this one, or at a `√c` at a time
+no later than this message's. -/
+theorem writer_waits (hspec : NetSpec net s t fin S) (hfin : ∀ f ∈ fin, f.t ≠ ⊤)
+    (hc : Inv net s t c) {len : ℕ → ℕ} (hpath : Follows net fin S c len)
+    (hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ κ, Waits net S c j κ)
+    {ch idx : ℕ} {m : Msg Val} (hm : (S ch)[idx]? = some m) (hL : (c.L ch).length ≤ idx) :
+    m.2 ≠ ⊤ ∧ ∃ j κ, Waits net S c j κ ∧ κ ≤ m.2 := by
   by_cases hw : ∃ (j : ℕ) (prj : Proc Var Val), net.procs[j]? = some prj ∧ ch ∈ prj.outs
   swap
   · push Not at hw
     have h₁ := hc.input ch hw
     have h₂ := hspec.2.2 ch hw
-    rw [h₁, ← h₂, hm] at hL
-    cases hL
+    rw [h₁, ← h₂] at hL
+    exact absurd (List.getElem?_eq_none hL) (by rw [hm]; simp)
   obtain ⟨j, prj, hprj, hchj⟩ := hw
   obtain ⟨pcj, hpcj⟩ := exists_pcfg hc hprj
   obtain ⟨fj, hfj⟩ := exists_fin hspec hprj
   have hwj := hc.w hprj hpcj ch hchj
-  have hr : (c.L ch).length ≤ st.r ch := List.getElem?_eq_none_iff.mp hL
   have hfw := (hspec.2.1 j prj fj hprj hfj).2 ch hchj
-  have hrS : st.r ch < (S ch).length := (List.getElem?_eq_some_iff.mp hm).1
+  have hrS : idx < (S ch).length := (List.getElem?_eq_some_iff.mp hm).1
   have hp := hpath hprj hpcj hfj
+  have hfj' : fj.t ≠ ⊤ := hfin fj (List.mem_of_getElem? hfj)
   by_cases hkj : pcj.k = []
   · have := path_nil hkj hp
     rw [this] at hwj
     omega
-  obtain ⟨τ', hbj⟩ := hall j pcj hpcj hkj
-  obtain ⟨prj', ch', x', k', st', m', hprj', hpcj', hch', hm', rfl, hL'⟩ := hbj
-  rw [hprj] at hprj'; cases hprj'
-  rw [hpcj] at hpcj'; cases hpcj'
-  obtain ⟨n', _, hp'⟩ := path_tail hp (.recv hch' hm')
-  dsimp only at hwj
-  obtain ⟨m₂, hm₂, h₁, h₂⟩ := hp'.stamp (ch := ch) (idx := st.r ch)
-    (by simp only [PSt.received]; omega) (by dsimp only; omega)
-  rw [hm] at hm₂; cases hm₂
-  refine ⟨j, m'.2, ⟨prj, ch', x', k', st', m', hprj, hpcj, hch', hm', rfl, hL'⟩, ?_⟩
-  have hfj' : fj.t ≠ ⊤ := hfin fj (List.mem_of_getElem? hfj)
-  have h₃ : m'.2 + 1 ≤ m.2 := le_trans (le_max_right _ _) h₁
-  have h₄ : m.2 ≠ ⊤ := ne_top_of_le_ne_top hfj' h₂
-  have h₅ : m'.2 ≠ ⊤ := fun h => h₄ (top_le_iff.mp (by simpa [h] using h₃))
-  exact (ENat.add_one_le_iff h₅).mp h₃
+  obtain ⟨m₀, hm₀, h₀, h₀'⟩ := hp.stamp (ch := ch) (idx := idx) (by omega)
+    (by show idx < fj.w ch; omega)
+  rw [hm] at hm₀; cases hm₀
+  have hfinm : m.2 ≠ ⊤ := ne_top_of_le_ne_top hfj' h₀'
+  refine ⟨hfinm, j, ?_⟩
+  obtain ⟨κ, hκ⟩ := hall j pcj hpcj hkj
+  rcases hκ with ⟨τ', hbj, rfl⟩ | hcb
+  · obtain ⟨prj', ch', x', k', st', m', hprj', hpcj', hch', hm', rfl, hL'⟩ := hbj
+    rw [hprj] at hprj'; cases hprj'
+    rw [hpcj] at hpcj'; cases hpcj'
+    obtain ⟨n', _, hp'⟩ := path_tail hp (.recv hch' hm')
+    dsimp only at hwj
+    obtain ⟨m₂, hm₂, h₁, -⟩ := hp'.stamp (ch := ch) (idx := idx)
+      (by simp only [PSt.received]; omega) (by dsimp only; omega)
+    rw [hm] at hm₂; cases hm₂
+    exact ⟨_, .inl ⟨_, ⟨prj, ch', x', k', st', m', hprj, hpcj, hch', hm', rfl, hL'⟩, rfl⟩,
+      le_trans (le_max_right _ _) h₁⟩
+  · refine ⟨κ, .inr hcb, ?_⟩
+    obtain ⟨prj', ch', x', b', k', st', hprj', hpcj', -, -, rfl, -⟩ := hcb
+    rw [hpcj] at hpcj'; cases hpcj'
+    exact h₀
 
-/-- No process is blocked, if every unfinished one is. -/
+/-- **The time-ordering argument.** If every unfinished process waits, some
+process waits until strictly earlier than any one does: the writer of a message
+awaited waits until before it was sent, and a `√c` not settled waits for a
+message sent before now or for a process still behind. -/
+theorem blocked_descent (hspec : NetSpec net s t fin S)
+    (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (hc : Inv net s t c)
+    {len : ℕ → ℕ} (hpath : Follows net fin S c len)
+    (hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ κ, Waits net S c j κ)
+    {i : ℕ} {κ : ℕ∞} (hb : Waits net S c i κ) : ∃ j κ', Waits net S c j κ' ∧ κ' < κ := by
+  rcases hb with ⟨τ, ⟨pr, ch, x, k, st, m, hpr, hi, hch, hm, rfl, hL⟩, rfl⟩ | hcb
+  · obtain ⟨hfinm, j, κ', hj, hle⟩ := writer_waits hspec hfin hc hpath hall hm
+      (List.getElem?_eq_none_iff.mp hL)
+    exact ⟨j, κ', hj, lt_of_le_of_lt hle (ENat.lt_add_one_iff hfinm |>.mpr le_rfl)⟩
+  · obtain ⟨pr, ch, x, b, k, st, hpr, hi, hch, hL, rfl, hwhy⟩ := hcb
+    rcases hwhy with hnq | hready
+    · -- a process behind, which cannot be waiting for input with nothing there
+      simp only [MCfg.Quiet, not_forall] at hnq
+      obtain ⟨pc, hpc, hnq⟩ := hnq
+      obtain ⟨j, hj⟩ := List.mem_iff_getElem?.mp hpc
+      have hkj : pc.k ≠ [] := fun h => hnq (.inl h)
+      obtain ⟨κ', hκ'⟩ := hall j pc hj hkj
+      rcases hκ' with ⟨τ', ⟨prj, ch', x', k', st', m', -, hpcj, -, -, -, hL'⟩, -⟩ | hcb'
+      · rw [hj] at hpcj; cases hpcj
+        exact (hnq (.inr (.inr ⟨ch', x', k', rfl, fun m hm => by rw [hL'] at hm; cases hm⟩))).elim
+      · refine ⟨j, κ', .inr hcb', ?_⟩
+        obtain ⟨_, _, _, _, _, st', _, hpcj', _, _, hκ, _⟩ := hcb'
+        rw [hj] at hpcj'; cases hpcj'
+        simp only [PCfg.QuietAt, not_or, not_le] at hnq
+        rw [← hκ]; exact hnq.2.1
+    · -- the message is in time, so its writer waits until before now
+      unfold ready at hready
+      cases hm : (S ch)[st.r ch]? with
+      | none => rw [hm] at hready; cases hready
+      | some m =>
+        rw [hm] at hready
+        have hlt : m.2 < st.t := by simpa using hready
+        obtain ⟨-, j, κ', hj, hle⟩ := writer_waits hspec hfin hc hpath hall hm
+          (List.getElem?_eq_none_iff.mp hL)
+        exact ⟨j, κ', hj, lt_of_le_of_lt hle hlt⟩
+
+/-- No process waits, if every unfinished one does. -/
 theorem not_blocked (hspec : NetSpec net s t fin S)
     (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (hc : Inv net s t c)
     {len : ℕ → ℕ} (hpath : Follows net fin S c len)
-    (hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ τ, Blocked net S c j τ) (τ : ℕ∞) :
-    ∀ i, ¬ Blocked net S c i τ := by
-  refine WellFoundedLT.induction (motive := fun τ => ∀ i, ¬ Blocked net S c i τ) τ ?_
-  intro τ ih i hb
-  obtain ⟨j, τ', hb', hlt⟩ := blocked_descent hspec hfin hc hpath hall hb
-  exact ih τ' hlt j hb'
+    (hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ κ, Waits net S c j κ)
+    (κ : ℕ∞) : ∀ i, ¬ Waits net S c i κ := by
+  refine WellFoundedLT.induction (motive := fun κ => ∀ i, ¬ Waits net S c i κ) κ ?_
+  intro κ ih i hb
+  obtain ⟨j, κ', hb', hlt⟩ := blocked_descent hspec hfin hc hpath hall hb
+  exact ih κ' hlt j hb'
 
 /-- **Progress**: while some process has not finished, the machine can take the
 book's next step for one of them. -/
@@ -1040,17 +1395,18 @@ theorem progress (hspec : NetSpec net s t fin S)
     (hfin : ∀ f ∈ fin, f.t ≠ ⊤) (hc : Inv net s t c) (hpre : ∀ ch, c.L ch <+: S ch)
     {len : ℕ → ℕ} (hpath : Follows net fin S c len)
     (hnd : ∃ (i : ℕ) (pc : PCfg Var Val), c.ps[i]? = some pc ∧ pc.k ≠ []) :
-    ∃ i pc b L', c.ps[i]? = some pc ∧ Act net i c.L pc b L' ∧
+    ∃ i pc b L', c.ps[i]? = some pc ∧ Act net i c.Quiet c.L pc b L' ∧
       ∀ pr, net.procs[i]? = some pr → PStep net.defs pr S pc b := by
-  by_cases hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] → ∃ τ, Blocked net S c j τ
+  by_cases hall : ∀ (j : ℕ) (pc : PCfg Var Val), c.ps[j]? = some pc → pc.k ≠ [] →
+      ∃ κ, Waits net S c j κ
   · obtain ⟨i, pc, hi, hk⟩ := hnd
-    obtain ⟨τ, hb⟩ := hall i pc hi hk
-    exact (not_blocked hspec hfin hc hpath hall τ i hb).elim
+    obtain ⟨κ, hb⟩ := hall i pc hi hk
+    exact (not_blocked hspec hfin hc hpath hall κ i hb).elim
   · push Not at hall
     obtain ⟨j, pc, hj, hk, hnb⟩ := hall
-    rcases step_or_blocked hspec hfin hc hpre hpath hj hk with ⟨b, L', ha, hps⟩ | ⟨τ, hb⟩
+    rcases step_or_blocked hspec hfin hc hpre hpath hj hk with ⟨b, L', ha, hps⟩ | ⟨κ, hb⟩
     · exact ⟨j, pc, b, L', hj, ha, hps⟩
-    · exact (hnb τ hb).elim
+    · exact (hnb κ hb).elim
 
 /-- One round of the completeness argument: the machine has finished, as the
 book says it does, or it takes a step and the histories left get shorter. -/

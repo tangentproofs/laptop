@@ -79,7 +79,7 @@ def parseB4 (names : List String) (ts : Toks) : Except String B4Program := do
 A scope hides its own variable. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.writes (look : ℕ → List ℕ) : Stmt → List ℕ
   | .assign x _ => [x]
-  | .recv _ x => [x]
+  | .recv _ x | .check _ x => [x]
   | .seq p q | .cond _ p q => p.writes look ++ q.writes look
   | .loop _ p => p.writes look
   | .scope x _ p => (p.writes look).filter (· != x)
@@ -91,7 +91,7 @@ each named statement. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.comms (look : ℕ → List (Bool × ℕ)) :
     Stmt → List (Bool × ℕ)
   | .send c _ => [(true, c)]
-  | .recv c _ => [(false, c)]
+  | .recv c _ | .check c _ => [(false, c)]
   | .seq p q | .cond _ p q => p.comms look ++ q.comms look
   | .loop _ p | .scope _ _ p => p.comms look
   | .call k => look k
@@ -190,10 +190,10 @@ def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outco
   for c in [0:bp.chans.length] do
     if (net.procs.filter fun pr => pr.outs.contains c).length > 1 then
       throw s!"channel {(bp.chans[c]?.map (·.1)).getD "?"} is written by two processes"
-  let w := (net.load L s).run fuel
+  let w := (net.load L s).runK fuel
   let st :=
     if w.ms.all (getRST · != 1) then B4Status.halted
-    else if w.sweep.2 then .running else .deadlock
+    else if w.sweep.2 || w.settle.isSome then .running else .deadlock
   let owner := fun x => bp.procs.findIdx? (·.writes bp.writesLook |>.contains x)
   let value := fun x => match owner x with
     | some i => ((w.ms[i]?).map fun m => B4Program.value (getVal m.mem (L.addr x))).getD 0

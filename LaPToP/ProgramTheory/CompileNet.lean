@@ -41,6 +41,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toNP : Stmt → NProc ℕ Value
   | .scope x e p => .scope x e.eval p.toNP
   | .ret => .act .ok
   | .restore x v => .restore x v
+  | .check ch x => .check ch x .bool
 
 /-- A statement a program is written in: no return or end of scope, which only
 running makes. -/
@@ -163,8 +164,8 @@ inductive SStep (L : Layout) (net : SNet) : SCfg → SCfg → Prop
 /-- An action in 32 bits, other than a call, is an action of the network machine. -/
 theorem SAct.act {L : Layout} {net : SNet} {i : ℕ} {pr : SProc} (hpr : net.procs[i]? = some pr)
     {Λ Λ' : Scripts Value} {a b : List Stmt × PSt ℕ Value} (h : SAct L pr Λ a b Λ')
-    (hnc : ∀ k ks, a.1 ≠ .call k :: ks) :
-    Act net.toNet i Λ ⟨a.1.map Stmt.toNP, a.2⟩ ⟨b.1.map Stmt.toNP, b.2⟩ Λ' := by
+    (hnc : ∀ k ks, a.1 ≠ .call k :: ks) {Q : ℕ∞ → Prop} :
+    Act net.toNet i Q Λ ⟨a.1.map Stmt.toNP, a.2⟩ ⟨b.1.map Stmt.toNP, b.2⟩ Λ' := by
   have hpr' : net.toNet.procs[i]? = some ⟨pr.body.toNP, pr.outs, pr.ins⟩ := by
     simp [SNet.toNet, hpr]
   cases h with
@@ -333,7 +334,7 @@ theorem swarm_lift {w : Swarm} {i : ℕ} {s s' : State} (hi : w.ms[i]? = some s)
     have h₁ : ({ w with ms := w.ms.set i s₁ } : Swarm).ms[i]? = some s₁ := by
       simp [List.getElem?_set_self hlt]
     rw [Swarm.stepAt_other h₁ ((running_iff _).mpr hr) (by rw [ioCmd_of_notIo hn]; simp)
-      (by rw [ioCmd_of_notIo hn]; simp)]
+      (by rw [ioCmd_of_notIo hn]; simp) (by rw [ioCmd_of_notIo hn]; simp)]
     simp
 
 /-- Follow the jumps before what is left. -/
@@ -1170,7 +1171,7 @@ theorem halt_one (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {st 
     have hn : NotIo s₁ := notIo_of_hop h₁ h₃
     refine ⟨step s₁, hw₁.tail ⟨i, ?_⟩, ⟨step_hl s₁ hp₁.wf h₁ h₃, ?_, ?_⟩⟩
     · rw [Swarm.stepAt_other hs₁ ((running_iff _).mpr hp₁.run) (by rw [ioCmd_of_notIo hn]; simp)
-        (by rw [ioCmd_of_notIo hn]; simp)]
+        (by rw [ioCmd_of_notIo hn]; simp) (by rw [ioCmd_of_notIo hn]; simp)]
       simp
     · rw [step_of s₁ _ h₁ h₃, runOp_hl]; simpa using hp₁.vars
     · rw [step_of s₁ _ h₁ h₃, runOp_hl]; simpa using hp₁.clk

@@ -1573,7 +1573,7 @@ converted, by induction on the fuel, each case unfolding one step of both and
 using those two facts.
 :::
 
-:::theorem "interpreter_network" (parent := "programming_language_core") (tags := "programs, interpreter, channels, concurrency, deadlock, hehner-9.1") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.PStep, LaPToP.ProgramTheory.Interpreter.Network.NetSpec, LaPToP.ProgramTheory.Interpreter.Network.Net.WF, LaPToP.ProgramTheory.Interpreter.Network.Act, LaPToP.ProgramTheory.Interpreter.Network.MStep, LaPToP.ProgramTheory.Interpreter.Network.act_comm, LaPToP.ProgramTheory.Interpreter.Network.mstep_diamond, LaPToP.ProgramTheory.Interpreter.Network.mstep_confluent, LaPToP.ProgramTheory.Interpreter.Network.normal_unique, LaPToP.ProgramTheory.Interpreter.Network.Inv, LaPToP.ProgramTheory.Interpreter.Network.netSpec_of_reach, LaPToP.ProgramTheory.Interpreter.Network.Path.stamp, LaPToP.ProgramTheory.Interpreter.Network.blocked_descent, LaPToP.ProgramTheory.Interpreter.Network.progress, LaPToP.ProgramTheory.Interpreter.Network.reach_of_netSpec, LaPToP.ProgramTheory.Interpreter.Network.netSpec_unique, LaPToP.ProgramTheory.Interpreter.Network.deadlock_top, LaPToP.ProgramTheory.Interpreter.Network.runNet, LaPToP.ProgramTheory.Interpreter.Network.runNet_correct, LaPToP.ProgramTheory.Interpreter.Lang.toNP, LaPToP.ProgramTheory.Interpreter.Lang.toNet, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sendRecv_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.buffer_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deadlock_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.doubler_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.pipeline_net, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv_exists, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv_book, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer_reach, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer_book, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait_normal, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait_book")
+:::theorem "interpreter_network" (parent := "programming_language_core") (tags := "programs, interpreter, channels, concurrency, deadlock, hehner-9.1") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.PStep, LaPToP.ProgramTheory.Interpreter.Network.NetSpec, LaPToP.ProgramTheory.Interpreter.Network.Net.WF, LaPToP.ProgramTheory.Interpreter.Network.Act, LaPToP.ProgramTheory.Interpreter.Network.MStep, LaPToP.ProgramTheory.Interpreter.Network.act_comm, LaPToP.ProgramTheory.Interpreter.Network.ready, LaPToP.ProgramTheory.Interpreter.Network.MCfg.Quiet, LaPToP.ProgramTheory.Interpreter.Network.MStep.quiet, LaPToP.ProgramTheory.Interpreter.Network.Waits, LaPToP.ProgramTheory.Interpreter.Network.writer_waits, LaPToP.ProgramTheory.Interpreter.Network.mstep_diamond, LaPToP.ProgramTheory.Interpreter.Network.mstep_confluent, LaPToP.ProgramTheory.Interpreter.Network.normal_unique, LaPToP.ProgramTheory.Interpreter.Network.Inv, LaPToP.ProgramTheory.Interpreter.Network.netSpec_of_reach, LaPToP.ProgramTheory.Interpreter.Network.Path.stamp, LaPToP.ProgramTheory.Interpreter.Network.blocked_descent, LaPToP.ProgramTheory.Interpreter.Network.progress, LaPToP.ProgramTheory.Interpreter.Network.reach_of_netSpec, LaPToP.ProgramTheory.Interpreter.Network.netSpec_unique, LaPToP.ProgramTheory.Interpreter.Network.deadlock_top, LaPToP.ProgramTheory.Interpreter.Network.runNet, LaPToP.ProgramTheory.Interpreter.Network.runNet_correct, LaPToP.ProgramTheory.Interpreter.Lang.toNP, LaPToP.ProgramTheory.Interpreter.Lang.toNet, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sendRecv_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.buffer_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deadlock_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.doubler_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.pipeline_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.poll_net, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv_exists, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv_book, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer_reach, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer_book, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait_normal, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait_book")
 Communicating processes, run by a machine proved equal to the book's semantics.
 A network is processes, each with its own variables, its own clock and its own
 read and write cursors, joined by channels, each with one writer and any number
@@ -1587,10 +1587,14 @@ declaration quantifies the scripts existentially, as in
 until $`∞`.
 
 The machine runs the processes in turns, an output appending its message to the
-channel's script, an input waiting while its message is not there. It is
-*determinate* (Kahn): two steps of different processes commute — an output only
-appends, and two outputs are on different channels — so the machine is
-confluent and reaches at most one configuration in which nothing can move,
+channel's script, an input waiting while its message is not there. The check
+$`\surd c` is the book's timed one, $`T\,r + 1 ≤ t`: it is answered once it is
+settled — the next message is there, or no process can send one before now
+(each has finished, or is at time $`t`, or waits for input that would bring it
+there). It is *determinate* (Kahn): two steps of different processes commute — an
+output only appends, two outputs are on different channels, and a settled check
+stays settled, since no process can send before $`t` ever again once none can —
+so the machine is confluent and reaches at most one configuration in which nothing can move,
 whatever the order of turns. It is *sound*: when every process finishes, the
 final states and the scripts it wrote are a behaviour of the book's semantics.
 It is *complete*: a behaviour of the book's semantics in which every process
@@ -1613,9 +1617,7 @@ theorems above.
 
 Honest scope. Each process is deterministic: its chunks are in the deterministic
 fragment. In the concrete syntax, a choice or a $`\|` may not surround
-communication (a local variable may: it is a scope of the process), and
-$`\surd c` is not available, since whether a message
-is waiting depends on how fast the other processes run. Uniqueness and
+communication (a local variable may: it is a scope of the process). Uniqueness and
 completeness are for behaviours with finite times; with a deadlock the book
 leaves the messages sent at time $`∞` arbitrary, and so does this account.
 :::
@@ -1627,14 +1629,18 @@ commuting list updates and function updates; Church–Rosser then gives
 confluence, and a configuration without steps is reached only by the empty run.
 Soundness: an invariant of every reachable configuration says each process got
 where it is by the book's steps against any scripts extending those written so
-far, and each writer's cursor counts what it has written. Completeness: follow
-the book's histories, which are determined by the scripts. While some process
-has not finished, one can take its next step on the machine; otherwise each
-unfinished process waits for a message not yet written, and the writer of the
-one a process waits for is itself waiting for a message sent strictly earlier —
-it receives that message, one unit after it was sent, before it sends the one
-awaited, and the times are finite. That is an infinite descent in a well-founded
-order. Each step shortens the histories left, so the machine finishes, having
+far by messages sent no earlier than any time before which no process can send
+(so a check settled by quiet gets the book's answer), and each writer's cursor
+counts what it has written. Quiet lasts: a process that steps while none can
+send before $`t` is at $`t` or later after its step, and sends at $`t` or
+later. Completeness: follow the book's histories, which are determined by the
+scripts. While some process has not finished, one can take its next step on the
+machine; otherwise each unfinished process waits — for a message not yet
+written, until one unit after it was sent, or at a check not settled, until its
+own time. The writer of an awaited message waits until no later than it was
+sent, and a check not settled waits for a message sent before now or for a
+process behind it, which can only be waiting at a check itself; and the times
+are finite. That is an infinite descent in a well-founded order. Each step shortens the histories left, so the machine finishes, having
 written exactly the book's scripts.
 :::
 
@@ -1722,7 +1728,11 @@ the interpreter and the network machine do, and a run warns when a value left
 
 Honest scope. Forward simulation, and the correspondence of deadlocks
 ({uses "interpreter_swarm_deadlock"}[]); that the swarm does nothing else
-in general is not proved. That the statements the parser builds beside a
+in general is not proved. $`\surd c` runs on the swarm too — a check `io`
+answered when the message is there, and settled to false by the runner, when no
+machine can move, for the earliest machine waiting at one — and the self-test
+checks it against the network machine, but the simulation theorems do not yet
+cover it. That the statements the parser builds beside a
 program are that program (`Stmt.toProg`) is checked on the demonstrations, not
 proved.
 :::

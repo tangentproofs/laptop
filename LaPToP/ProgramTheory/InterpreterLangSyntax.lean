@@ -300,6 +300,9 @@ structure PS where
   (`Network`): then `c! e` and `c?` are marks for the network's output and
   input, and `c` is the variable an input stores its message in. -/
   net : Bool
+  /-- In a network, the channels whose `√c` the expressions read since the last
+  statement use: each is a `check` the statement must do first. -/
+  pending : List ℕ := []
 
 /-- `c! e` in a network: a mark on the channel's (otherwise unused) cursor
 variable, read by `Network`'s translation as output. As a program it does nothing. -/
@@ -307,6 +310,10 @@ def netSend (r : ℕ) (e : Exp) : P := .newLocal r e.eval .ok
 
 /-- `c?` in a network: a mark on the channel's variable, read as input into it. -/
 def netRecv (M : ℕ) : P := .newLocal M (fun _ => .int 0) .ok
+
+/-- `x:= √c` in a network: a mark on the channel's hidden variable `#c.ready`,
+read by `Network`'s translation as the check, which keeps the answer there. -/
+def netCheck (q : ℕ) : P := .newLocal q (fun _ => .bool false) .ok
 
 /-- A program is a network when it has channels and a `||`. -/
 def isNet (chans : List (String × ℕ × ℕ)) (ts : Toks) : Bool :=
@@ -337,6 +344,28 @@ def parseName (st : PS) : Except String (ℕ × PS) :=
     else let (x, names) := intern w st.names; .ok (x, { st with toks := rest, names := names })
   | t :: _ => .error s!"expected a name, found '{t.render}'"
   | [] => .error "expected a name, found the end of the program"
+
+/-- `p`, after the checks `cs` (channel numbers) that its expressions need. -/
+def PS.checksThen (st : PS) (cs : List ℕ) (p : PB) : PB :=
+  cs.eraseDups.foldr (fun k acc => match st.chans[k]? with
+    | some (c, _, _) =>
+      match st.names.idxOf? ("#" ++ c ++ ".ready") with
+      | some q => PB.seq (PB.of (netCheck q) (.check k q)) acc
+      | none => acc
+    | none => acc) p
+
+/-- `p`, then the checks `cs`: a loop's condition is checked again after its body. -/
+def PS.thenChecks (st : PS) (cs : List ℕ) (p : PB) : PB :=
+  match cs with
+  | [] => p
+  | _ => PB.seq p (st.checksThen cs PB.ok)
+
+/-- `p`, after the checks its expressions read; and no checks pending. -/
+def PS.withChecks (st : PS) (p : PB) : PB × PS :=
+  (st.checksThen st.pending p, { st with pending := [] })
+
+/-- The checks pending, and none any more. -/
+def PS.takePending (st : PS) : List ℕ × PS := (st.pending, { st with pending := [] })
 
 /-- A fresh specification for a loop to be compiled to. -/
 def newProc (tag : String) (st : PS) : ℕ × PS :=
@@ -564,12 +593,15 @@ def parseAtom (fuel : ℕ) (st : PS) : Except String (Exp × PS) :=
       .error "rand may be used only as x:= rand n; for rand inside an expression, \
         assign it to a fresh variable first, as Section 5.7 does"
     | .sym "√" :: .word c :: ts =>
-      match st.chans.find? (·.1 == c) with
-      | some (_, M, r) =>
-        if st.net then .error s!"√{c} cannot be used in a network of processes: \
-          whether a message is waiting depends on how fast the others run"
+      match st.chans.find? (·.1 == c), st.chans.findIdx? (·.1 == c) with
+      | some (_, M, r), some k =>
+        -- in a network, the answer is in `#c.ready`, which a check sets first
+        if st.net then
+          match st.names.idxOf? ("#" ++ c ++ ".ready") with
+          | some q => .ok (.var q, { st.at ts with pending := st.pending ++ [k] })
+          | none => .error s!"√{c}: no variable for the answer"
         else .ok (check M r, st.at ts)
-      | none => .error s!"'{c}' is not a channel"
+      | _, _ => .error s!"'{c}' is not a channel"
     | .word w :: ts =>
       match st.chans.find? (·.1 == w) with
       | some (_, M, r) => .ok (if st.net then .var M else message M r, st.at ts)
@@ -768,13 +800,18 @@ def parseBody (fuel : ℕ) (st : PS) : Except String (List Raw × PS) :=
   | 0 => .error "loop body too long or too deeply nested"
   | f + 1 => do
     let (r, st) ← parseItem f st
+    -- the checks an `exit when` or an `if` needs, first
+    let (cs, st) := st.takePending
+    let pre : List Raw := match cs with
+      | [] => []
+      | _ => [.stmt (st.checksThen cs PB.ok)]
     match st.toks with
     | .sym "." :: ts₁ =>
-      if endsBlock ts₁ then .ok ([r], st.at ts₁)
+      if endsBlock ts₁ then .ok (pre ++ [r], st.at ts₁)
       else do
         let (rs, st) ← parseBody f (st.at ts₁)
-        .ok (r :: rs, st)
-    | _ => .ok ([r], st)
+        .ok (pre ++ r :: rs, st)
+    | _ => .ok (pre ++ [r], st)
 termination_by structural fuel
 
 /-- An item of a loop body. -/
@@ -801,16 +838,18 @@ def parseItem (fuel : ℕ) (st : PS) : Except String (Raw × PS) :=
         let (p, st) ← parseStmt f st₀
         .ok (.stmt p, st)
       | _ => do
+        -- the condition's checks go before the `if`, not into its branches
+        let (cs, st) := st.takePending
         let st ← expectWord "then" st
         let (t, st) ← parseBody f st
         match st.toks with
         | .word "else" :: ts => do
           let (e, st) ← parseBody f (st.at ts)
           let st ← expectWord "fi" st
-          .ok (.ifr ((t ++ e).any Raw.jumps) c t e, st)
+          .ok (.ifr ((t ++ e).any Raw.jumps) c t e, { st with pending := cs })
         | _ => do
           let st ← expectWord "fi" st
-          .ok (.ifr (t.any Raw.jumps) c t [.stmt PB.ok], st)
+          .ok (.ifr (t.any Raw.jumps) c t [.stmt PB.ok], { st with pending := cs })
     | .word "do" :: ts => do
       let (b, st) ← parseBody f (st.at ts)
       let st ← expectWord "od" st
@@ -830,10 +869,10 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
     | .word "tick" :: ts => .ok (PB.of .tick .tick, st.at ts)
     | .word "ensure" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
-      .ok (PB.no (ensure c) "'ensure'", st)
+      .ok (st.withChecks (PB.no (ensure c) "'ensure'"))
     | .word "assert" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
-      .ok (PB.no (assert c) "'assert'", st)
+      .ok (st.withChecks (PB.no (assert c) "'assert'"))
     | .word "if" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
       let (d, st) ← match st.toks with
@@ -841,6 +880,7 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           let (d, st) ← parseExp f (st.at ts)
           .ok (some d, st)
         | _ => .ok (none, st)
+      let (cs, st) := st.takePending
       let st ← expectWord "then" st
       let (p, st) ← parseProg f st
       let (q, st) ← match st.toks with
@@ -852,14 +892,16 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           let st ← expectWord "fi" st
           .ok (PB.ok, st)
       match d with
-      | some d => .ok (PB.no (probIf c d p.p q.p) "a probabilistic choice", st)
-      | none => .ok (PB.ifThen c p q, st)
+      | some d => .ok (st.checksThen cs (PB.no (probIf c d p.p q.p) "a probabilistic choice"), st)
+      | none => .ok (st.checksThen cs (PB.ifThen c p q), st)
     | .word "while" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
+      let (cs, st) := st.takePending
       let st ← expectWord "do" st
       let (p, st) ← parseProg f st
       let st ← expectWord "od" st
-      .ok (PB.loop c p, st)
+      -- checked before the loop, and again after each round
+      .ok (st.checksThen cs (PB.loop c (st.thenChecks cs p)), st)
     | .word "do" :: ts => do
       let (b, st) ← parseBody f (st.at ts)
       let st ← expectWord "od" st
@@ -870,6 +912,7 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
       let (m, st) ← parseExp f st
       let st ← expectSym ";.." st
       let (n, st) ← parseExp f st
+      let (cs, st) := st.takePending
       let st ← expectWord "do" st
       let (body, st) ← parseProg f st
       let st ← expectWord "od" st
@@ -881,13 +924,13 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
         let step : PB := PB.seq body
           (PB.seq (PB.assign i (.bin .add (.var i) (.lit (.int 1)))) (PB.call k))
         let st := st.define k (PB.ifThen (.bin .lt (.var i) (.var hi)) step PB.ok)
-        .ok (PB.declare hi n (PB.declare i m (PB.call k)), st)
+        .ok (st.checksThen cs (PB.declare hi n (PB.declare i m (PB.call k))), st)
     | .word c :: .sym "!" :: ts =>
       match st.chans.find? (·.1 == c), st.chans.findIdx? (·.1 == c) with
       | some (_, M, r), some k => do
         let (e, st) ← parseExp f (st.at ts)
-        .ok (if st.net then PB.of (netSend r e) (.send k e)
-          else PB.no (output M e) "a channel outside a network", st)
+        .ok (st.withChecks (if st.net then PB.of (netSend r e) (.send k e)
+          else PB.no (output M e) "a channel outside a network"))
       | _, _ => .error s!"'{c}' is not a channel"
     | .word c :: .sym "?" :: ts =>
       match st.chans.find? (·.1 == c), st.chans.findIdx? (·.1 == c) with
@@ -901,10 +944,11 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
       let (x, st) ← parseName (st.at ts)
       let st ← expectSym ":=" st
       let (e, st) ← parseExp f st
+      let (cs, st) := st.takePending
       let st ← expectWord "in" st
       let (p, st) ← parseProg f st
       let st ← expectWord "end" st
-      .ok (PB.declare x e p, st)
+      .ok (st.checksThen cs (PB.declare x e p), st)
     | .sym "(" :: ts => do
       let (p, st) ← parseProg f (st.at ts)
       let st ← expectSym ")" st
@@ -919,7 +963,9 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           let (args, st) ← parseArgs f (st.at ts)
           if args.length != ps.length then
             .error s!"'{w}' takes {plural ps.length "argument"}, not {args.length}"
-          else .ok (callWith k ps args st)
+          else
+            let (p, st) := callWith k ps args st
+            .ok (st.withChecks p)
         | ps, _ => .error s!"'{w}' takes {plural ps.length "argument"}"
       | none => do
         let (x, st) ← parseName st
@@ -931,20 +977,22 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           if es.length != xs.length then
             .error s!"{plural xs.length "variable"} cannot be assigned {plural es.length "value"}"
           else if !xs.Nodup then .error "a variable is assigned twice at once"
-          else .ok (assignAll xs es st)
+          else
+            let (p, st) := assignAll xs es st
+            .ok (st.withChecks p)
         | .sym ":=" :: .word "rand" :: ts => do
           let (e, st) ← parseAtom f (st.at ts)
           let (hn, st) := newHidden st
           let (hi, st) := newHidden st
           let (k, st) := newProc "rand" st
-          .ok (PB.no (declare hn e (declare hi (.lit (.int 0)) (.call k))) "'rand'",
-            st.define k (PB.no (randBody k x hn hi) "'rand'"))
+          let st := st.define k (PB.no (randBody k x hn hi) "'rand'")
+          .ok (st.withChecks (PB.no (declare hn e (declare hi (.lit (.int 0)) (.call k))) "'rand'"))
         | _ => do
           let (idx, st) ← parseTarget f st
           let (e, st) ← parseExp f st
           match idx with
-          | [] => .ok (PB.assign x e, st)
-          | _ => .ok (PB.no (assignIdx x idx e) "an indexed assignment", st)
+          | [] => .ok (st.withChecks (PB.assign x e))
+          | _ => .ok (st.withChecks (PB.no (assignIdx x idx e) "an indexed assignment"))
     | t :: _ => .error s!"expected a statement, found '{t.render}'"
     | [] => .error "expected a statement, found the end of the program"
 termination_by structural fuel
@@ -1073,12 +1121,14 @@ def parseToksRaw (net : Bool) (names : List String) (ts : Toks) : Except String 
   let (names, params) := internParams defs names
   let chanNames := scanChans ts []
   let (names, chans) := internChans chanNames names
+  -- `#c.ready` keeps a network's answer to `√c`
+  let names := names ++ (chanNames.map (fun c => "#" ++ c ++ ".ready")).filter (!names.contains ·)
   match procs.find? isKeyword, procs.find? names.contains, chanNames.find? procs.contains with
   | some w, _, _ => .error s!"the keyword '{w}' cannot be defined"
   | none, some w, _ => .error s!"'{w}' names a variable, a parameter or a channel, not a specification"
   | none, none, some w => .error s!"'{w}' is both a channel and a specification"
   | none, none, none =>
-    parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params, chans, net || isNet chans ts⟩
+    parseFile (8 * ts.length + 32) none ⟨ts, names, procs, [], params, chans, net || isNet chans ts, []⟩
 
 /-- Parse a whole token list, starting from a table of variable names already in
 use, as a network of processes if `net`. -/
@@ -1143,9 +1193,9 @@ def parseProgram (src : String) : Except String Program := parseProgramWith [] s
 /-- Parse a lone expression, given the variable names in use. -/
 def parseExpression (names : List String) (src : String) : Except String (Exp × List String) := do
   let ts ← tokenize (src.length + 1) src.toList
-  match parseExp (8 * ts.length + 32) ⟨ts, names, [], [], [], [], false⟩ with
-  | .ok (e, ⟨[], names, _, _, _, _, _⟩) => .ok (e, names)
-  | .ok (_, ⟨t :: _, _, _, _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
+  match parseExp (8 * ts.length + 32) ⟨ts, names, [], [], [], [], false, []⟩ with
+  | .ok (e, ⟨[], names, _, _, _, _, _, _⟩) => .ok (e, names)
+  | .ok (_, ⟨t :: _, _, _, _, _, _, _, _⟩) => .error s!"unexpected '{t.render}' after the end of the expression"
   | .error e => .error e
 
 /-! ### States -/
@@ -1265,7 +1315,7 @@ def exitLoopToks : Toks :=
 the main program is a call of it. -/
 theorem parse_exitLoop :
     (parseToksWith ["n"] exitLoopToks).map (fun prog => (prog.procs, prog.defs.map (·.1))) =
-      .ok (["do#0"], [0]) := rfl
+      .ok (["do#0"], [0]) := by decide +kernel
 
 theorem exitLoop_run :
     ((parseToksWith ["n"] exitLoopToks).toOption.bind fun prog =>
