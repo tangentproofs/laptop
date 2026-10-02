@@ -124,6 +124,18 @@ iterations take well under a second. Building the executable links the whole imp
 chain, so it is a separate target: plain `lake build` and the Blueprint site do
 not build it.
 
+## Compile to the b4 virtual machine
+
+`LaPToP/ProgramTheory/CompileB4.lean` compiles the integer fragment of the
+language (assignment, sequence, `if`, `while`, over `+ - ×`, `<`, `=`, `¬`) to
+bytecode for [b4](https://github.com/tangentstorm/b4), a small stack machine with
+implementations in many languages. Its Lean implementation (required from git,
+`imp/lean`, with its theory in `B4/Theory.lean`) runs the code, and
+`load_correct` proves the result: whenever the language takes a state to
+another without any value leaving 32 bits, the loaded machine halts with the
+variables holding the final state. The `sumTo` loop compiles to 86 bytes, and
+b4 computes `s = 55` from `n = 10`.
+
 ## Prove a theorem by calculation (`lake exe netty`)
 
 Netty is a prover's assistant for calculational proofs — the tool described in

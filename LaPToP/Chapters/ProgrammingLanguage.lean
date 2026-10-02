@@ -25,6 +25,7 @@ import LaPToP.ProgramTheory.InterpreterLangSyntax
 import LaPToP.ProgramTheory.InterpreterProb
 import LaPToP.ProgramTheory.InterpreterFast
 import LaPToP.ProgramTheory.NetworkLang
+import LaPToP.ProgramTheory.CompileB4
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1624,4 +1625,43 @@ it receives that message, one unit after it was sent, before it sends the one
 awaited, and the times are finite. That is an infinite descent in a well-founded
 order. Each step shortens the histories left, so the machine finishes, having
 written exactly the book's scripts.
+:::
+
+:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
+A compiler from the integer fragment of the language to the b4 virtual machine,
+proved correct. b4 is a small stack machine with byte-addressed memory, its
+registers mapped into the first bytes, and data and control stacks; it has
+implementations in many languages, among them one in Lean, and that one is
+given a theory here: memory cells read back what was written, the stacks are
+lists, a fuelled run, and what each instruction the compiler uses does to the
+pointer, the stacks and memory.
+
+Variables live in 32-bit cells above the code; an integer is kept as its two's
+complement word and a binary as $`-1` or $`0`. An expression is computed on the
+data stack; an assignment stores the top of the stack in the variable's cell;
+$`\mathbf{if}` and $`\mathbf{while}` complement the condition, test it with a
+conditional hop, and jump with absolute jumps. The theorem: whenever the
+language's execution takes a state $`σ` to $`σ'` with every value evaluated
+fitting in 32 bits, the loaded machine, run long enough, halts with the cells
+holding $`σ'`. Execution in 32 bits is an execution of the language, by the
+semantics of {uses "interpreter_soundness"}[].
+
+Honest scope. The fragment is assignment, sequence, $`\mathbf{if}`,
+$`\mathbf{while}` over integer and binary expressions with
+$`+ - ×`, $`<`, $`=`, negation and $`¬`; time, calls, channels and lists are
+not compiled yet, and the converse direction (that the machine does nothing the
+language does not allow) is not proved.
+:::
+
+:::proof "interpreter_b4"
+Each instruction's effect is proved from b4's definitions: a word written into
+memory reads back, as four bytes reassembled (by bit-blasting), and writing a
+cell leaves disjoint cells alone; the stack heights live in register cells, so
+pushing and popping is shown to append to and remove from a list. An
+expression's code is proved by induction on the expression to push its value,
+changing nothing else. A statement's code is proved by induction on the
+32-bit execution to take the cells from $`σ` to $`σ'` and end at the end of its
+code, keeping everything below the variables — so the code itself — intact,
+which is what lets a loop run its own code again. The loader is shown to set up
+exactly the state the theorem asks for.
 :::
