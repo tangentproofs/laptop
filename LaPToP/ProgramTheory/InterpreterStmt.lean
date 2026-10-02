@@ -44,6 +44,8 @@ inductive Stmt where
   | restore (x : ℕ) (v : Value)
   /-- `x:= √c`, on channel number `c`: whether the next message has arrived. -/
   | check (c : ℕ) (x : ℕ)
+  /-- `A i:= e`, on an array variable `A`. -/
+  | store (x : ℕ) (i e : Exp)
 
 /-- A statement as a program of the language. -/
 def Stmt.toProg : Stmt → P
@@ -56,6 +58,7 @@ def Stmt.toProg : Stmt → P
   -- Communication means something only in a network (`CompileNet`); alone, it has
   -- no behaviour.
   | .send _ _ | .recv _ _ | .check _ _ => .ensure fun _ => false
+  | .store x i e => assignIdx x [i] e
   | .call k => .call k
   | .scope x e p => declare x e p.toProg
   | .ret => .ok

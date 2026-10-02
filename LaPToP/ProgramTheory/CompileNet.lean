@@ -42,6 +42,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toNP : Stmt → NProc ℕ Value
   | .ret => .act .ok
   | .restore x v => .restore x v
   | .check ch x => .check ch x .bool
+  | .store x i e => .act (assignIdx x [i] e)
 
 /-- A statement a program is written in: no return or end of scope, which only
 running makes. -/
@@ -113,7 +114,7 @@ inductive SAct (L : Layout) (pr : SProc) :
   /-- `ok`. -/
   | ok {Λ ks st} : SAct L pr Λ (.ok :: ks, st) (ks, st) Λ
   /-- `x:= e`. -/
-  | assign {Λ ks st x e} : x < L.n → Fits L st.mem e →
+  | assign {Λ ks st x e} : x < L.n → L.arrayAt x = none → Fits L st.mem e →
       SAct L pr Λ (.assign x e :: ks, st)
         (ks, { st with mem := Function.update st.mem x (e.eval st.mem) }) Λ
   /-- `t:= t+1`. -/
@@ -138,6 +139,7 @@ inductive SAct (L : Layout) (pr : SProc) :
         (Function.update Λ ch (Λ ch ++ [(e.eval st.mem, st.t)]))
   /-- `c?. x:= c`. -/
   | recv {Λ ks st ch x m} : ch ∈ pr.ins → (Λ ch)[st.r ch]? = some m → x < L.n →
+      L.arrayAt x = none →
       TFits (max st.t (m.2 + 1)) →
       SAct L pr Λ (.recv ch x :: ks, st) (ks, st.received ch x m) Λ
   /-- A call: the named statement, then the return. -/
@@ -146,13 +148,18 @@ inductive SAct (L : Layout) (pr : SProc) :
   /-- The return. -/
   | ret {Λ ks st} : SAct L pr Λ (.ret :: ks, st) (ks, st) Λ
   /-- A scope begins: `x` holds `e`, and gets its value back at the end. -/
-  | scope {Λ ks st x e p} : x < L.n → Fits L st.mem e → frames ks < STACKSZ →
+  | scope {Λ ks st x e p} : x < L.n → L.arrayAt x = none → Fits L st.mem e → frames ks < STACKSZ →
       SAct L pr Λ (.scope x e p :: ks, st)
         (p :: .restore x (st.mem x) :: ks,
           { st with mem := Function.update st.mem x (e.eval st.mem) }) Λ
   /-- A scope ends. -/
   | restore {Λ ks st x v} : SAct L pr Λ (.restore x v :: ks, st)
       (ks, { st with mem := Function.update st.mem x v }) Λ
+  /-- `A i:= e`. -/
+  | store {Λ ks st x i e} : Fits L st.mem (.index (.var x) i) → Fits L st.mem e →
+      SAct L pr Λ (.store x i e :: ks, st)
+        (ks, { st with mem := (Function.update st.mem x
+          ((st.mem x).update [(i.eval st.mem).toInt] (e.eval st.mem))) }) Λ
 
 /-- **A step of the network, in 32 bits**: one process acts. -/
 inductive SStep (L : Layout) (net : SNet) : SCfg → SCfg → Prop
@@ -183,6 +190,7 @@ theorem SAct.act {L : Layout} {net : SNet} {i : ℕ} {pr : SProc} (hpr : net.pro
   | ret => exact .loc (.act (u := ⟨_, _⟩) trivial .ok)
   | scope => exact .loc .scope
   | restore => exact .loc .restore
+  | store => exact .loc (.act (p := assignIdx _ [_] _) trivial .assign)
 
 /-- A step in 32 bits is one or two steps of the network machine: a call is the
 call and then the start of the named statement and its return. -/
@@ -217,6 +225,7 @@ theorem SStep.msteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c'
   | ret => exact one (by simp)
   | scope => exact one (by simp)
   | restore => exact one (by simp)
+  | store => exact one (by simp)
 
 /-- A run in 32 bits is a run of the network machine. -/
 theorem reach_of_sSteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c' : SCfg}
@@ -246,7 +255,8 @@ inductive Cont (L : Layout) (m : ℕ → UInt8) : List UInt32 → List Stmt → 
       Cont L m cs ks b → Cont L m (cs ++ [UInt32.ofNat b]) (.ret :: ks) a
   /-- The end of a scope, `cd li x wi`, giving `x` back `v`. -/
   | restore {cs : List UInt32} {ks : List Stmt} {a x : ℕ} {v : Value} : 256 ≤ a → a + 7 ≤ L.base →
-      x < L.n → CodeAt m a ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) →
+      x < L.n → L.arrayAt x = none →
+      CodeAt m a ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) →
       Cont L m cs ks (a + 7) → Cont L m (cs ++ [enc v]) (.restore x v :: ks) a
 
 /-- What is left, without a jump first. -/
@@ -262,7 +272,8 @@ inductive Direct (L : Layout) (m : ℕ → UInt8) : List UInt32 → List Stmt �
       Cont L m cs ks b → Direct L m (cs ++ [UInt32.ofNat b]) (.ret :: ks) a
   /-- The end of a scope. -/
   | restore {cs : List UInt32} {ks : List Stmt} {a x : ℕ} {v : Value} : 256 ≤ a → a + 7 ≤ L.base →
-      x < L.n → CodeAt m a ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) →
+      x < L.n → L.arrayAt x = none →
+      CodeAt m a ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) →
       Cont L m cs ks (a + 7) → Direct L m (cs ++ [enc v]) (.restore x v :: ks) a
 
 theorem Cont.bounds {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a : ℕ}
@@ -272,7 +283,7 @@ theorem Cont.bounds {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : Li
   | cons h₁ h₂ _ _ _ _ => exact ⟨h₁, by omega⟩
   | jump h₁ h₂ _ _ => exact ⟨h₁, by omega⟩
   | ret h₁ h₂ _ _ => exact ⟨h₁, by omega⟩
-  | restore h₁ h₂ _ _ _ => exact ⟨h₁, by omega⟩
+  | restore h₁ h₂ _ _ _ _ => exact ⟨h₁, by omega⟩
 
 theorem Direct.cont {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a : ℕ}
     (h : Direct L m cs ks a) : Cont L m cs ks a := by
@@ -280,7 +291,7 @@ theorem Direct.cont {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : Li
   | nil h₁ h₂ h₃ => exact .nil h₁ h₂ h₃
   | cons h₁ h₂ h₃ h₄ h₅ h₆ => exact .cons h₁ h₂ h₃ h₄ h₅ h₆
   | ret h₁ h₂ h₃ h₄ => exact .ret h₁ h₂ h₃ h₄
-  | restore h₁ h₂ h₃ h₄ h₅ => exact .restore h₁ h₂ h₃ h₄ h₅
+  | restore h₁ h₂ h₃ h₃' h₄ h₅ => exact .restore h₁ h₂ h₃ h₃' h₄ h₅
 
 /-- What is left survives writes above the code. -/
 theorem Cont.mono {L : Layout} {m m' : ℕ → UInt8} (hm : ∀ i < L.base, m' i = m i)
@@ -291,7 +302,7 @@ theorem Cont.mono {L : Layout} {m m' : ℕ → UInt8} (hm : ∀ i < L.base, m' i
     exact .cons h₁ h₂ h₃ h₄ (h₅.mono hm (by rw [length_scode]; exact h₂)) ih
   | jump h₁ h₂ h₃ _ ih => exact .jump h₁ h₂ (h₃.mono hm (by simpa using h₂)) ih
   | ret h₁ h₂ h₃ _ ih => exact .ret h₁ h₂ (by rw [hm _ h₂]; exact h₃) ih
-  | restore h₁ h₂ h₃ h₄ _ ih => exact .restore h₁ h₂ h₃ (h₄.mono hm (by simpa using h₂)) ih
+  | restore h₁ h₂ h₃ h₃' h₄ _ ih => exact .restore h₁ h₂ h₃ h₃' (h₄.mono hm (by simpa using h₂)) ih
 
 /-- The control stack holds an entry for each return and end of scope. -/
 theorem Cont.frames {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a : ℕ}
@@ -301,7 +312,7 @@ theorem Cont.frames {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : Li
   | cons _ _ _ h₄ _ _ ih => simp [CompileNet.frames, h₄] at ih ⊢; exact ih
   | jump _ _ _ _ ih => exact ih
   | ret _ _ _ _ ih => simp [CompileNet.frames, Stmt.clean] at ih ⊢; exact ih
-  | restore _ _ _ _ _ ih => simp [CompileNet.frames, Stmt.clean] at ih ⊢; exact ih
+  | restore _ _ _ _ _ _ ih => simp [CompileNet.frames, Stmt.clean] at ih ⊢; exact ih
 
 theorem frames_cons_clean {p : Stmt} {ks : List Stmt} (h : p.clean = true) :
     frames (p :: ks) = frames ks := by
@@ -351,9 +362,9 @@ theorem follow (L : Layout) (hL : L.Ok) {m : ℕ → UInt8} {cs : List UInt32} {
   | ret h₁ h₂ h₃ h₄ =>
     intro s hm hcs hw hr hip
     exact ⟨s, .refl, Same.refl s, hw, rfl, hip ▸ .ret h₁ h₂ h₃ h₄⟩
-  | restore h₁ h₂ h₃ h₄ h₅ =>
+  | restore h₁ h₂ h₃ h₃' h₄ h₅ =>
     intro s hm hcs hw hr hip
-    exact ⟨s, .refl, Same.refl s, hw, rfl, hip ▸ .restore h₁ h₂ h₃ h₄ h₅⟩
+    exact ⟨s, .refl, Same.refl s, hw, rfl, hip ▸ .restore h₁ h₂ h₃ h₃' h₄ h₅⟩
   | @jump cs ks a b h₁ h₂ h₃ hcb ih =>
     intro s hm hcs hw hr hip
     have hb := hcb.bounds
@@ -594,12 +605,12 @@ theorem Direct.ret_inv {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks :
 
 theorem Direct.restore_inv {L : Layout} {m : ℕ → UInt8} {cs : List UInt32} {ks : List Stmt} {a x : ℕ}
     {v : Value} (h : Direct L m cs (.restore x v :: ks) a) : ∃ cs', cs = cs' ++ [enc v] ∧ 256 ≤ a ∧
-      a + 7 ≤ L.base ∧ x < L.n ∧
+      a + 7 ≤ L.base ∧ x < L.n ∧ L.arrayAt x = none ∧
       CodeAt m a ([0x91] ++ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])) ∧
       Cont L m cs' ks (a + 7) := by
   cases h with
   | cons _ _ _ h₄ => simp [Stmt.clean] at h₄
-  | restore h₁ h₂ h₃ h₄ h₅ => exact ⟨_, rfl, h₁, h₂, h₃, h₄, h₅⟩
+  | restore h₁ h₂ h₃ h₃' h₄ h₅ => exact ⟨_, rfl, h₁, h₂, h₃, h₃', h₄, h₅⟩
 
 /-- **The machine does a process's step** that is not communication. -/
 theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Value}
@@ -614,9 +625,16 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     obtain ⟨-, -, -, -, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     exact ⟨s, .refl, ⟨hp.wf, hp.run, hp.stack, by simpa [slen] using hk, hp.vars, hp.clk, hp.tfit,
       hp.rd, hp.image⟩⟩
-  | @assign ks st x e hx hf =>
+  | @assign ks st x e hx ha hf =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
-    obtain ⟨s', r', w', run', i', d', v', k'⟩ := assign_runs L hL hx hf s (getIP s)
+    obtain ⟨s', r', w', run', i', d', v', k'⟩ := assign_runs L hL hx ha hf s (getIP s)
+      ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
+    refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
+      hp.image.mono k'.low⟩⟩
+    rw [i', k'.cs]; exact hk.mono k'.low
+  | @store ks st x i e hfi hf =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
+    obtain ⟨s', r', w', run', i', d', v', k'⟩ := store_runs L hL hfi hf s (getIP s)
       ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
     refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
       hp.image.mono k'.low⟩⟩
@@ -737,7 +755,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       ⟨w₁, ⟨f₁.st.trans hp.run.1, f₁.db.trans hp.run.2⟩, by rw [d₁]; exact hp.stack,
         by rw [i₁, hbn, f₁.high, c₁]; exact hk, by rw [f₁.high]; exact hp.vars,
         by rw [f₁.clk]; exact hp.clk, hp.tfit, hp.rd, by rw [f₁.high]; exact hp.image⟩⟩
-  | @scope ks st x e p hx hf hfr =>
+  | @scope ks st x e p hx ha hf hfr =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, hcl⟩ := hd.cons_inv (by simp) (by simp)
     have hcsl : (cstack s).length < STACKSZ := by
       rw [hp.cont.frames, frames_cons_clean hcl]; exact hfr
@@ -757,7 +775,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
       rwa [List.append_assoc] at this
     obtain ⟨s₁, r₁, w₁, run₁, i₁, d₁, c₁, f₁⟩ := enter_runs L hL hx hp.wf hp.run h₁ (by omega) hA
       hp.vars hp.stack hcsl
-    obtain ⟨s₂, r₂, w₂, run₂, i₂, d₂, v₂, k₂⟩ := assign_runs L hL (d := (cstack s₁).length) hx hf
+    obtain ⟨s₂, r₂, w₂, run₂, i₂, d₂, v₂, k₂⟩ := assign_runs L hL (d := (cstack s₁).length) hx ha hf
       s₁ (getIP s + 7)
       ⟨w₁, run₁, i₁, by omega, by simp [slen]; omega, by rw [f₁.high]; simpa [scode] using hB,
         by rw [f₁.high]; exact hp.vars, d₁, by simp [sdepth]; omega, rfl,
@@ -769,11 +787,11 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     rw [i₂, k₂.cs, c₁]
     refine .cons (by omega) (by omega) (by omega) hcl
       (hP.mono hhigh (by rw [length_scode]; omega)) ?_
-    refine .restore (by omega) (by omega) hx (hC.mono hhigh (by simp; omega)) ?_
+    refine .restore (by omega) (by omega) hx ha (hC.mono hhigh (by simp; omega)) ?_
     exact (hk.mono hhigh).cast (by omega)
   | @restore ks st x v =>
-    obtain ⟨cs', hcs, h₁, h₂, hx, h₄, hk⟩ := hd.restore_inv
-    obtain ⟨s', r', w', run', i', d', c', v', lo', -, k'⟩ := restore_runs L hL hx hp.wf hp.run h₁
+    obtain ⟨cs', hcs, h₁, h₂, hx, ha, h₄, hk⟩ := hd.restore_inv
+    obtain ⟨s', r', w', run', i', d', c', v', lo', -, k'⟩ := restore_runs L hL hx ha hp.wf hp.run h₁
       h₂ h₄ hp.vars hp.stack hcs
     exact ⟨s', r', ⟨w', run', d', by rw [i', c']; exact hk.mono lo', v', by rw [k']; exact hp.clk,
       hp.tfit, hp.rd, hp.image.mono lo'⟩⟩
@@ -891,6 +909,7 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
     (hp : PRel L (.recv ch x :: ks) st s (w.rd.getD i fun _ => 0))
     (hd : Direct L (high s) (cstack s) (.recv ch x :: ks) (getIP s)) (hch : ch < 2 ^ 32)
     (hchan : w.chans ch = encS (Λ ch)) (hm : (Λ ch)[st.r ch]? = some m) (hx : x < L.n)
+    (ha : L.arrayAt x = none)
     (hfit : TFits (max st.t (m.2 + 1))) :
     ∃ s', Swarm.Steps w ⟨w.ms.set i s', w.chans,
         w.rd.set i (fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1
@@ -963,7 +982,7 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
   · rw [i₅, i₄, i₃, i₂, i₁, c₅, sm₄.cs, cs₃, sm₂.cs, sm₁.cs]
     exact Cont.mono hlow (by convert hk using 1; simp [slen])
   · rw [hi₅, sm₄.high, h₃', sm₂.high, sm₁.high]
-    exact varsOk_write hp.vars
+    exact varsOk_write hp.vars hx ha
   · rw [hclk₅, sm₄.clk, c₃, (sm₁.trans sm₂).clk, hp.clk]
     exact later_encT hp.tfit hfit
   · intro c
@@ -1038,7 +1057,7 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
       simpa using this
   cases hact with
   | ok => exact local_case .ok (by simp) (by simp)
-  | assign hx hf => exact local_case (.assign hx hf) (by simp) (by simp)
+  | assign hx hax hf => exact local_case (.assign hx hax hf) (by simp) (by simp)
   | tick hfit => exact local_case (.tick hfit) (by simp) (by simp)
   | seq => exact local_case .seq (by simp) (by simp)
   | condT hf hc => exact local_case (.condT hf hc) (by simp) (by simp)
@@ -1047,7 +1066,8 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
   | loopF hf hc => exact local_case (.loopF hf hc) (by simp) (by simp)
   | call hk hcl hfr => exact local_case (.call hk hcl hfr) (by simp) (by simp)
   | ret => exact local_case .ret (by simp) (by simp)
-  | scope hx hf hfr => exact local_case (.scope hx hf hfr) (by simp) (by simp)
+  | scope hx hax hf hfr => exact local_case (.scope hx hax hf hfr) (by simp) (by simp)
+  | store hfi hf => exact local_case (.store hfi hf) (by simp) (by simp)
   | restore => exact local_case .restore (by simp) (by simp)
   | @send ks' _ ch e hch hf =>
     obtain ⟨s₂, hw₂, hp₂⟩ := send_sim L hL hs₁ hp₁ hd₁ hf (hchb pr hprm ch (.inl hch))
@@ -1069,9 +1089,9 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
           List.getElem?_eq_getElem (hr.rdlen ▸ hlt)]; rfl
       · rw [List.getElem?_set_ne hij]
     rw [hrd] at this; simpa using this
-  | @recv ks' _ ch x m hch hm hx hfit =>
+  | @recv ks' _ ch x m hch hm hx hax hfit =>
     obtain ⟨s₂, hw₂, hp₂⟩ := recv_sim L hL (Λ := c.L) hs₁ (by simpa using hp₁) hd₁
-      (hchb pr hprm ch (.inr hch)) (by simpa using hr.chans ch) hm hx hfit
+      (hchb pr hprm ch (.inr hch)) (by simpa using hr.chans ch) hm hx hax hfit
     refine ⟨_, hw₁.trans hw₂, rfl, ?_⟩
     have := hr.setRd hlt (ks := ks') (st := st.received ch x m) (s := s₂) (Λ := c.L)
       (chans := w.chans) hp₂ hr.chans
