@@ -28,6 +28,7 @@ import LaPToP.ProgramTheory.NetworkLang
 import LaPToP.ProgramTheory.NetworkBook
 import LaPToP.ProgramTheory.CompileB4
 import LaPToP.ProgramTheory.CompileNet
+import LaPToP.ProgramTheory.B4Lang
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1674,7 +1675,7 @@ which is what lets a loop run its own code again. The loader is shown to set up
 exactly the state the theorem asks for.
 :::
 
-:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT")
+:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees")
 Communicating processes, compiled to b4, run as a swarm of machines, proved to
 compute the network. Each process of a network becomes its own b4 machine; the
 machines run side by side and reach their channels through b4's `io`
@@ -1692,9 +1693,18 @@ channels hold the scripts the network wrote — which is the book's semantics of
 the network. The compiled statements are those of {uses "interpreter_b4"}[],
 with time and communication added.
 
+The command line runs programs this way with `interp --b4`: the part of the
+concrete syntax the compiler takes is read into its statements, compiled, and
+run on one machine or a swarm; the self-test checks on the demonstrations that
+the machines compute what the interpreter and the network machine do, and a run
+warns when a value left 32 bits, outside what the theorems cover.
+
 Honest scope. Forward simulation only: that the swarm does nothing else, and
 that a swarm that stops corresponds to a deadlock, are not proved. Processes
-use the compiled fragment (no calls, locals or lists).
+use the compiled fragment (no calls, locals or lists). `interp --b4` reads that
+fragment with a parser of its own, sharing the interpreter's tokens, names and
+expressions; that the two parsers agree is checked on the demonstrations, not
+proved.
 :::
 
 :::proof "interpreter_swarm"

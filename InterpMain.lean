@@ -1,4 +1,4 @@
-import LaPToP.ProgramTheory.NetworkLang
+import LaPToP.ProgramTheory.B4Lang
 
 /-!
 # `interp`: running programs of the aPToP interpreter from a shell
@@ -38,6 +38,8 @@ structure Options where
   dist : Bool := false
   /-- Run as a network of communicating processes. -/
   net : Bool := false
+  /-- Compile to b4 and run there. -/
+  b4 : Bool := false
   /-- Check the tokenizer against the token lists the parser theorems use. -/
   selftest : Bool := false
   /-- Print the grammar. -/
@@ -66,6 +68,9 @@ usage: interp [options] [file]
                      with --all, search on the clock (runAllT)
   --dist             compute the distribution of the final states (Section 5.7):
                      each with its probability, and the probability of none
+  --b4               compile to the b4 virtual machine and run there (a network
+                     on a swarm of b4 machines): ok, tick, x:= e, if, while,
+                     c! e, c? and a || of processes, on 32-bit integers
   --net              run as a network of communicating processes (Chapter 9),
                      as is done anyway when the program has channels and a ||:
                      each process has its own variables, communicates only on
@@ -169,6 +174,7 @@ def parseArgs : List String → Options → Except String Options
     else if a == "--timed" then parseArgs rest { o with timed := true }
     else if a == "--dist" then parseArgs rest { o with dist := true }
     else if a == "--net" then parseArgs rest { o with net := true }
+    else if a == "--b4" then parseArgs rest { o with b4 := true }
     else if a == "--selftest" then parseArgs rest { o with selftest := true }
     else if a == "--grammar" then parseArgs rest { o with grammar := true }
     else if a.startsWith "--demo=" then parseArgs rest { o with demo := some (optValue a 7) }
@@ -243,6 +249,25 @@ def runSelfTest : IO UInt32 := do
     | .error e =>
       IO.eprintln s!"FAIL  {name}: {e}"
       bad := bad + 1
+  -- The b4 compiler against the interpreters, on the demonstrations it takes.
+  let sumToStart : St := fun x => if x = 0 then .int 10 else .int 0
+  match (parseToksWith ["n"] Lang.Demo.sumToToks), b4Outcome ["n"] Lang.Demo.sumToToks sumToStart 100000 with
+  | .ok prog, .ok b =>
+    let arr : Array Value := Array.ofFn (n := prog.names.length) fun i => sumToStart i.1
+    match prog.runFast 100000 arr with
+    | some r =>
+      if b.agreesWith prog.names (toFun r) then IO.println "ok    sumTo: b4 computes what the interpreter does"
+      else IO.eprintln "FAIL  sumTo: b4 and the interpreter differ"; bad := bad + 1
+    | none => IO.eprintln "FAIL  sumTo: the interpreter found no poststate"; bad := bad + 1
+  | _, _ => IO.eprintln "FAIL  sumTo: does not parse for b4"; bad := bad + 1
+  for (name, _, toks) in Lang.Demo.netSelfTests do
+    let start : St := if name == "doubler" then Function.update init 0 (.list [.int 1, .int 2, .int 5]) else init
+    if name == "doubler" then continue
+    match netOutcome false [] toks start 1000 1000, b4Outcome [] toks start 10000 with
+    | .ok o, .ok b =>
+      if b.agrees o then IO.println s!"ok    {name}: the b4 swarm computes what the network machine does"
+      else IO.eprintln s!"FAIL  {name}: the b4 swarm and the network machine differ"; bad := bad + 1
+    | _, _ => IO.eprintln s!"FAIL  {name}: does not run on both"; bad := bad + 1
   if bad == 0 then
     IO.println "all self-tests passed"
     return 0
@@ -363,6 +388,57 @@ def runNetwork (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 :=
         (--fuel); shown is what they had done"
       return 2
 
+/-- Compile to b4, run, and print what the machines hold. -/
+def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
+  let parsed := do
+    let bp ← parseB4 setNames ts
+    let (names, st) ← initialState bp.names o.sets
+    let bp := { bp with names := names }
+    let out ← bp.run st o.fuel
+    return (bp, st, out)
+  match parsed with
+  | .error e =>
+    IO.eprintln s!"interp --b4: {e}"
+    return 1
+  | .ok (bp, st, out) =>
+    -- The theorems hold while no value leaves 32 bits: check against the
+    -- language's own interpreters, and say so if the machine went outside.
+    let agrees : Bool :=
+      if bp.procs.length == 1 && bp.chans.isEmpty then
+        match parseToksMode false setNames ts with
+        | .ok prog =>
+          let arr : Array Value := Array.ofFn (n := prog.names.length) fun i => st i.1
+          match prog.runFast o.fuel arr with
+          | some r => out.agreesWith prog.names (toFun r)
+          | none => true
+        | .error _ => true
+      else
+        match netOutcome true setNames ts st o.fuel o.fuel with
+        | .ok n => n.status == .running || out.status == .running || out.agrees n
+        | .error _ => true
+    if !agrees then
+      IO.eprintln "interp --b4: warning: some value left 32 bits, so the machine's result is \
+        not the language's (the compiler is proved correct only within 32 bits)"
+    let shown := fun (w : String) (v : ℤ) =>
+      match bp.names.idxOf? w with
+      | some x => if bp.isBinVar x then (if v == 0 then "⊥" else "⊤") else toString v
+      | none => toString v
+    let vars := ", ".intercalate (out.vars.map fun (w, v) => s!"{w} = {shown w v}")
+    let time := if out.status == .deadlock then "∞" else toString out.time
+    IO.println (if vars.isEmpty then s!"t = {time}" else s!"{vars}, t = {time}")
+    for (w, sc) in out.scripts do
+      let vs := "; ".intercalate (sc.map fun (v, _) => toString v)
+      let tts := "; ".intercalate (sc.map fun (_, t) => toString t)
+      IO.println s!"{w} = [{vs}] sent at [{tts}]"
+    match out.status with
+    | .halted => return 0
+    | .deadlock =>
+      IO.println "deadlock: the machines that have not halted wait for input that never comes"
+      return 0
+    | .running =>
+      IO.eprintln s!"interp --b4: the machines were still running after {o.fuel} rounds (--fuel)"
+      return 2
+
 def main (args : List String) : IO UInt32 := do
   match parseArgs args {} with
   | .error e =>
@@ -389,6 +465,13 @@ def main (args : List String) : IO UInt32 := do
         IO.eprintln s!"interp: '{w}' cannot be a variable name"
         return 1
     let setNames := (o.sets.map (·.1)).foldl (fun ns w => (intern w ns).2) []
+    if o.b4 then
+      match src with
+      | .ok text =>
+        match tokenize (text.length + 1) text.toList with
+        | .ok ts => return (← runB4 o setNames ts)
+        | .error e => IO.eprintln s!"interp: {e}"; return 1
+      | .error e => IO.eprintln s!"interp: {e}"; return 1
     if !o.timed && !o.all && !o.dist then
       match src with
       | .ok text =>

@@ -136,6 +136,23 @@ another without any value leaving 32 bits, the loaded machine halts with the
 variables holding the final state. The `sumTo` loop compiles to 86 bytes, and
 b4 computes `s = 55` from `n = 10`.
 
+Networks run on a swarm of b4 machines (`CompileNet.lean`, and `B4/Swarm.lean`
+in b4): each process on its own machine, channels reached through b4's `io`
+(`'s'` sends, `'r'` receives), time in register `T`. `swarm_correct` proves that
+every 32-bit run of the network machine is matched by the swarm, which halts
+with the network's variables, times and scripts — the book's semantics, by
+`swarm_book`. `interp --b4` compiles and runs a program or a network there:
+
+```bash
+lake exe interp --b4 --demo=sumTo --n=10        # => n = 10, i = 10, s = 55, t = 0
+echo '(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)' | lake exe interp --b4
+# => y = 3, x = 4, t = 2
+#    c = [3; 4] sent at [0; 1]
+```
+It takes `ok`, `tick`, `x:= e`, `if`, `while`, `c! e`, `c?` and a `||` of
+processes over 32-bit integers and binaries, and warns when a value leaves 32
+bits; `interp --selftest` checks it against the interpreters on the demonstrations.
+
 ## Prove a theorem by calculation (`lake exe netty`)
 
 Netty is a prover's assistant for calculational proofs — the tool described in
