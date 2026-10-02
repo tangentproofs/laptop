@@ -423,4 +423,307 @@ theorem swarm_recv {w : Swarm} {i : ℕ} {s : State} {ch : ℕ} {v τ : UInt32}
   simp only [e₂, htn, hm]
   rfl
 
+/-! ### One process, one machine -/
+
+/-- **A process and its machine agree**: the machine is running with an empty
+stack, what is left of the process is laid out from the pointer, the cells hold
+its variables, the clock its time, and the swarm's cursors its cursors. -/
+structure PRel (L : Layout) (ks : List Stmt) (st : PSt ℕ Value) (s : State) (r : ℕ → ℕ) :
+    Prop where
+  wf : WF s
+  run : Running s
+  stack : dstack s = []
+  cont : Cont L (high s) ks (getIP s)
+  vars : VarsOk L (high s) st.mem
+  clk : getClk s = encT st.t
+  tfit : TFits st.t
+  rd : ∀ c, r c = st.r c
+
+theorem Direct.cons_inv {L : Layout} {m : ℕ → UInt8} {p : Stmt} {ks : List Stmt} {a : ℕ}
+    (h : Direct L m (p :: ks) a) : 256 ≤ a ∧ a + slen L p ≤ L.base ∧ sdepth p ≤ STACKSZ ∧
+      CodeAt m a (scode L a p) ∧ Cont L m ks (a + slen L p) := by
+  cases h with
+  | cons h₁ h₂ h₃ h₄ h₅ => exact ⟨h₁, h₂, h₃, h₄, h₅⟩
+
+/-- **The machine does a process's step** that is not communication. -/
+theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Value}
+    {a b : List Stmt × PSt ℕ Value} (h : SAct L pr Λ a b Λ')
+    (hsend : ∀ ch e ks, a.1 ≠ .send ch e :: ks) (hrecv : ∀ ch x ks, a.1 ≠ .recv ch x :: ks)
+    {s : State} {r : ℕ → ℕ} (hp : PRel L a.1 a.2 s r) (hd : Direct L (high s) a.1 (getIP s)) :
+    ∃ s', Steps s s' ∧ PRel L b.1 b.2 s' r := by
+  have hb := hL.2
+  cases h with
+  | @ok ks st =>
+    obtain ⟨-, -, -, -, hk⟩ := hd.cons_inv
+    exact ⟨s, .refl, ⟨hp.wf, hp.run, hp.stack, by simpa [slen] using hk, hp.vars, hp.clk, hp.tfit,
+      hp.rd⟩⟩
+  | @assign ks st x e hx hf =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨s', r', w', run', i', d', v', k'⟩ := assign_runs L hL hx hf s (getIP s)
+      ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃⟩
+    refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
+    rw [i']; exact hk.mono k'.low
+  | @tick ks st hfit =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨s', r', w', run', i', d', c', hi', -, -⟩ := tick_runs (L := L) hp.wf hp.run h₁
+      (by simp [slen] at h₂; omega) h₄ hp.stack hp.clk hfit
+    refine ⟨s', r', ⟨w', run', d', by rw [hi', i']; simpa [slen] using hk,
+      by rw [hi']; exact hp.vars, c', hfit, hp.rd⟩⟩
+  | @seq ks st p q =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    simp only [scode] at h₄
+    rw [CodeAt.append, length_scode] at h₄
+    simp only [slen, sdepth] at h₂ h₃ hk
+    exact ⟨s, .refl, ⟨hp.wf, hp.run, hp.stack, .cons h₁ (by omega) (by omega) h₄.1
+      (.cons (by omega) (by omega) (by omega) h₄.2 (by rwa [Nat.add_assoc])), hp.vars, hp.clk,
+      hp.tfit, hp.rd⟩⟩
+  | @condT ks st c p q hf hc =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨hE, hT, hJ, hP, hJ', hQ⟩ := cond_code h₄
+    simp only [slen, sdepth] at h₂ h₃ hk
+    have hcode := h₄; simp only [scode] at hcode
+    obtain ⟨s', r', w', run', i', d', sm'⟩ := run_cond (b := true) hL hf hc hp.wf hp.run rfl h₁
+      (rest := jmTo _ ++ scode L _ p ++ jmTo _ ++ scode L _ q)
+      (by simp [length_scode]; omega) (by simpa only [List.append_assoc] using hcode) hp.vars
+      hp.stack (by omega)
+    simp only [ite_true] at i'
+    refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
+    rw [i', sm'.high]
+    refine .cons (by omega) (by omega) (by omega) hP (.jump (by omega) (by omega) hJ' ?_)
+    convert hk using 1; omega
+  | @condF ks st c p q hf hc =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨hE, hT, hJ, hP, hJ', hQ⟩ := cond_code h₄
+    simp only [slen, sdepth] at h₂ h₃ hk
+    have hcode := h₄; simp only [scode] at hcode
+    obtain ⟨s', r', w', run', i', d', sm'⟩ := run_cond (b := false) hL hf hc hp.wf hp.run rfl h₁
+      (rest := jmTo _ ++ scode L _ p ++ jmTo _ ++ scode L _ q)
+      (by simp [length_scode]; omega) (by simpa only [List.append_assoc] using hcode) hp.vars
+      hp.stack (by omega)
+    simp only [Bool.false_eq_true, ite_false] at i'
+    refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
+    rw [i', sm'.high]
+    refine .jump (by omega) (by omega) hJ (.cons (by omega) (by omega) (by omega) hQ ?_)
+    convert hk using 1; omega
+  | @loopT ks st c p hf hc =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨hE, hT, hJ, hP, hJ'⟩ := loop_code h₄
+    have h₂' := h₂; have h₃' := h₃
+    simp only [slen, sdepth] at h₂ h₃
+    have hcode := h₄; simp only [scode] at hcode
+    obtain ⟨s', r', w', run', i', d', sm'⟩ := run_cond (b := true) hL hf hc hp.wf hp.run rfl h₁
+      (rest := jmTo _ ++ scode L _ p ++ jmTo (getIP s))
+      (by simp [length_scode]; omega) (by simpa only [List.append_assoc] using hcode) hp.vars
+      hp.stack (by omega)
+    simp only [ite_true] at i'
+    refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
+    rw [i', sm'.high]
+    exact .cons (by omega) (by omega) (by omega) hP
+      (.jump (by omega) (by omega) hJ' (.cons h₁ h₂' h₃' h₄ hk))
+  | @loopF ks st c p hf hc =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+    obtain ⟨hE, hT, hJ, hP, hJ'⟩ := loop_code h₄
+    simp only [slen, sdepth] at h₂ h₃ hk
+    have hcode := h₄; simp only [scode] at hcode
+    obtain ⟨s', r', w', run', i', d', sm'⟩ := run_cond (b := false) hL hf hc hp.wf hp.run rfl h₁
+      (rest := jmTo _ ++ scode L _ p ++ jmTo (getIP s))
+      (by simp [length_scode]; omega) (by simpa only [List.append_assoc] using hcode) hp.vars
+      hp.stack (by omega)
+    simp only [Bool.false_eq_true, ite_false] at i'
+    refine ⟨s', r', ⟨w', run', d', ?_, by rw [sm'.high]; exact hp.vars,
+      by rw [sm'.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
+    rw [i', sm'.high]
+    refine .jump (by omega) (by omega) hJ ?_
+    convert hk using 1; omega
+  | send => exact (hsend _ _ _ rfl).elim
+  | recv => exact (hrecv _ _ _ rfl).elim
+
+theorem toNat_encT {t : ℕ∞} (h : TFits t) : (encT t).toNat = t.toNat := by
+  have := h.toNat_lt
+  simp only [encT, UInt32.toNat_ofNat']; omega
+
+/-- The clock after an input is the encoded `t ↑ (τ + 1)`. -/
+theorem later_encT {t τ : ℕ∞} (ht : TFits t) (h : TFits (max t (τ + 1))) :
+    later (encT t) (encT τ + 1) = encT (max t (τ + 1)) := by
+  have hτ1 : TFits (τ + 1) := h.mono (le_max_right _ _)
+  have hτ : TFits τ := hτ1.mono le_self_add
+  have h₁ := ht.toNat_lt; have h₂ := hτ1.toNat_lt
+  lift t to ℕ using ht.ne_top
+  lift τ to ℕ using hτ.ne_top
+  simp only [ENat.toNat_natCast] at h₁
+  rw [show ((τ : ℕ∞) + 1).toNat = τ + 1 by norm_cast] at h₂
+  have hs : encT (τ : ℕ∞) + 1 = encT ((τ + 1 : ℕ) : ℕ∞) := by
+    apply UInt32.toNat_inj.mp
+    simp only [encT, ENat.toNat_natCast, UInt32.toNat_add, UInt32.toNat_ofNat']
+    have : (1 : UInt32).toNat = 1 := rfl
+    rw [this]; omega
+  rw [hs]
+  unfold later
+  simp only [encT, ENat.toNat_natCast, UInt32.toNat_ofNat']
+  rw [show max (t : ℕ∞) ((τ : ℕ∞) + 1) = ((max t (τ + 1) : ℕ) : ℕ∞) by rfl,
+    ENat.toNat_natCast]
+  split_ifs with hlt
+  · congr 1; omega
+  · congr 1; omega
+
+/-- **The swarm and the network agree**: a machine for each process, related
+as `PRel` says, and the channels holding the scripts. -/
+structure Rel (L : Layout) (c : SCfg) (w : Swarm) : Prop where
+  len : w.ms.length = c.ps.length
+  rdlen : w.rd.length = c.ps.length
+  proc : ∀ {i : ℕ} {ks : List Stmt} {st : PSt ℕ Value} {s : State}, c.ps[i]? = some (ks, st) →
+    w.ms[i]? = some s → PRel L ks st s (w.rd.getD i fun _ => 0)
+  chans : ∀ ch, w.chans ch = encS (c.L ch)
+
+/-- Replace one machine and one process, keeping the cursors. -/
+theorem Rel.set {L : Layout} {c : SCfg} {w : Swarm} (hr : Rel L c w) {i : ℕ}
+    (hi : i < c.ps.length) {ks : List Stmt} {st : PSt ℕ Value} {s : State} {Λ : Scripts Value}
+    (hp : PRel L ks st s (w.rd.getD i fun _ => 0)) (hch : ∀ ch, w.chans ch = encS (Λ ch)) :
+    Rel L ⟨c.ps.set i (ks, st), Λ⟩ { w with ms := w.ms.set i s } := by
+  refine ⟨by simp [hr.len], by simp [hr.rdlen], ?_, hch⟩
+  intro j ks' st' s' hc hm
+  by_cases hij : i = j
+  · subst hij
+    simp only [List.getElem?_set_self hi, Option.some.injEq, Prod.mk.injEq] at hc
+    obtain ⟨rfl, rfl⟩ := hc
+    simp only [List.getElem?_set_self (hr.len ▸ hi), Option.some.injEq] at hm
+    subst hm; exact hp
+  · simp only [List.getElem?_set_ne hij] at hc hm
+    exact hr.proc hc hm
+
+theorem swarm_set_set (w : Swarm) (i : ℕ) (s s' : State) :
+    ({ { w with ms := w.ms.set i s } with ms := ({ w with ms := w.ms.set i s } : Swarm).ms.set i s' } :
+      Swarm) = { w with ms := w.ms.set i s' } := by
+  simp
+
+/-- **Send**, on the machine and then in the swarm. -/
+theorem send_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch : ℕ} {e : Exp}
+    {ks : List Stmt} {st : PSt ℕ Value} {r : ℕ → ℕ} (hi : w.ms[i]? = some s)
+    (hp : PRel L (.send ch e :: ks) st s r) (hd : Direct L (high s) (.send ch e :: ks) (getIP s))
+    (hf : Fits L st.mem e) (hch : ch < 2 ^ 32) :
+    ∃ s', Swarm.Steps w ⟨w.ms.set i s',
+        fun c => if c = ch then w.chans c ++ [(enc (e.eval st.mem), encT st.t)] else w.chans c,
+        w.rd⟩ ∧ PRel L ks (st.sent ch) s' r := by
+  have hb := hL.2
+  obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+  simp only [slen, sdepth] at h₂ h₃
+  simp only [scode, List.append_assoc] at h₄
+  have hA : At L st.mem s (ecode L e ++ ((0x97 :: le4 (UInt32.ofNat ch)) ++
+      ((0x97 :: le4 SEND) ++ [0xFD]))) (max (depth e) 3) :=
+    ⟨hp.wf, hp.run, h₁, by simp; omega, h₄, hp.vars, by rw [hp.stack]; simpa using h₃⟩
+  obtain ⟨s₁, r₁, w₁, i₁, d₁, sm₁⟩ := exp_runs L hL st.mem e s hf (hA.left (le_max_left _ _))
+  have hA₁ := hA.after (d₂ := 2) (by omega) w₁ i₁ d₁ sm₁
+  obtain ⟨w₂, i₂, d₂, sm₂⟩ := run_li hA₁ (by omega)
+  have hA₂ := hA₁.after (bs₁ := 0x97 :: le4 (UInt32.ofNat ch)) (d₂ := 1) (by omega) w₂
+    (by rw [i₂]; rfl) d₂ sm₂
+  obtain ⟨w₃, i₃, d₃, sm₃⟩ := run_li hA₂ (by omega)
+  have hA₃ := hA₂.after (bs₁ := 0x97 :: le4 SEND) (d₂ := 0) (by omega) w₃
+    (by rw [i₃]; rfl) d₃ sm₃
+  have hrun : Steps s (step (step s₁)) :=
+    (r₁.tail ⟨hA₁.run, notIo_li hA₁, rfl⟩).tail ⟨hA₂.run, notIo_li hA₂, rfl⟩
+  have hop : high (step (step s₁)) (getIP (step (step s₁))) = 0xFD := by
+    simpa using hA₃.code 0 (by simp)
+  have hlift := swarm_lift hi hrun
+  obtain ⟨s', hst, w', i', d', sm'⟩ := swarm_send (w := { w with ms := w.ms.set i (step (step s₁)) })
+    (i := i) (v := enc (e.eval st.mem)) (ch := ch)
+    (by simp [List.getElem?_set_self (List.getElem?_eq_some_iff.mp hi).1]) hA₃.wf hA₃.run hA₃.lo
+    (by have := hA₃.hi; simp at this; omega) hop
+    (by rw [d₃, d₂, d₁, hp.stack]; rfl) hch
+  have hsm := sm₁.trans (sm₂.trans (sm₃.trans sm'))
+  refine ⟨s', ?_, ⟨w', hsm.running hp.run, d', ?_, by rw [hsm.high]; exact hp.vars,
+    by rw [hsm.clk]; exact hp.clk, hp.tfit, hp.rd⟩⟩
+  · refine hlift.tail ⟨i, ?_⟩
+    rw [hst]
+    simp only [List.set_set]
+    rw [(sm₁.trans (sm₂.trans sm₃)).clk, hp.clk]
+  · rw [i', i₃, i₂, i₁, hsm.high]
+    convert hk using 1
+    simp [slen]; omega
+
+/-- **Receive**, in the swarm and then on the machine. -/
+theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch x : ℕ}
+    {ks : List Stmt} {st : PSt ℕ Value} {m : Msg Value} {Λ : Scripts Value} (hi : w.ms[i]? = some s)
+    (hp : PRel L (.recv ch x :: ks) st s (w.rd.getD i fun _ => 0))
+    (hd : Direct L (high s) (.recv ch x :: ks) (getIP s)) (hch : ch < 2 ^ 32)
+    (hchan : w.chans ch = encS (Λ ch)) (hm : (Λ ch)[st.r ch]? = some m) (hx : x < L.n)
+    (hfit : TFits (max st.t (m.2 + 1))) :
+    ∃ s', Swarm.Steps w ⟨w.ms.set i s', w.chans,
+        w.rd.set i fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1
+          else (w.rd.getD i fun _ => 0) c⟩ ∧
+      PRel L ks (st.received ch x m)
+        s' (fun c => if c = ch then (w.rd.getD i fun _ => 0) ch + 1 else (w.rd.getD i fun _ => 0) c) := by
+  have hb := hL.2
+  have hlt : i < w.ms.length := (List.getElem?_eq_some_iff.mp hi).1
+  obtain ⟨h₁, h₂, h₃, h₄, hk⟩ := hd.cons_inv
+  simp only [slen, sdepth] at h₂ h₃
+  simp only [scode, List.append_assoc] at h₄
+  have hA : At L st.mem s ((0x97 :: le4 (UInt32.ofNat ch)) ++ ((0x97 :: le4 RECV) ++ ([0xFD] ++
+      ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])))) 2 :=
+    ⟨hp.wf, hp.run, h₁, by simp; omega, h₄, hp.vars, by rw [hp.stack]; decide⟩
+  obtain ⟨w₁, i₁, d₁, sm₁⟩ := run_li hA (by omega)
+  have hA₁ := hA.after (bs₁ := 0x97 :: le4 (UInt32.ofNat ch)) (d₂ := 1) (by omega) w₁
+    (by rw [i₁]; rfl) d₁ sm₁
+  obtain ⟨w₂, i₂, d₂, sm₂⟩ := run_li hA₁ (by omega)
+  have hA₂ := hA₁.after (bs₁ := 0x97 :: le4 RECV) (d₂ := 0) (by omega) w₂
+    (by rw [i₂]; rfl) d₂ sm₂
+  set s₂ := step (step s) with hs₂
+  have hrun : Steps s s₂ := (Steps.one hp.run (notIo_li hA)).tail ⟨hA₁.run, notIo_li hA₁, rfl⟩
+  have hop : high s₂ (getIP s₂) = 0xFD := by simpa using hA₂.code 0 (by simp)
+  have hlift := swarm_lift hi hrun
+  have hst₂ : dstack s₂ = [UInt32.ofNat ch, RECV] := by rw [d₂, d₁, hp.stack]; rfl
+  have hm' : (w.chans ch)[(w.rd.getD i fun _ => 0) ch]? = some (enc m.1, encT m.2) := by
+    rw [hchan, hp.rd ch, encS, List.getElem?_map, hm]; rfl
+  have hstep := swarm_recv (w := { w with ms := w.ms.set i s₂ }) (i := i) (ch := ch)
+    (by simp [List.getElem?_set_self hlt]) hA₂.wf hA₂.run hA₂.lo hop hst₂ hch hm'
+  obtain ⟨w₃, i₃, d₃, c₃, h₃', cs₃, st₃, db₃, o₃⟩ :=
+    recvState_view (v := enc m.1) (τ := encT m.2) hA₂.wf (by have := hA₂.hi; simp at this; omega) hst₂
+  set s₃ := recvState s₂ (enc m.1) (encT m.2) with hs₃
+  -- `li addr; wi`
+  have hc₃ : CodeAt (high s₃) (getIP s₃) ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95]) := by
+    rw [h₃', i₃]; have := (CodeAt.append.mp hA₂.code).2; simpa using this
+  have hA₃ : At L st.mem s₃ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95]) 1 :=
+    ⟨w₃, ⟨st₃.trans hA₂.run.1, db₃.trans hA₂.run.2⟩, by rw [i₃]; have := hA₂.lo; omega,
+      by rw [i₃]; have := hA₂.hi; simp at this ⊢; omega, hc₃,
+      by rw [h₃', sm₂.high, sm₁.high]; exact hp.vars, by rw [d₃]; simp [STACKSZ]⟩
+  obtain ⟨w₄, i₄, d₄, sm₄⟩ := run_li hA₃ le_rfl
+  have haddr : L.addr x + 3 < MAXBYTE := by unfold Layout.addr; omega
+  have hop₄ : high (step s₃) (getIP (step s₃)) = 0x95 := by
+    rw [sm₄.high, i₄]; have := (CodeAt.append.mp hc₃).2 0 (by simp); simpa using this
+  have hip₄ : 256 ≤ getIP (step s₃) := by rw [i₄]; have := hA₃.lo; omega
+  have hd₄ : dstack (step s₃) = [] ++ [enc m.1, UInt32.ofNat (L.addr x)] := by rw [d₄, d₃]; rfl
+  have ha₄ : 256 ≤ (UInt32.ofNat (L.addr x)).toNat := by
+    rw [toNat_ofNat_addr (by omega)]; unfold Layout.addr; have := hL.1; omega
+  obtain ⟨w₅, i₅, d₅, c₅, st₅, db₅, hi₅, o₅⟩ := step_wi (step s₃) [] (enc m.1)
+    (UInt32.ofNat (L.addr x)) w₄ hip₄ (by rw [i₄]; have := hA₃.hi; unfold MAXBYTE at this; simp at this; omega)
+    hop₄ hd₄ ha₄ (by rw [toNat_ofNat_addr (by omega)]; exact haddr)
+  have hclk₅ := step_wi_clk (step s₃) [] (enc m.1) (UInt32.ofNat (L.addr x)) w₄ hip₄ hop₄ hd₄ ha₄
+  rw [toNat_ofNat_addr (by omega)] at hi₅
+  have run₃ : Running s₃ := hA₃.run
+  have run₄ : Running (step s₃) := sm₄.running run₃
+  have hrun₂ : Steps s₃ (step (step s₃)) :=
+    (Steps.one run₃ (notIo_li hA₃)).tail ⟨run₄, notIo_of_hop hip₄ hop₄, rfl⟩
+  refine ⟨step (step s₃), ?_, ⟨w₅, ⟨st₅.trans run₄.1, db₅.trans run₄.2⟩, d₅, ?_, ?_, ?_, hfit, ?_⟩⟩
+  · refine (hlift.tail ⟨i, hstep⟩).trans ?_
+    have := swarm_lift (w := ⟨w.ms.set i s₃, w.chans, w.rd.set i fun c => if c = ch then
+      (w.rd.getD i fun _ => 0) ch + 1 else (w.rd.getD i fun _ => 0) c⟩) (i := i) (s := s₃)
+      (by simp [List.getElem?_set_self hlt]) hrun₂
+    simpa using this
+  · rw [hi₅, sm₄.high, h₃', sm₂.high, sm₁.high, i₅, i₄, i₃, i₂, i₁]
+    refine Cont.mono (fun j hj => ?_) (by convert hk using 1; simp [slen])
+    unfold writeWord Layout.addr
+    simp [show j ≠ L.base + 4 * x by omega, show j ≠ L.base + 4 * x + 1 by omega,
+      show j ≠ L.base + 4 * x + 2 by omega, show j ≠ L.base + 4 * x + 3 by omega]
+  · rw [hi₅, sm₄.high, h₃', sm₂.high, sm₁.high]
+    exact varsOk_write hp.vars
+  · rw [hclk₅, sm₄.clk, c₃, (sm₁.trans sm₂).clk, hp.clk]
+    exact later_encT hp.tfit hfit
+  · intro c
+    simp only [PSt.received, Function.update_apply]
+    by_cases hc : c = ch
+    · subst hc; simp [hp.rd]
+    · simp [hc, hp.rd]
+
 end LaPToP.ProgramTheory.CompileNet
