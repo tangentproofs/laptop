@@ -25,6 +25,7 @@ import LaPToP.ProgramTheory.InterpreterLangSyntax
 import LaPToP.ProgramTheory.InterpreterProb
 import LaPToP.ProgramTheory.InterpreterFast
 import LaPToP.ProgramTheory.NetworkLang
+import LaPToP.ProgramTheory.NetworkBook
 import LaPToP.ProgramTheory.CompileB4
 
 open Verso.Genre
@@ -1569,7 +1570,7 @@ converted, by induction on the fuel, each case unfolding one step of both and
 using those two facts.
 :::
 
-:::theorem "interpreter_network" (parent := "programming_language_core") (tags := "programs, interpreter, channels, concurrency, deadlock, hehner-9.1") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.PStep, LaPToP.ProgramTheory.Interpreter.Network.NetSpec, LaPToP.ProgramTheory.Interpreter.Network.Net.WF, LaPToP.ProgramTheory.Interpreter.Network.Act, LaPToP.ProgramTheory.Interpreter.Network.MStep, LaPToP.ProgramTheory.Interpreter.Network.act_comm, LaPToP.ProgramTheory.Interpreter.Network.mstep_diamond, LaPToP.ProgramTheory.Interpreter.Network.mstep_confluent, LaPToP.ProgramTheory.Interpreter.Network.normal_unique, LaPToP.ProgramTheory.Interpreter.Network.Inv, LaPToP.ProgramTheory.Interpreter.Network.netSpec_of_reach, LaPToP.ProgramTheory.Interpreter.Network.Path.stamp, LaPToP.ProgramTheory.Interpreter.Network.blocked_descent, LaPToP.ProgramTheory.Interpreter.Network.progress, LaPToP.ProgramTheory.Interpreter.Network.reach_of_netSpec, LaPToP.ProgramTheory.Interpreter.Network.netSpec_unique, LaPToP.ProgramTheory.Interpreter.Network.deadlock_top, LaPToP.ProgramTheory.Interpreter.Network.runNet, LaPToP.ProgramTheory.Interpreter.Network.runNet_correct, LaPToP.ProgramTheory.Interpreter.Lang.toNP, LaPToP.ProgramTheory.Interpreter.Lang.toNet, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sendRecv_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.buffer_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deadlock_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.doubler_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.pipeline_net")
+:::theorem "interpreter_network" (parent := "programming_language_core") (tags := "programs, interpreter, channels, concurrency, deadlock, hehner-9.1") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.PStep, LaPToP.ProgramTheory.Interpreter.Network.NetSpec, LaPToP.ProgramTheory.Interpreter.Network.Net.WF, LaPToP.ProgramTheory.Interpreter.Network.Act, LaPToP.ProgramTheory.Interpreter.Network.MStep, LaPToP.ProgramTheory.Interpreter.Network.act_comm, LaPToP.ProgramTheory.Interpreter.Network.mstep_diamond, LaPToP.ProgramTheory.Interpreter.Network.mstep_confluent, LaPToP.ProgramTheory.Interpreter.Network.normal_unique, LaPToP.ProgramTheory.Interpreter.Network.Inv, LaPToP.ProgramTheory.Interpreter.Network.netSpec_of_reach, LaPToP.ProgramTheory.Interpreter.Network.Path.stamp, LaPToP.ProgramTheory.Interpreter.Network.blocked_descent, LaPToP.ProgramTheory.Interpreter.Network.progress, LaPToP.ProgramTheory.Interpreter.Network.reach_of_netSpec, LaPToP.ProgramTheory.Interpreter.Network.netSpec_unique, LaPToP.ProgramTheory.Interpreter.Network.deadlock_top, LaPToP.ProgramTheory.Interpreter.Network.runNet, LaPToP.ProgramTheory.Interpreter.Network.runNet_correct, LaPToP.ProgramTheory.Interpreter.Lang.toNP, LaPToP.ProgramTheory.Interpreter.Lang.toNet, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sendRecv_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.buffer_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deadlock_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.doubler_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.pipeline_net, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv_exists, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv_book, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer_reach, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer_book, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait_normal, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait_book")
 Communicating processes, run by a machine proved equal to the book's semantics.
 A network is processes, each with its own variables, its own clock and its own
 read and write cursors, joined by channels, each with one writer and any number
@@ -1600,6 +1601,12 @@ kernel-checked demonstrations: a message received one unit after it is sent, the
 book's buffer, a three-stage pipeline, the deadlock, and the recursive doubler
 $`S ⇐ c?. d!\,2×c. S` on input from the command line. This extends
 {uses "interpreter_time"}[].
+
+The hand expansions of Chapter 9 come out of it: as networks,
+$`c!\,e \| (c?. x:= c)`, the buffer, and the mutual wait have exactly the
+behaviours their channel declarations were computed to have — $`x′=e ∧ t′=t+1`,
+$`x′=7 ∧ t′=t+1`, and $`t′=∞` — each shown by running the machine and the
+theorems above.
 
 Honest scope. Each process is deterministic: its chunks are in the deterministic
 fragment. In the concrete syntax, a local variable, a choice or a $`\|` may not
