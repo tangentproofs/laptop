@@ -46,6 +46,7 @@ inductive Stmt where
   | check (c : ℕ) (x : ℕ)
   /-- `A i:= e`, on an array variable `A`. -/
   | store (x : ℕ) (i e : Exp)
+  deriving Repr
 
 /-- A statement as a program of the language. -/
 def Stmt.toProg : Stmt → P

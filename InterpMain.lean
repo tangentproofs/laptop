@@ -1,4 +1,5 @@
 import LaPToP.ProgramTheory.B4Lang
+import LaPToP.ProgramTheory.Alloc
 
 /-!
 # `interp`: running programs of the aPToP interpreter from a shell
@@ -265,6 +266,21 @@ def runSelfTest : IO UInt32 := do
      ("swap", ["x", "y"], Lang.Demo.swapToks, given [(0, 1), (1, 2)]),
      ("sort", ["n", "A"], Lang.Demo.sortToks, Function.update (given [(0, 6)]) 1
        (.list ([5, 3, 9, 1, 4, 2].map .int)))]
+  -- The allocator: read from its source, it is the statement proved (Alloc.alloc_sEval).
+  let allocToks := (tokenize (LaPToP.ProgramTheory.Alloc.allocSrc.length + 1) LaPToP.ProgramTheory.Alloc.allocSrc.toList).toOption.getD []
+  match parseB4 ["n", "M"] allocToks with
+  | .ok bp =>
+    if reprStr bp.procs == reprStr [LaPToP.ProgramTheory.Alloc.allocStmt] then
+      IO.println "ok    alloc: the source reads as the allocator proved in Alloc"
+    else IO.eprintln "FAIL  alloc: the source does not read as the proved allocator"; bad := bad + 1
+  | .error e => IO.eprintln s!"FAIL  alloc: {e}"; bad := bad + 1
+  let heap : List ℤ → St := fun ms => Function.update (given [(0, 5)]) 1 (.list (ms.map .int))
+  let b4Tests := b4Tests ++
+    [("alloc (split)", ["n", "M"], allocToks, heap ([-1, 17] ++ List.replicate 18 0)),
+     ("alloc (merge)", ["n", "M"], allocToks,
+       Function.update (heap [6, 3, 0, 0, 0, 0, 11, 2, 0, 0, 0, -1, 6, 1, 0, 0, 0, 0, 0, 0]) 0 (.int 7)),
+     ("alloc (none)", ["n", "M"], allocToks,
+       Function.update (heap [6, 3, 1, 0, 0, 0, -1, 11, 1, 0, 0, 0, 0, 0, 0, 0, 0]) 0 (.int 2))]
   for (name, names, toks, start) in b4Tests do
     match parseToksWith names toks, b4Outcome names toks start 100000 with
     | .ok prog, .ok b =>

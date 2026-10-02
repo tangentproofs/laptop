@@ -28,6 +28,7 @@ def Exp.toB4 : Exp → Except String Exp
   | .lit (.int k) => .ok (.lit (.int k))
   | .lit (.bool b) => .ok (.lit (.bool b))
   | .var x => .ok (.var x)
+  | .un .neg (.lit (.int k)) => .ok (.lit (.int (-k)))
   | .un .neg a => do .ok (.un .neg (← a.toB4))
   | .un .not a => do .ok (.un .not (← a.toB4))
   | .bin op a b => do

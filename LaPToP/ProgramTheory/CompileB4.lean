@@ -1501,7 +1501,8 @@ theorem Layout.arrayAt_isSome {L L' : Layout} (h : L.arrays = L'.arrays) (x : �
 
 /-- How long a statement's code is does not depend on the layout, only on which
 variables are arrays. -/
-theorem length_ecode_congr (L L' : Layout) (h : L.arrays = L'.arrays) (e : Exp) :
+theorem length_ecode_congr (L L' : Layout) (h : ∀ x, (L.arrayAt x).isSome = (L'.arrayAt x).isSome)
+    (e : Exp) :
     (ecode L e).length = (ecode L' e).length := by
   induction e with
   | un op a ih => cases op <;> simp [ecode, ih]
@@ -1513,16 +1514,17 @@ theorem length_ecode_congr (L L' : Layout) (h : L.arrays = L'.arrays) (e : Exp) 
   | index a i _ ihi =>
     cases a with
     | var x =>
-      have := L.arrayAt_isSome h x
+      have := h x
       cases h₁ : L.arrayAt x <;> cases h₂ : L'.arrayAt x <;> simp_all [ecode]
     | _ => rfl
   | cond => rfl
 
-theorem slen_congr (L L' : Layout) (h : L.arrays = L'.arrays) : ∀ p : Stmt, slen L p = slen L' p := by
+theorem slen_congr (L L' : Layout) (h : ∀ x, (L.arrayAt x).isSome = (L'.arrayAt x).isSome) :
+    ∀ p : Stmt, slen L p = slen L' p := by
   intro p
   induction p with
   | store x i e =>
-    have := L.arrayAt_isSome h x
+    have := h x
     cases h₁ : L.arrayAt x <;> cases h₂ : L'.arrayAt x <;>
       simp_all [slen, length_ecode_congr L L' h]
   | _ => simp_all [slen, length_ecode_congr L L' h]
@@ -1539,7 +1541,7 @@ theorem Layout.laid_of_place (L L₀ : Layout) (hd : L.defs = L₀.defs) (ha : L
     refine ⟨by simpa [Layout.place] using he k (by simp), ?_⟩
     rw [List.nodup_cons] at hn
     refine L.laid_of_place L₀ hd ha ks _ hn.2 fun j hj => ?_
-    rw [he j (by simp [hj]), Layout.place, hd, slen_congr L L₀ ha]
+    rw [he j (by simp [hj]), Layout.place, hd, slen_congr L L₀ (L.arrayAt_isSome ha)]
     simp [show j ≠ k by rintro rfl; exact hn.1 hj]
 
 /-- The layout's variables and named statements, before placing them. -/

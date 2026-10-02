@@ -30,6 +30,7 @@ import LaPToP.ProgramTheory.CompileB4
 import LaPToP.ProgramTheory.CompileNet
 import LaPToP.ProgramTheory.CompileNetDeadlock
 import LaPToP.ProgramTheory.B4Lang
+import LaPToP.ProgramTheory.Alloc
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1644,7 +1645,7 @@ are finite. That is an infinite descent in a well-founded order. Each step short
 written exactly the book's scripts.
 :::
 
-:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, LaPToP.ProgramTheory.CompileB4.Layout.Image, LaPToP.ProgramTheory.CompileB4.Layout.Laid, LaPToP.ProgramTheory.CompileB4.Layout.image_of_laid, LaPToP.ProgramTheory.CompileB4.Layout.Fit, LaPToP.ProgramTheory.CompileB4.Layout.build, LaPToP.ProgramTheory.CompileB4.Layout.build_laid, LaPToP.ProgramTheory.CompileB4.enter_runs, LaPToP.ProgramTheory.CompileB4.restore_runs, LaPToP.ProgramTheory.CompileB4.enc_div, LaPToP.ProgramTheory.CompileB4.enc_mod, B4.step_cl, B4.step_rt, B4.step_dc, B4.step_cd, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
+:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, LaPToP.ProgramTheory.CompileB4.Layout.Image, LaPToP.ProgramTheory.CompileB4.Layout.Laid, LaPToP.ProgramTheory.CompileB4.Layout.image_of_laid, LaPToP.ProgramTheory.CompileB4.Layout.Fit, LaPToP.ProgramTheory.CompileB4.Layout.build, LaPToP.ProgramTheory.CompileB4.Layout.build_laid, LaPToP.ProgramTheory.CompileB4.enter_runs, LaPToP.ProgramTheory.CompileB4.restore_runs, LaPToP.ProgramTheory.CompileB4.enc_div, LaPToP.ProgramTheory.CompileB4.enc_mod, LaPToP.ProgramTheory.CompileB4.ArrOk, LaPToP.ProgramTheory.CompileB4.VarsOk, LaPToP.ProgramTheory.CompileB4.addrCode, LaPToP.ProgramTheory.CompileB4.run_addr, LaPToP.ProgramTheory.CompileB4.store_runs, LaPToP.ProgramTheory.CompileB4.varsOk_store, LaPToP.ProgramTheory.CompileB4.writeArrs, B4.step_cl, B4.step_rt, B4.step_dc, B4.step_cd, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
 A compiler from the integer fragment of the language to the b4 virtual machine,
 proved correct. b4 is a small stack machine with byte-addressed memory, its
 registers mapped into the first bytes, and data and control stacks; it has
@@ -1663,7 +1664,11 @@ $`\mathbf{do}`/$`\mathbf{exit}` and $`\mathbf{for}` loops — are laid out end
 to end from the start of code, each followed by a return, and a call is b4's
 `cl`, which keeps the return address on the control stack. A local variable
 (as parameters and simultaneous assignments use) keeps the variable's old value
-on the control stack while its scope runs, and puts it back at the end. The theorem: whenever the
+on the control stack while its scope runs, and puts it back at the end. An
+array — a variable holding a list, indexed $`A i` and assigned item by item,
+$`A i:= e` — has a cell for each item, after the variables' cells, as many as
+the list it starts with; the address of item $`i` is computed on the stack
+(`li 4 ml li a ad`) and read with `ri` or written with `wi`. The theorem: whenever the
 language's execution takes a state $`σ` to $`σ'` with every value evaluated
 fitting in 32 bits, the loaded machine, run long enough, halts with the cells
 holding $`σ'`. Execution in 32 bits is an execution of the language, by the
@@ -1673,10 +1678,11 @@ Honest scope. The fragment is assignment, sequence, $`\mathbf{if}`,
 $`\mathbf{while}`, calls of named statements (so recursion, procedures with
 parameters, and the loops the parser compiles to calls) and local variables,
 over integer and binary expressions with $`+ - ×`, $`\mathbf{div}` and
-$`\mathbf{mod}` by a positive divisor, $`<`, $`=`, negation and $`¬`; time and
-channels are compiled for networks ({uses "interpreter_swarm"}[]); lists are not
-compiled, and the converse direction (that the machine does nothing the
-language does not allow) is not proved.
+$`\mathbf{mod}` by a positive divisor, $`<`, $`=`, negation and $`¬`, and items
+of arrays, at an index inside them; time and channels are compiled for networks
+({uses "interpreter_swarm"}[]); lists are compiled only as arrays of fixed
+length, never assigned whole, and the converse direction (that the machine does
+nothing the language does not allow) is not proved.
 :::
 
 :::proof "interpreter_b4"
@@ -1788,4 +1794,41 @@ script, which the swarm holds, does not have: no machine can move. If the
 network could also finish in 32 bits, the simulation would bring the swarm to a
 state with every machine halted, also stuck — the same state, by uniqueness,
 which is a contradiction.
+:::
+
+:::theorem "interpreter_alloc" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, arrays, memory allocation") (effort := "large") (lean := "LaPToP.ProgramTheory.Alloc.Blk, LaPToP.ProgramTheory.Alloc.absorb, LaPToP.ProgramTheory.Alloc.claim, LaPToP.ProgramTheory.Alloc.alloc, LaPToP.ProgramTheory.Alloc.free, LaPToP.ProgramTheory.Alloc.Chain, LaPToP.ProgramTheory.Alloc.allocStmt, LaPToP.ProgramTheory.Alloc.allocSrc, LaPToP.ProgramTheory.Alloc.freeStmt, LaPToP.ProgramTheory.Alloc.merge_runs, LaPToP.ProgramTheory.Alloc.take_runs, LaPToP.ProgramTheory.Alloc.search_runs, LaPToP.ProgramTheory.Alloc.alloc_sEval, LaPToP.ProgramTheory.Alloc.free_sEval, LaPToP.ProgramTheory.Alloc.alloc_eval, LaPToP.ProgramTheory.Alloc.alloc_on_b4, LaPToP.ProgramTheory.Alloc.alloc_on_b4'")
+A memory allocator, written in the language and proved. It is the allocator of
+b4's `mm.b4a` (first fit, merging free neighbours as it searches, splitting off
+what a request leaves), rewritten over an array $`M` of cells: the heap is a
+chain of blocks, each a three-cell header — the next block ($`-1` at the last),
+the size of its data, and whether it is used — followed by its data.
+
+The theorems: on a heap whose chain holds the blocks $`bs`, asked for $`n`
+cells, the program runs in 32 bits and leaves a heap holding exactly what the
+list-level model $`\mathit{alloc}\ n\ bs` says — the blocks merged as far as
+the search went, the one taken split when what is left is at least four cells
+— answering in $`r` where the data of the block taken starts, or $`-1` when no
+block is big enough; $`M\ (r-1):= 0` frees it again, as the model's
+$`\mathit{free}`. Being execution in 32 bits, this is an execution of the
+language and, by {uses "interpreter_b4"}[], what the compiled program does on
+b4: loaded with a heap of up to 16000 cells, the machine halts with the
+heap's cells holding the model's blocks.
+
+Honest scope. The program's source text, read by the parser, is checked to be
+the statement proved by `interp --selftest`, not by a theorem; the model counts
+in cells, where `mm.b4a` counts in bytes (a header of 12, a split at 16).
+:::
+
+:::proof "interpreter_alloc"
+The heap is related to the blocks by a chain predicate that reads only the
+headers it reaches, so writing any other cell keeps it (a frame lemma), and
+blocks before a position are kept as a continuation: whatever chain starts
+there, the whole heap holds those blocks followed by it, in any memory that
+agrees below. The merging loop is proved by induction on the blocks after the
+current one: a free neighbour is absorbed by two header writes, and the chain
+after it is untouched. Taking a block is six writes when it splits — a new
+header inside the block's data, before the next block — and one otherwise. The
+search loop is proved by induction on the number of blocks, each round taking
+a used block or a merged free block that is too small into the blocks before.
+Every expression is shown to fit in 32 bits from the heap's bound.
 :::
