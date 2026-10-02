@@ -27,6 +27,7 @@ import LaPToP.ProgramTheory.InterpreterFast
 import LaPToP.ProgramTheory.NetworkLang
 import LaPToP.ProgramTheory.NetworkBook
 import LaPToP.ProgramTheory.CompileB4
+import LaPToP.ProgramTheory.CompileNet
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1671,4 +1672,40 @@ changing nothing else. A statement's code is proved by induction on the
 code, keeping everything below the variables — so the code itself — intact,
 which is what lets a loop run its own code again. The loader is shown to set up
 exactly the state the theorem asks for.
+:::
+
+:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT")
+Communicating processes, compiled to b4, run as a swarm of machines, proved to
+compute the network. Each process of a network becomes its own b4 machine; the
+machines run side by side and reach their channels through b4's `io`
+instruction: with a value, a channel and `'s'` on the stack, the message goes on
+the channel's script stamped with the machine's clock (register `T`); with a
+channel and `'r'`, the next message is taken, waiting while there is none, and
+the clock moves to one past its sending time if that is later. `t:= t+1` adds
+one to the clock.
+
+The theorem: every run of the network machine of {uses "interpreter_network"}[]
+in which no value or time leaves 32 bits is matched step for step by a run of
+the swarm, and when every process has finished, every machine halts with its
+process's final variables in its cells and final time on its clock, and the
+channels hold the scripts the network wrote — which is the book's semantics of
+the network. The compiled statements are those of {uses "interpreter_b4"}[],
+with time and communication added.
+
+Honest scope. Forward simulation only: that the swarm does nothing else, and
+that a swarm that stops corresponds to a deadlock, are not proved. Processes
+use the compiled fragment (no calls, locals or lists).
+:::
+
+:::proof "interpreter_swarm"
+What is left of a process is related to the machine's code by a relation that
+lays the statements out one after another from the pointer, allowing the jumps
+that `if` and `while` leave behind. Each step of the network is then simulated:
+the machine first follows any jumps, then runs the code of the statement at
+hand, by the lemmas for expressions, assignments and conditions of the
+compiler's proof, by a lemma for the clock, or by the swarm's `io` for
+communication; runs of a single machine are runs of the swarm, since they never
+touch `io`. Writes go to the cells above the code, so the code, and with it what
+is left of every process, survives them. At the end each machine follows its
+jumps to `hl` and halts.
 :::

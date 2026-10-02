@@ -116,6 +116,7 @@ inductive SAct (L : Layout) (pr : SProc) :
 
 /-- **A step of the network, in 32 bits**: one process acts. -/
 inductive SStep (L : Layout) (net : SNet) : SCfg → SCfg → Prop
+  /-- Process `i` acts. -/
   | mk {c : SCfg} {i : ℕ} {pr : SProc} {a b : List Stmt × PSt ℕ Value} {Λ : Scripts Value} :
       net.procs[i]? = some pr → c.ps[i]? = some a → SAct L pr c.L a b Λ →
       SStep L net c ⟨c.ps.set i b, Λ⟩
@@ -430,13 +431,21 @@ stack, what is left of the process is laid out from the pointer, the cells hold
 its variables, the clock its time, and the swarm's cursors its cursors. -/
 structure PRel (L : Layout) (ks : List Stmt) (st : PSt ℕ Value) (s : State) (r : ℕ → ℕ) :
     Prop where
+  /-- The machine is well formed. -/
   wf : WF s
+  /-- It is running. -/
   run : Running s
+  /-- Its data stack is empty. -/
   stack : dstack s = []
+  /-- What is left is laid out from the pointer. -/
   cont : Cont L (high s) ks (getIP s)
+  /-- The cells hold the variables. -/
   vars : VarsOk L (high s) st.mem
+  /-- The clock holds the time. -/
   clk : getClk s = encT st.t
+  /-- The time fits. -/
   tfit : TFits st.t
+  /-- The cursors are the process's. -/
   rd : ∀ c, r c = st.r c
 
 theorem Direct.cons_inv {L : Layout} {m : ℕ → UInt8} {p : Stmt} {ks : List Stmt} {a : ℕ}
@@ -572,10 +581,14 @@ theorem later_encT {t τ : ℕ∞} (ht : TFits t) (h : TFits (max t (τ + 1))) :
 /-- **The swarm and the network agree**: a machine for each process, related
 as `PRel` says, and the channels holding the scripts. -/
 structure Rel (L : Layout) (c : SCfg) (w : Swarm) : Prop where
+  /-- A machine for each process. -/
   len : w.ms.length = c.ps.length
+  /-- Cursors for each process. -/
   rdlen : w.rd.length = c.ps.length
+  /-- Each process and its machine agree. -/
   proc : ∀ {i : ℕ} {ks : List Stmt} {st : PSt ℕ Value} {s : State}, c.ps[i]? = some (ks, st) →
     w.ms[i]? = some s → PRel L ks st s (w.rd.getD i fun _ => 0)
+  /-- The channels hold the scripts. -/
   chans : ∀ ch, w.chans ch = encS (c.L ch)
 
 /-- Replace one machine and one process, keeping the cursors. -/
@@ -725,5 +738,303 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
     by_cases hc : c = ch
     · subst hc; simp [hp.rd]
     · simp [hc, hp.rd]
+
+/-- Replace one machine, its cursors and one process. -/
+theorem Rel.setRd {L : Layout} {c : SCfg} {w : Swarm} (hr : Rel L c w) {i : ℕ}
+    (hi : i < c.ps.length) {ks : List Stmt} {st : PSt ℕ Value} {s : State} {Λ : Scripts Value}
+    {r : ℕ → ℕ} {chans : ℕ → List B4.Msg} (hp : PRel L ks st s r) (hch : ∀ ch, chans ch = encS (Λ ch)) :
+    Rel L ⟨c.ps.set i (ks, st), Λ⟩ ⟨w.ms.set i s, chans, w.rd.set i r⟩ := by
+  refine ⟨by simp [hr.len], by simp [hr.rdlen], ?_, hch⟩
+  intro j ks' st' s' hc hm
+  have hrd : i < w.rd.length := hr.rdlen ▸ hi
+  by_cases hij : i = j
+  · subst hij
+    simp only [List.getElem?_set_self hi, Option.some.injEq, Prod.mk.injEq] at hc
+    obtain ⟨rfl, rfl⟩ := hc
+    simp only [List.getElem?_set_self (hr.len ▸ hi), Option.some.injEq] at hm
+    subst hm
+    simpa [List.getD_eq_getElem?_getD, List.getElem?_set_self hrd] using hp
+  · simp only [List.getElem?_set_ne hij] at hc hm
+    have := hr.proc hc hm
+    simpa [List.getD_eq_getElem?_getD, List.getElem?_set_ne hij] using this
+
+theorem Rel.machine {L : Layout} {c : SCfg} {w : Swarm} (hr : Rel L c w) {i : ℕ}
+    {ks : List Stmt} {st : PSt ℕ Value} (ha : c.ps[i]? = some (ks, st)) :
+    ∃ s, w.ms[i]? = some s ∧ PRel L ks st s (w.rd.getD i fun _ => 0) := by
+  have hlt : i < w.ms.length := hr.len ▸ (List.getElem?_eq_some_iff.mp ha).1
+  exact ⟨_, List.getElem?_eq_getElem hlt, hr.proc ha (List.getElem?_eq_getElem hlt)⟩
+
+/-- Follow the jumps of machine `i` in the swarm. -/
+theorem Rel.follow (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ks : List Stmt}
+    {st : PSt ℕ Value} {r : ℕ → ℕ} (hi : w.ms[i]? = some s) (hp : PRel L ks st s r) :
+    ∃ s₁, Swarm.Steps w { w with ms := w.ms.set i s₁ } ∧ Steps s s₁ ∧ PRel L ks st s₁ r ∧
+      Direct L (high s₁) ks (getIP s₁) := by
+  obtain ⟨s₁, r₁, sm₁, w₁, d₁, hd₁⟩ := LaPToP.ProgramTheory.CompileNet.follow L hL hp.cont s rfl
+    hp.wf hp.run rfl
+  exact ⟨s₁, swarm_lift hi r₁, r₁, ⟨w₁, sm₁.running hp.run, d₁.trans hp.stack,
+    by rw [sm₁.high]; exact hd₁.cont, by rw [sm₁.high]; exact hp.vars, by rw [sm₁.clk]; exact hp.clk,
+    hp.tfit, hp.rd⟩, by rw [sm₁.high]; exact hd₁⟩
+
+/-- **One step of the network, in 32 bits, is some steps of the swarm**, which
+keep them agreeing. -/
+theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
+    (hchb : ∀ pr ∈ net.procs, ∀ ch, ch ∈ pr.outs ∨ ch ∈ pr.ins → ch < 2 ^ 32)
+    {c c' : SCfg} (h : SStep L net c c') {w : Swarm} (hr : Rel L c w) :
+    ∃ w', Swarm.Steps w w' ∧ Rel L c' w' := by
+  obtain ⟨hpr, ha, hact⟩ := h
+  rename_i i pr a b Λ
+  obtain ⟨ks, st⟩ := a
+  have hlt : i < c.ps.length := (List.getElem?_eq_some_iff.mp ha).1
+  have hprm : pr ∈ net.procs := List.mem_of_getElem? hpr
+  obtain ⟨s, hs, hp⟩ := hr.machine ha
+  obtain ⟨s₁, hw₁, r₁, hp₁, hd₁⟩ := Rel.follow L hL hs hp
+  have hs₁ : ({ w with ms := w.ms.set i s₁ } : Swarm).ms[i]? = some s₁ := by
+    simp [List.getElem?_set_self (hr.len ▸ hlt)]
+  -- the actions that do not communicate
+  have local_case : ∀ {b' : List Stmt × PSt ℕ Value}, SAct L pr c.L (ks, st) b' c.L →
+      (∀ ch e ks', ks ≠ .send ch e :: ks') → (∀ ch x ks', ks ≠ .recv ch x :: ks') →
+      ∃ w', Swarm.Steps w w' ∧ Rel L ⟨c.ps.set i b', c.L⟩ w' := by
+    intro b' hb' hs' hr'
+    obtain ⟨s₂, r₂, hp₂⟩ := machine_sim L hL hb' hs' hr' hp₁ hd₁
+    refine ⟨{ w with ms := w.ms.set i s₂ }, ?_, ?_⟩
+    · have := swarm_lift hs₁ r₂; simp at this; exact hw₁.trans (by simpa using this)
+    · have := hr.set hlt (ks := b'.1) (st := b'.2) (s := s₂) (Λ := c.L) hp₂ hr.chans
+      simpa using this
+  cases hact with
+  | ok => exact local_case .ok (by simp) (by simp)
+  | assign hx hf => exact local_case (.assign hx hf) (by simp) (by simp)
+  | tick hfit => exact local_case (.tick hfit) (by simp) (by simp)
+  | seq => exact local_case .seq (by simp) (by simp)
+  | condT hf hc => exact local_case (.condT hf hc) (by simp) (by simp)
+  | condF hf hc => exact local_case (.condF hf hc) (by simp) (by simp)
+  | loopT hf hc => exact local_case (.loopT hf hc) (by simp) (by simp)
+  | loopF hf hc => exact local_case (.loopF hf hc) (by simp) (by simp)
+  | @send ks' _ ch e hch hf =>
+    obtain ⟨s₂, hw₂, hp₂⟩ := send_sim L hL hs₁ hp₁ hd₁ hf (hchb pr hprm ch (.inl hch))
+    refine ⟨_, hw₁.trans hw₂, ?_⟩
+    have := hr.setRd hlt (ks := ks') (st := st.sent ch) (s := s₂)
+      (Λ := Function.update c.L ch (c.L ch ++ [(e.eval st.mem, st.t)]))
+      (chans := fun c' => if c' = ch then w.chans c' ++ [(enc (e.eval st.mem), encT st.t)]
+        else w.chans c') (r := w.rd.getD i fun _ => 0) (by simpa using hp₂) (by
+        intro c'
+        by_cases hc : c' = ch
+        · subst hc; simp [hr.chans, encS]
+        · simp [hc, hr.chans])
+    have hrd : w.rd.set i (w.rd.getD i fun _ => 0) = w.rd := by
+      apply List.ext_getElem?; intro j
+      by_cases hij : i = j
+      · subst hij
+        rw [List.getElem?_set_self (hr.rdlen ▸ hlt), List.getD_eq_getElem?_getD,
+          List.getElem?_eq_getElem (hr.rdlen ▸ hlt)]; rfl
+      · rw [List.getElem?_set_ne hij]
+    rw [hrd] at this; simpa using this
+  | @recv ks' _ ch x m hch hm hx hfit =>
+    obtain ⟨s₂, hw₂, hp₂⟩ := recv_sim L hL (Λ := c.L) hs₁ (by simpa using hp₁) hd₁
+      (hchb pr hprm ch (.inr hch)) (by simpa using hr.chans ch) hm hx hfit
+    refine ⟨_, hw₁.trans hw₂, ?_⟩
+    have := hr.setRd hlt (ks := ks') (st := st.received ch x m) (s := s₂) (Λ := c.L)
+      (chans := w.chans) hp₂ hr.chans
+    simpa using this
+
+/-- **Runs**: every run of the network in 32 bits is matched by a run of the
+swarm. -/
+theorem swarm_simulates (L : Layout) (hL : L.Ok) {net : SNet}
+    (hchb : ∀ pr ∈ net.procs, ∀ ch, ch ∈ pr.outs ∨ ch ∈ pr.ins → ch < 2 ^ 32)
+    {c c' : SCfg} (h : ReflTransGen (SStep L net) c c') {w : Swarm} (hr : Rel L c w) :
+    ∃ w', Swarm.Steps w w' ∧ Rel L c' w' := by
+  induction h with
+  | refl => exact ⟨w, .refl, hr⟩
+  | tail _ hs ih =>
+    obtain ⟨w₁, r₁, h₁⟩ := ih
+    obtain ⟨w₂, r₂, h₂⟩ := sim_step L hL hchb hs h₁
+    exact ⟨w₂, r₁.trans r₂, h₂⟩
+
+/-! ### Loading the swarm -/
+
+theorem getClk_load (L : Layout) (hL : L.Ok) (p : Stmt) (st : St)
+    (hfit : 0x100 + slen L p + 1 ≤ L.base) : getClk (load L p st) = 0 := by
+  have hlow := loadMem_low L p st hfit hL
+  have hload : load L p st = setRST (setIP ⟨loadMem L p st, Array.replicate STACKSZ 0,
+      Array.replicate STACKSZ 0, ""⟩ 0x100) 1 := rfl
+  rw [hload, getClk_setRST, getClk_setIP]
+  exact getVal_of_zero _ _ fun i _ hi => hlow i (by simp [CLK_OFF, Register.toNat] at hi; omega)
+
+/-- The swarm for a network: each process compiled and loaded into its own
+machine, from the prestate `s`, with the environment's scripts on the channels. -/
+def SNet.load (L : Layout) (net : SNet) (s : St) : Swarm :=
+  ⟨net.procs.map fun pr => CompileB4.load L pr.body s, fun ch => encS (net.input ch),
+    net.procs.map fun _ _ => 0⟩
+
+/-- The code of each process fits below the variables, and its stack. -/
+def SNet.Fits (L : Layout) (net : SNet) : Prop :=
+  ∀ pr ∈ net.procs, 0x100 + slen L pr.body + 1 ≤ L.base ∧ sdepth pr.body ≤ STACKSZ
+
+/-- **At the start, the swarm and the network agree.** -/
+theorem rel_init (L : Layout) (hL : L.Ok) (net : SNet) (hfit : net.Fits L) (s : St) :
+    Rel L (net.init s) (net.load L s) := by
+  refine ⟨by simp [SNet.load, SNet.init], by simp [SNet.load, SNet.init], ?_, fun ch => rfl⟩
+  intro i ks st m hc hm
+  simp only [SNet.init, List.getElem?_map, Option.map_eq_some_iff] at hc
+  obtain ⟨pr, hpr, hpe⟩ := hc
+  simp only [Prod.mk.injEq] at hpe
+  obtain ⟨rfl, rfl⟩ := hpe
+  simp only [SNet.load, List.getElem?_map, hpr, Option.map_some, Option.some.injEq] at hm
+  subst hm
+  obtain ⟨hf₁, hf₂⟩ := hfit pr (List.mem_of_getElem? hpr)
+  obtain ⟨hw, hrun, hip, hc, hv, hd⟩ := load_ready L hL pr.body s hf₁
+  have hc' := CodeAt.append.mp hc
+  rw [length_scode] at hc'
+  refine ⟨hw, hrun, hd, ?_, hv, by rw [getClk_load L hL _ _ hf₁]; rfl,
+    by simp [TFits], fun _ => by simp [SNet.load, List.getD_eq_getElem?_getD]⟩
+  rw [hip]
+  exact .cons le_rfl (by omega) hf₂ hc'.1
+    (.nil (by omega) (by omega) (by simpa using hc'.2 0 (by simp)))
+
+/-! ### The end -/
+
+/-- A machine that has halted holding a process's final state. -/
+structure Halted (L : Layout) (st : PSt ℕ Value) (s : State) : Prop where
+  stopped : getRST s = 0
+  vars : VarsOk L (high s) st.mem
+  clk : getClk s = encT st.t
+
+/-- A machine whose process has finished halts. -/
+theorem halt_one (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {st : PSt ℕ Value}
+    {r : ℕ → ℕ} (hi : w.ms[i]? = some s) (hp : PRel L [] st s r) :
+    ∃ s', Swarm.Steps w { w with ms := w.ms.set i s' } ∧ Halted L st s' := by
+  obtain ⟨s₁, hw₁, -, hp₁, hd₁⟩ := Rel.follow L hL hi hp
+  cases hd₁ with
+  | nil h₁ h₂ h₃ =>
+    have hs₁ : ({ w with ms := w.ms.set i s₁ } : Swarm).ms[i]? = some s₁ := by
+      simp [List.getElem?_set_self (List.getElem?_eq_some_iff.mp hi).1]
+    have hn : NotIo s₁ := notIo_of_hop h₁ h₃
+    refine ⟨step s₁, hw₁.tail ⟨i, ?_⟩, ⟨step_hl s₁ hp₁.wf h₁ h₃, ?_, ?_⟩⟩
+    · rw [Swarm.stepAt_other hs₁ ((running_iff _).mpr hp₁.run) (by rw [ioCmd_of_notIo hn]; simp)
+        (by rw [ioCmd_of_notIo hn]; simp)]
+      simp
+    · rw [step_of s₁ _ h₁ h₃, runOp_hl]; simpa using hp₁.vars
+    · rw [step_of s₁ _ h₁ h₃, runOp_hl]; simpa using hp₁.clk
+
+/-- Halt the machines of finished processes one by one. -/
+theorem halt_upto (L : Layout) (hL : L.Ok) {c : SCfg} {w : Swarm} (hr : Rel L c w)
+    (hdone : ∀ p ∈ c.ps, p.1 = []) (k : ℕ) :
+    ∃ w', Swarm.Steps w w' ∧ w'.ms.length = c.ps.length ∧ w'.chans = w.chans ∧
+      ∀ {i : ℕ} {ks : List Stmt} {st : PSt ℕ Value}, c.ps[i]? = some (ks, st) →
+        ∃ s, w'.ms[i]? = some s ∧
+          (if i < k then Halted L st s else PRel L ks st s (w.rd.getD i fun _ => 0)) := by
+  induction k with
+  | zero =>
+    refine ⟨w, .refl, hr.len, rfl, fun hc => ?_⟩
+    obtain ⟨s, hs, hp⟩ := hr.machine hc
+    exact ⟨s, hs, by simpa using hp⟩
+  | succ k ih =>
+    obtain ⟨w₁, r₁, l₁, c₁, h₁⟩ := ih
+    by_cases hk : k < c.ps.length
+    · obtain ⟨ks, st⟩ := c.ps[k]
+      have hck : c.ps[k]? = some (c.ps[k].1, c.ps[k].2) := by simp [hk]
+      obtain ⟨s, hs, hp⟩ := h₁ hck
+      rw [ite_eq_right (by omega)] at hp
+      have hnil : c.ps[k].1 = [] := hdone _ (List.getElem_mem hk)
+      rw [hnil] at hp
+      obtain ⟨s', r', hh⟩ := halt_one L hL hs hp
+      refine ⟨_, r₁.trans r', by simp [l₁], by simp [c₁], fun {i ks' st'} hc => ?_⟩
+      by_cases hik : i = k
+      · subst hik
+        rw [hck] at hc; cases hc
+        exact ⟨s', by simp [List.getElem?_set_self (l₁ ▸ hk)], by rw [ite_eq_left (by omega)]; exact hh⟩
+      · obtain ⟨s'', hs'', hq⟩ := h₁ hc
+        refine ⟨s'', by simpa [List.getElem?_set_ne (Ne.symm hik)] using hs'', ?_⟩
+        by_cases hlt : i < k
+        · rw [ite_eq_left hlt] at hq; rw [ite_eq_left (by omega)]; exact hq
+        · rw [ite_eq_right hlt] at hq; rw [ite_eq_right (by omega)]; exact hq
+    · refine ⟨w₁, r₁, l₁, c₁, fun {i ks st} hc => ?_⟩
+      obtain ⟨s, hs, hq⟩ := h₁ hc
+      have : i < c.ps.length := (List.getElem?_eq_some_iff.mp hc).1
+      refine ⟨s, hs, ?_⟩
+      rw [ite_eq_left (by omega)]; rw [ite_eq_left (by omega)] at hq; exact hq
+
+/-- **The swarm computes the network.** If the network, started from `s`, runs
+in 32 bits to a configuration where every process has finished, then the swarm
+of compiled processes, loaded from `s`, runs to a state where every machine has
+halted with its process's final variables in its cells and its final time on
+its clock, and the channels hold the scripts the network wrote. -/
+theorem swarm_correct (L : Layout) (hL : L.Ok) {net : SNet} (hfit : net.Fits L)
+    (hchb : ∀ pr ∈ net.procs, ∀ ch, ch ∈ pr.outs ∨ ch ∈ pr.ins → ch < 2 ^ 32) (s : St)
+    {c : SCfg} (h : ReflTransGen (SStep L net) (net.init s) c) (hdone : ∀ p ∈ c.ps, p.1 = []) :
+    ∃ w, Swarm.Steps (net.load L s) w ∧ w.ms.length = c.ps.length ∧
+      (∀ ch, w.chans ch = encS (c.L ch)) ∧
+      ∀ {i : ℕ} {ks : List Stmt} {st : PSt ℕ Value}, c.ps[i]? = some (ks, st) →
+        ∃ m, w.ms[i]? = some m ∧ Halted L st m := by
+  obtain ⟨w₁, r₁, h₁⟩ := swarm_simulates L hL hchb h (rel_init L hL net hfit s)
+  obtain ⟨w₂, r₂, l₂, c₂, h₂⟩ := halt_upto L hL h₁ hdone c.ps.length
+  refine ⟨w₂, r₁.trans r₂, l₂, fun ch => by rw [c₂, h₁.chans], fun hc => ?_⟩
+  obtain ⟨m, hm, hh⟩ := h₂ hc
+  rw [ite_eq_left (List.getElem?_eq_some_iff.mp hc).1] at hh
+  exact ⟨m, hm, hh⟩
+
+/-- **The swarm computes the book's semantics.** When the network runs in 32
+bits until every process has finished, its final states and scripts are a
+behaviour of the book's semantics of the network (`Network.NetSpec`), and the
+swarm halts holding exactly them. -/
+theorem swarm_book (L : Layout) (hL : L.Ok) {net : SNet} (hwf : net.toNet.WF) (hfit : net.Fits L)
+    (hchb : ∀ pr ∈ net.procs, ∀ ch, ch ∈ pr.outs ∨ ch ∈ pr.ins → ch < 2 ^ 32) (s : St)
+    {c : SCfg} (h : ReflTransGen (SStep L net) (net.init s) c) (hdone : ∀ p ∈ c.ps, p.1 = []) :
+    NetSpec net.toNet s 0 (c.ps.map (·.2)) c.L ∧
+      ∃ w, Swarm.Steps (net.load L s) w ∧ (∀ ch, w.chans ch = encS (c.L ch)) ∧
+        ∀ {i : ℕ} {ks : List Stmt} {st : PSt ℕ Value}, c.ps[i]? = some (ks, st) →
+          ∃ m, w.ms[i]? = some m ∧ Halted L st m := by
+  have hm := reach_of_sSteps h
+  rw [SNet.init_toM] at hm
+  have hd : c.toM.Done := by
+    intro pc hpc
+    simp only [SCfg.toM, List.mem_map] at hpc
+    obtain ⟨⟨ks, st⟩, hmem, rfl⟩ := hpc
+    have := hdone _ hmem
+    simp only at this ⊢
+    simp [this]
+  have hs := netSpec_of_reach hwf hm hd
+  obtain ⟨w, hw, -, hch, hh⟩ := swarm_correct L hL hfit hchb s h hdone
+  refine ⟨?_, w, hw, hch, hh⟩
+  have heq : c.toM.ps.map (·.st) = c.ps.map (·.2) := by simp [SCfg.toM, Function.comp_def]
+  rw [← heq]; exact hs
+
+/-! ### Demonstrations -/
+
+namespace Demo
+
+/-- Run a swarm and show each machine's variables `0..n-1`, its clock, and channel
+`0` and `1`'s scripts. -/
+def display (L : Layout) (w : Swarm) : List (List ℤ × UInt32) × List (List B4.Msg) :=
+  (w.ms.map fun m => (readVars L m, getClk m), [w.chans 0, w.chans 1])
+
+/-- Cells above 64 bytes of code. -/
+def layout : Layout := ⟨0x400, 3⟩
+
+/-- `c! 2 || (c?. x:= c)`. -/
+def sendRecv : SNet :=
+  ⟨[⟨.send 0 (.lit (.int 2)), [0], []⟩, ⟨.recv 0 0, [], [0]⟩], fun _ => []⟩
+
+-- The receiver has `x = 2` at time `1`.
+#eval display layout ((sendRecv.load layout fun _ => .int 0).run 1000)
+
+/-- The buffer: `(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)`, `x`, `y` variables `0`, `1`. -/
+def buffer : SNet :=
+  ⟨[⟨.seq (.send 0 (.lit (.int 3))) (.seq .tick (.send 0 (.lit (.int 4)))), [0], []⟩,
+    ⟨.seq (.recv 0 1) (.recv 0 0), [], [0]⟩], fun _ => []⟩
+
+-- `y = 3`, `x = 4`, the reader at time `2`; the script `[(3, 0), (4, 1)]`.
+#eval display layout ((buffer.load layout fun _ => .int 0).run 1000)
+
+/-- A pipeline: `(c! 1. c! 2) || (c?. d! c+10. c?. d! c+10) || (d?. x:= d. d?. y:= d)`. -/
+def pipeline : SNet :=
+  ⟨[⟨.seq (.send 0 (.lit (.int 1))) (.send 0 (.lit (.int 2))), [0], []⟩,
+    ⟨.seq (.recv 0 0) (.seq (.send 1 (.bin .add (.var 0) (.lit (.int 10))))
+      (.seq (.recv 0 0) (.send 1 (.bin .add (.var 0) (.lit (.int 10)))))), [1], [0]⟩,
+    ⟨.seq (.recv 1 0) (.recv 1 1), [], [1]⟩], fun _ => []⟩
+
+-- The last process has `x = 11`, `y = 12` at time `2`.
+#eval display layout ((pipeline.load layout fun _ => .int 0).run 1000)
+
+end Demo
 
 end LaPToP.ProgramTheory.CompileNet
