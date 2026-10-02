@@ -88,6 +88,10 @@ inductive NProc (Var : Type u) (Val : Type v) : Type (max u v) where
   | loop (b : Spec.State Var Val → Bool) (p : NProc Var Val)
   /-- A call of a named process. -/
   | call (k : ℕ)
+  /-- `var x:= e· P`: a local variable around communication. -/
+  | scope (x : Var) (e : Spec.State Var Val → Val) (p : NProc Var Val)
+  /-- The end of a local variable's scope: `x` gets back the value `v` it had. -/
+  | restore (x : Var) (v : Val)
 
 /-- A message: its value, and the time it was sent. -/
 abbrev Msg (Val : Type v) := Val × ℕ∞
@@ -186,6 +190,14 @@ inductive LStep (defs : ℕ → NProc Var Val) : PCfg Var Val → PCfg Var Val �
   /-- A call. -/
   | call {n : ℕ} {k : List (NProc Var Val)} {st : PSt Var Val} :
       LStep defs ⟨.call n :: k, st⟩ ⟨defs n :: k, st⟩
+  /-- A local variable's scope begins: `x` holds `e`, and gets its value back after. -/
+  | scope {x : Var} {e : Spec.State Var Val → Val} {p : NProc Var Val} {k : List (NProc Var Val)}
+      {st : PSt Var Val} :
+      LStep defs ⟨.scope x e p :: k, st⟩
+        ⟨p :: .restore x (st.mem x) :: k, { st with mem := Function.update st.mem x (e st.mem) }⟩
+  /-- A local variable's scope ends. -/
+  | restore {x : Var} {v : Val} {k : List (NProc Var Val)} {st : PSt Var Val} :
+      LStep defs ⟨.restore x v :: k, st⟩ ⟨k, { st with mem := Function.update st.mem x v }⟩
 
 
 /-- **A step of a process against constant scripts** `S`, the book's reading:
@@ -310,6 +322,8 @@ theorem lstep_det [DetDefs Var Val] {defs : ℕ → NProc Var Val} {a b b' : PCf
   | loopT hb => cases h' with | loopT => rfl | loopF hb' => simp_all
   | loopF hb => cases h' with | loopT hb' => simp_all | loopF => rfl
   | call => cases h'; rfl
+  | scope => cases h'; rfl
+  | restore => cases h'; rfl
 
 /-- What a process does is determined. -/
 theorem act_det [DetDefs Var Val] {net : Net Var Val} {i : ℕ} {L L₁ L₂ : Scripts Val}
@@ -610,6 +624,11 @@ def stepAt (net : Net Var Val) (f : ℕ) (c : MCfg Var Val) (i : ℕ) : Option (
   | some ⟨.loop b p :: k, st⟩ =>
       some ⟨c.ps.set i ⟨if b st.mem then p :: .loop b p :: k else k, st⟩, c.L⟩
   | some ⟨.call n :: k, st⟩ => some ⟨c.ps.set i ⟨net.defs n :: k, st⟩, c.L⟩
+  | some ⟨.scope x e p :: k, st⟩ =>
+      some ⟨c.ps.set i ⟨p :: .restore x (st.mem x) :: k,
+        { st with mem := Function.update st.mem x (e st.mem) }⟩, c.L⟩
+  | some ⟨.restore x v :: k, st⟩ =>
+      some ⟨c.ps.set i ⟨k, { st with mem := Function.update st.mem x v }⟩, c.L⟩
   | some ⟨.send ch e :: k, st⟩ =>
       match net.procs[i]? with
       | some pr =>
@@ -647,6 +666,8 @@ theorem mstep_of_stepAt {net : Net Var Val} {f : ℕ} {c c' : MCfg Var Val} {i :
     · simpa [hb] using MStep.mk (net := net) hps (.loc (.loopF hb))
     · simpa [hb] using MStep.mk (net := net) hps (.loc (.loopT hb))
   · rename_i hps; cases h; exact .mk hps (.loc .call)
+  · rename_i hps; cases h; exact .mk hps (.loc .scope)
+  · rename_i hps; cases h; exact .mk hps (.loc .restore)
   · rename_i ch e k st hps
     split at h
     · rename_i pr hpr

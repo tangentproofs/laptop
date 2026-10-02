@@ -18,8 +18,9 @@ between them becomes a chunk run in one step. The network is then run by
 `Network.runNet`, whose result, when every process finishes, is the book's
 semantics (`Network.runNet_correct`), whatever the order the processes run in.
 
-Not yet expressible in a network: a local variable, a choice, or a `||` around
-input or output, and `√c` (whether a message is waiting depends on the speed of
+A local variable around input or output (as a `for` loop's index is) stays a
+scope of the process (`NProc.scope`). Not yet expressible in a network: a choice,
+or a `||` around input or output, and `√c` (whether a message is waiting depends on the speed of
 the other processes).
 -/
 
@@ -71,7 +72,7 @@ def toNP (chans : List (String × ℕ × ℕ)) (look : ℕ → List (Bool × ℕ
     | _, some c, .ok => .ok (.recv c x)
     | _, _, p =>
       if (comms chans look p).isEmpty then .ok (.act (.newLocal x e p))
-      else .error "a local variable around input or output is not supported in a network"
+      else do .ok (.scope x e (← toNP chans look p))
   | .seq p q =>
     if (comms chans look (.seq p q)).isEmpty then .ok (.act (.seq p q))
     else do .ok (.seq (← toNP chans look p) (← toNP chans look q))
