@@ -25,6 +25,8 @@ open B4
 open LaPToP.ProgramTheory.Interpreter
 open LaPToP.ProgramTheory.Interpreter.Lang
 open LaPToP.ProgramTheory.CompileB4
+open LaPToP.ProgramTheory.CompileNet
+open LaPToP.ProgramTheory.Interpreter.Network
 open LaPToP.ProgramTheory.Alloc (rd rd_set fits_lt fits_add fits_sub inR)
 
 /-! ### The runtime, as a program over memory's words -/
@@ -338,5 +340,214 @@ theorem pop_runs {L : Layout} {d : ℕ} {σ : St} (hcap : L.cap < 2 ^ 20) {ms : 
   · intro j hj
     rw [fr₅ j (by omega) (by omega) (by omega) (by omega), rd₄, ite_eq_right (by omega),
       ite_eq_right (by omega), ite_eq_right (by omega), ite_eq_right (by omega)]
+
+/-! ### Memory as words -/
+
+/-- Word `j` from the first cell. -/
+def Wd (L : Layout) (m : ℕ → UInt8) (j : ℕ) : UInt32 := word m (L.base + 4 * j)
+
+theorem fromInt32_toInt32 (w : UInt32) : fromInt32 (toInt32 w) = w := by
+  apply UInt32.toNat_inj.mp
+  have := w.toNat_lt
+  unfold fromInt32 toInt32
+  simp only
+  split_ifs <;> simp [UInt32.toNat_ofNat'] <;> omega
+
+/-- Memory's words from the first cell, as the runtime's array holds them. -/
+def words (L : Layout) (m : ℕ → UInt8) : List ℤ :=
+  (List.range L.cap).map fun j => toInt32 (Wd L m j)
+
+@[simp] theorem length_words (L : Layout) (m : ℕ → UInt8) : (words L m).length = L.cap := by
+  simp [words]
+
+theorem rd_words {L : Layout} {m : ℕ → UInt8} {j : ℕ} (hj : j < L.cap) :
+    rd (words L m) j = toInt32 (Wd L m j) := by
+  simp [rd, words, List.getD_eq_getElem?_getD, hj]
+
+theorem varsOk_words (L : Layout) (m : ℕ → UInt8) (σ : St) : VarsOk L.rt m (MS (words L m) σ) := by
+  refine ⟨fun x hx => by simp [Layout.rt] at hx, fun x a₀ cap hx vs hvs j hj hjl => ?_⟩
+  have hx0 : x = 0 := by
+    by_contra h; simp [Layout.rt, Layout.arrayAt, arrFrom, Ne.symm h] at hx
+  subst hx0
+  rw [L.rt_arrayAt0] at hx; cases hx
+  simp only [MS_zero, Value.list.injEq] at hvs; subst hvs
+  simp only [List.length_map, length_words] at hjl
+  rw [List.getD_eq_getElem _ _ (by simpa using hjl), List.getElem_map]
+  simp only [words, List.getElem_map, List.getElem_range, enc, fromInt32_toInt32]
+  rfl
+
+theorem wd_of_varsOk {L : Layout} {m : ℕ → UInt8} {ms : List ℤ} {σ : St}
+    (h : VarsOk L.rt m (MS ms σ)) (hl : ms.length = L.cap) {j : ℕ} (hj : j < L.cap) :
+    Wd L m j = fromInt32 (rd ms j) := by
+  have := h.2 0 _ _ L.rt_arrayAt0 _ (MS_zero ms σ) j (by unfold Layout.cap at hj; omega)
+    (by simp; omega)
+  rw [List.getD_eq_getElem _ _ (by simp; omega), List.getElem_map] at this
+  unfold Wd; rw [this]
+  simp [enc, rd, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (show j < ms.length by omega)]
+
+theorem arrFrom_off : ∀ (l : List (ℕ × ℕ)) (a x a₀ c : ℕ), arrFrom a l x = some (a₀, c) →
+    ∃ o, a₀ = a + 4 * o ∧ o + c ≤ cellsOf l
+  | [], _, _, _, _, h => by simp [arrFrom] at h
+  | (y, c') :: rest, a, x, a₀, c, h => by
+    simp only [arrFrom] at h
+    simp only [cellsOf, List.map_cons, List.sum_cons]
+    split_ifs at h
+    · cases h; exact ⟨0, by omega, by omega⟩
+    · obtain ⟨o, h₁, h₂⟩ := arrFrom_off rest _ x a₀ c h
+      simp only [cellsOf] at h₂
+      exact ⟨c' + o, by omega, by omega⟩
+
+/-- The cells hold a state by their words alone. -/
+theorem varsOk_congr {L : Layout} {m m' : ℕ → UInt8} {st : St} (h : VarsOk L m st)
+    (hw : ∀ k < L.W, Wd L m' k = Wd L m k) : VarsOk L m' st := by
+  refine ⟨fun x hx => ?_, fun x a₀ c hx vs hvs j hj hjl => ?_⟩
+  · have := hw x (by unfold Layout.W; omega)
+    unfold Wd at this; unfold Layout.addr; rw [this]; exact h.1 x hx
+  · obtain ⟨o, h₁, h₂⟩ := arrFrom_off _ _ _ _ _ hx
+    have := hw (L.n + o + j) (by unfold Layout.W; omega)
+    unfold Wd at this
+    rw [show a₀ + 4 * j = L.base + 4 * (L.n + o + j) by omega, this,
+      show L.base + 4 * (L.n + o + j) = a₀ + 4 * j by omega]
+    exact h.2 x a₀ c hx vs hvs j hj hjl
+
+/-- Memory seen from word `o` on. -/
+def Shift (m : ℕ → UInt8) (o : ℕ) : ℕ → UInt8 := fun a => m (a + 4 * o)
+
+theorem wd_shift (L : Layout) (m : ℕ → UInt8) (o k : ℕ) : Wd L (Shift m o) k = Wd L m (o + k) := by
+  unfold Wd Shift word
+  simp only []
+  rw [show L.base + 4 * k + 4 * o = L.base + 4 * (o + k) by omega,
+    show L.base + 4 * k + 1 + 4 * o = L.base + 4 * (o + k) + 1 by omega,
+    show L.base + 4 * k + 2 + 4 * o = L.base + 4 * (o + k) + 2 by omega,
+    show L.base + 4 * k + 3 + 4 * o = L.base + 4 * (o + k) + 3 by omega]
+
+/-! ### Backtracking, as an abstract machine -/
+
+/-- What backtracking holds: what is left to run and its state, and the choice
+points, the last first, each what is left and the state to go back to. -/
+structure BCfg where
+  /-- What is left to run, and its state. -/
+  cur : List Stmt × PSt ℕ Value
+  /-- The choice points. -/
+  cps : List (List Stmt × PSt ℕ Value)
+
+/-- A lone program, as a process with no channels. -/
+def lone : SProc := ⟨.ok, [], []⟩
+
+/-- No scripts. -/
+def noScripts : Scripts Value := fun _ => []
+
+/-- **A step of backtracking, in 32 bits**: a step of the program, other than
+time; a choice, which keeps the other choice as a choice point; or an `ensure`,
+which goes on, or goes back to the last choice point. Choices and failures are
+outside calls and scopes. -/
+inductive BStep (L : Layout) : BCfg → BCfg → Prop
+  /-- A step of the program. -/
+  | act {a b : List Stmt × PSt ℕ Value} {cps : List (List Stmt × PSt ℕ Value)} {Λ : Scripts Value} :
+      SAct L lone noScripts a b Λ → (∀ ks, a.1 ≠ .tick :: ks) → BStep L ⟨a, cps⟩ ⟨b, cps⟩
+  /-- `P or Q`: `P`, keeping `Q`. -/
+  | choice {ks : List Stmt} {st : PSt ℕ Value} {p q : Stmt} {cps : List (List Stmt × PSt ℕ Value)} :
+      frames ks = 0 → cps.length < L.choices →
+      BStep L ⟨(.choice p q :: ks, st), cps⟩ ⟨(p :: ks, st), (q :: ks, st) :: cps⟩
+  /-- `ensure c` with `c` true. -/
+  | ensureT {ks : List Stmt} {st : PSt ℕ Value} {c : Exp} {cps : List (List Stmt × PSt ℕ Value)} :
+      Fits L st.mem c → c.eval st.mem = .bool true →
+      BStep L ⟨(.ensure c :: ks, st), cps⟩ ⟨(ks, st), cps⟩
+  /-- `ensure c` with `c` false: back to the last choice point. -/
+  | ensureF {ks : List Stmt} {st : PSt ℕ Value} {c : Exp} {cp : List Stmt × PSt ℕ Value}
+      {cps : List (List Stmt × PSt ℕ Value)} :
+      Fits L st.mem c → c.eval st.mem = .bool false → frames ks = 0 →
+      BStep L ⟨(.ensure c :: ks, st), cp :: cps⟩ ⟨cp, cps⟩
+
+/-- **Backtracking fails**: an `ensure` is false, and no choice point is left. -/
+def BFails (L : Layout) (c : BCfg) : Prop :=
+  ∃ (ks : List Stmt) (st : PSt ℕ Value) (e : Exp), c = ⟨(.ensure e :: ks, st), []⟩ ∧
+    Fits L st.mem e ∧ e.eval st.mem = .bool false ∧ frames ks = 0
+
+/-! ### The machine holds backtracking's configuration -/
+
+/-- Where choice point `i` starts, in words. -/
+def recN (L : Layout) (i : ℕ) : ℕ := L.W + 5 + i * (L.W + 1)
+
+/-- Choice point `i`: the address of its code, which runs what is left, and a
+copy of the cells holding its state. -/
+def RecOk (L : Layout) (m : ℕ → UInt8) (i : ℕ) (cp : List Stmt × PSt ℕ Value) : Prop :=
+  ∃ alt : ℕ, alt < 2 ^ 16 ∧ Wd L m (recN L i) = fromInt32 alt ∧ Cont L m [] cp.1 alt ∧
+    VarsOk L (Shift m (recN L i + 1)) cp.2.mem
+
+/-- **The machine holds a configuration of backtracking.** -/
+structure BRel (L : Layout) (c : BCfg) (s : State) : Prop where
+  /-- It runs what is left, with the cells holding the state. -/
+  p : PRel L c.cur.1 c.cur.2 s c.cur.2.r
+  /-- The count of choice points. -/
+  cnt : Wd L (high s) L.W = fromInt32 c.cps.length
+  /-- The flag is clear. -/
+  flag : Wd L (high s) (L.W + 4) = 0
+  /-- Not too many. -/
+  len : c.cps.length ≤ L.choices
+  /-- The choice points, the first kept first. -/
+  recs : ∀ i (h : i < c.cps.length), RecOk L (high s) i (c.cps.reverse[i]'(by simpa))
+  /-- Time and cursors stay put. -/
+  same : ∀ cp ∈ c.cps, cp.2.t = c.cur.2.t ∧ cp.2.r = c.cur.2.r
+
+theorem _root_.LaPToP.ProgramTheory.CompileB4.Layout.top_eq (L : Layout) :
+    L.top = L.base + 4 * L.W := by
+  unfold Layout.top Layout.W; omega
+
+theorem recN_ge (L : Layout) (i : ℕ) : L.W + 5 ≤ recN L i := by unfold recN; omega
+
+theorem RecOk.mono {L : Layout} {m m' : ℕ → UInt8} {i : ℕ} {cp : List Stmt × PSt ℕ Value}
+    (h : RecOk L m i cp) (hlo : ∀ j < L.base, m' j = m j)
+    (hw : ∀ j, L.W ≤ j → Wd L m' j = Wd L m j) : RecOk L m' i cp := by
+  obtain ⟨alt, h₀, h₁, h₂, h₃⟩ := h
+  refine ⟨alt, h₀, by rw [hw _ (by unfold recN; omega)]; exact h₁, h₂.mono hlo,
+    varsOk_congr h₃ fun k _ => ?_⟩
+  rw [wd_shift, wd_shift, hw _ (by unfold recN; omega)]
+
+/-- Memory from `L.top` up gives the words from `W` up. -/
+theorem wd_of_top {L : Layout} {m m' : ℕ → UInt8} (h : ∀ i, L.top ≤ i → m' i = m i) {j : ℕ}
+    (hj : L.W ≤ j) : Wd L m' j = Wd L m j := by
+  unfold Wd word
+  rw [h _ (by rw [L.top_eq]; omega), h _ (by rw [L.top_eq]; omega), h _ (by rw [L.top_eq]; omega),
+    h _ (by rw [L.top_eq]; omega)]
+
+/-! ### Simulation: a step of the program -/
+
+theorem sact_tr {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ Value} (h : SAct L lone noScripts a b Λ)
+    (ht : ∀ ks, a.1 ≠ .tick :: ks) : b.2.t = a.2.t ∧ b.2.r = a.2.r := by
+  cases h <;> simp_all [lone]
+
+theorem sact_not_send {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ Value}
+    (h : SAct L lone noScripts a b Λ) : ∀ ch e ks, a.1 ≠ .send ch e :: ks := by
+  intro ch e ks he; cases h <;> simp_all [lone]
+
+theorem sact_not_recv {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ Value}
+    (h : SAct L lone noScripts a b Λ) : ∀ ch x ks, a.1 ≠ .recv ch x :: ks := by
+  intro ch x ks he; cases h <;> simp_all [lone]
+
+/-- The machine at what is left, after its jumps. -/
+theorem BRel.follow {L : Layout} (hL : L.Ok) {c : BCfg} {s : State} (hr : BRel L c s) :
+    ∃ s₁, Steps s s₁ ∧ BRel L c s₁ ∧ Direct L (high s₁) (cstack s₁) c.cur.1 (getIP s₁) ∧
+      high s₁ = high s := by
+  obtain ⟨s₁, r₁, sm₁, w₁, d₁, hd₁⟩ := CompileNet.follow L hL hr.p.cont s rfl rfl hr.p.wf hr.p.run rfl
+  refine ⟨s₁, r₁, ⟨⟨w₁, sm₁.running hr.p.run, by rw [d₁]; exact hr.p.stack,
+    by rw [sm₁.high, sm₁.cs]; exact hd₁.cont, by rw [sm₁.high]; exact hr.p.vars,
+    by rw [sm₁.clk]; exact hr.p.clk, hr.p.tfit, hr.p.rd, by rw [sm₁.high]; exact hr.p.image⟩,
+    by rw [sm₁.high]; exact hr.cnt, by rw [sm₁.high]; exact hr.flag, hr.len,
+    fun i h => by rw [sm₁.high]; exact hr.recs i h, hr.same⟩,
+    by rw [sm₁.high, sm₁.cs]; exact hd₁, sm₁.high⟩
+
+/-- **A step of the program is steps of the machine.** -/
+theorem sim_act {L : Layout} (hL : L.Ok) {Λ : Scripts Value} {a b : List Stmt × PSt ℕ Value}
+    {cps : List (List Stmt × PSt ℕ Value)} (h : SAct L lone noScripts a b Λ)
+    (ht : ∀ ks, a.1 ≠ .tick :: ks) {s : State} (hr : BRel L ⟨a, cps⟩ s) :
+    ∃ s', Steps s s' ∧ BRel L ⟨b, cps⟩ s' := by
+  obtain ⟨s₁, r₁, hr₁, hd₁, -⟩ := hr.follow hL
+  obtain ⟨s₂, r₂, hp₂, lo₂, top₂⟩ := machine_sim L hL h (sact_not_send h) (sact_not_recv h) hr₁.p hd₁
+  obtain ⟨et, er⟩ := sact_tr h ht
+  have hw : ∀ j, L.W ≤ j → Wd L (high s₂) j = Wd L (high s₁) j := fun j hj => wd_of_top top₂ hj
+  refine ⟨s₂, r₁.trans r₂, ⟨by rw [er]; exact hp₂, by rw [hw _ le_rfl]; exact hr₁.cnt,
+    by rw [hw _ (by omega)]; exact hr₁.flag, hr₁.len, fun i hi => (hr₁.recs i hi).mono lo₂ hw,
+    fun cp hcp => by rw [et, er]; exact hr₁.same cp hcp⟩⟩
 
 end LaPToP.ProgramTheory.CompileBT
