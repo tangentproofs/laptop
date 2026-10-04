@@ -79,7 +79,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.avoids (z : ℕ) : Stmt → Prop
   | .seq p q | .choice p q => p.avoids z ∧ q.avoids z
   | .cond c p q => z ∉ reads c ∧ p.avoids z ∧ q.avoids z
   | .loop c p => z ∉ reads c ∧ p.avoids z
-  | .send _ e | .ensure e => z ∉ reads e
+  | .send _ e | .ensure e | .guard e => z ∉ reads e
   | .recv _ x | .check _ x | .restore x _ => x ≠ z
   | .scope x e p => x ≠ z ∧ z ∉ reads e ∧ p.avoids z
   | .store x i e => x ≠ z ∧ z ∉ reads i ∧ z ∉ reads e
@@ -119,7 +119,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.det (z : ℕ) : Stmt → Stmt
 /-- The statements `det` leaves alone and the compiler's execution (`SEval`) does
 not run: those of a network, and backtracking's `ensure`. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.leaf : Stmt → Bool
-  | .tick | .send _ _ | .recv _ _ | .ret | .restore _ _ | .check _ _ | .ensure _ => true
+  | .tick | .send _ _ | .recv _ _ | .ret | .restore _ _ | .check _ _ | .ensure _ | .guard _ => true
   | _ => false
 
 /-- What a statement becomes on the way to its deterministic version: the
@@ -163,6 +163,7 @@ theorem des_det (z : ℕ) : ∀ p : Stmt, Des z p (p.det z)
   | .restore _ _ => .leaf rfl
   | .check _ _ => .leaf rfl
   | .ensure _ => .leaf rfl
+  | .guard _ => .leaf rfl
 
 /-- Statements that only move the seed on. -/
 inductive SeedOnly (z : ℕ) : Stmt → Prop
@@ -295,6 +296,10 @@ theorem det_sound {L : Layout} {z : ℕ} (Od : ℕ → Stmt) (hdefs : ∀ k, L.d
     | loop _ =>
       exact ⟨s₀, .whileFalse (by simp [Exp.test, ← eval_agree hs c hO.1, hc]), hs⟩
     | leaf hl => simp [Stmt.leaf] at hl
+  | guard =>
+    refine ⟨fun O hD _ s₀ hs => ?_, fun hso => by cases hso⟩
+    cases hD with
+    | leaf _ => exact ⟨s₀, .ok, hs⟩
   | @call d k s t _ _ _ ih =>
     refine ⟨fun O hD hO s₀ hs => ?_, fun hso => by cases hso⟩
     cases hD with

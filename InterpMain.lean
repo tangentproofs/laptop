@@ -362,6 +362,13 @@ def runSelfTest : IO UInt32 := do
     if b.status == .full then IO.println "ok    full: b4 says when there is no room for a choice point"
     else IO.eprintln "FAIL  full: b4 did not report running out of choice points"; bad := bad + 1
   | .error e => IO.eprintln s!"FAIL  full: {e}"; bad := bad + 1
+  -- An index outside its array: the check before it stops the machine.
+  let faultSrc := "A:= [1; 2; 3]. i:= 0. while i < 5 do A i:= i. i:= i+1 od"
+  match b4Outcome [] ((tokenize (faultSrc.length + 1) faultSrc.toList).toOption.getD []) (given []) 100000 with
+  | .ok b =>
+    if b.status == .fault then IO.println "ok    fault: b4 stops when an index leaves its array"
+    else IO.eprintln "FAIL  fault: b4 did not stop at an index outside its array"; bad := bad + 1
+  | .error e => IO.eprintln s!"FAIL  fault: {e}"; bad := bad + 1
   -- Probabilistic choice on b4: with any seed, an outcome the program may have.
   let probTests : List (String × Toks) :=
     [("probEx1", Lang.Demo.probEx1Toks), ("probEx2", Lang.Demo.probEx2Toks),
@@ -538,7 +545,7 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     -- The theorems hold while no value leaves 32 bits: check against the
     -- language's own interpreters, and say so if the machine went outside.
     let agrees : Bool :=
-      if out.status == .running then true
+      if out.status == .running || out.status == .fault then true
       else if bp.procs.length == 1 && bp.chans.isEmpty then
         match parseToksMode false setNames ts with
         | .ok prog =>
@@ -572,6 +579,9 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     if out.status == .failed then
       IO.println "no poststate: every choice ends in an ensure that fails"
       return 2
+    if out.status == .fault then
+      IO.println "an index left its array: b4 checks every index, and the run stopped there"
+      return 2
     let real := fun (v : ℤ) => (Float32.ofBits (B4.fromInt32 v)).toString
     let shown := fun (w : String) (v : ℤ) =>
       if out.reals.contains w then real v else
@@ -604,7 +614,7 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     | .running =>
       IO.eprintln s!"interp --b4: the machines were still running after {o.fuel} rounds (--fuel)"
       return 2
-    | .failed | .full => return 2
+    | .failed | .full | .fault => return 2
 
 def main (args : List String) : IO UInt32 := do
   match parseArgs args {} with

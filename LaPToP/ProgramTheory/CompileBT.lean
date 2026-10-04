@@ -1308,6 +1308,7 @@ theorem sact_evalK {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ
   let _ := L.env
   cases h with
   | ok => exact ⟨fun h => ⟨_, .ok, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+  | guard => exact ⟨fun h => ⟨_, .ok, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
   | assign =>
     exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
   | tick => exact ⟨fun h => ⟨_, .tick, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩

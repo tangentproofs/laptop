@@ -918,6 +918,7 @@ def slen (L : Layout) : Stmt → ℕ
     | none => 0
   -- made deterministic before it is compiled (`CompileProb`)
   | .prob _ _ _ _ => 0
+  | .guard c => (ecode L c).length + 19
 
 /-- The code of the statements backtracking's runtime is written in — `ok`,
 assignment, sequence, `if`, `while` and stores — as `scode` makes it
@@ -985,6 +986,9 @@ def failCode (L : Layout) (f : ℕ) : List UInt8 :=
 theorem length_failCode (L : Layout) (f : ℕ) : (failCode L f).length = 461 := by
   simp [failCode, length_scodeR_halt, length_scodeR_pop, length_ecode_cnt, length_ecode_alt, jmTo]
 
+/-- What a failed `guard` leaves on the stack when the machine halts: `-3`. -/
+def FAULT : UInt32 := 0xFFFFFFFD
+
 /-- **The code of a statement** placed at address `a`. -/
 def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
   | .ok => []
@@ -1029,6 +1033,10 @@ def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
     | some (a₀, _) => ecodes L es ++ storeCode a₀ es.length
     | none => []
   | .prob _ _ _ _ => []
+  | .guard c =>
+    -- `c test → f; jm end; f: li FAULT hl`
+    let f := a + (ecode L c).length + 13
+    ecode L c ++ test ++ jmTo f ++ jmTo (f + 6) ++ ((0x97 :: le4 FAULT) ++ [0xFF])
 
 theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).length = slen L p
   | .ok, _ => rfl
@@ -1053,6 +1061,7 @@ theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).leng
   | .ensure _, _ => by simp [scode, slen, length_failCode, test, jmTo]
   | .fill x _, _ => by cases hx : L.arrayAt x <;> simp [scode, slen, hx]
   | .prob _ _ _ _, _ => rfl
+  | .guard _, _ => by simp [scode, slen, test, jmTo]
 
 /-- How deep the stack gets in any of several expressions. -/
 def maxDepth : List Exp → ℕ
@@ -1079,6 +1088,7 @@ def sdepth : Stmt → ℕ
   | .ensure c => max (depth c) 4
   | .fill _ es => es.length + maxDepth es + 1
   | .prob _ _ _ _ => 0
+  | .guard c => max (depth c) 1
 
 /-- The named statements' code, each at its entry and followed by `rt`, below
 the variables. -/
@@ -1136,6 +1146,8 @@ inductive SEval (L : Layout) : ℕ → Stmt → St → St → Prop
       L.arrayAt x = some (a₀, es.length) → s x = .list vs → vs.length = es.length →
       (∀ e ∈ es, Fits L s e) →
       SEval L d (.fill x es) s (Function.update s x ((Exp.ofList es).eval s))
+  /-- A run-time check that holds. -/
+  | guard {d : ℕ} {c : Exp} {s : St} : Fits L s c → c.eval s = .bool true → SEval L d (.guard c) s s
 
 /-- The definitions a layout carries, as the interpreter's. -/
 @[instance_reducible] def Layout.env (L : Layout) : Defs ℕ Value := ⟨fun k => (L.defs k).toProg⟩
@@ -1162,6 +1174,7 @@ theorem eval_of_sEval {L : Layout} {d : ℕ} {p : Stmt} {s t : St} (h : SEval L 
   | condF _ hc _ ih => exact .condFalse (by simp [Exp.test, hc]) ih
   | loopT _ hc _ _ ih₁ ih₂ => exact .whileTrue (by simp [Exp.test, hc]) ih₁ ih₂
   | loopF _ hc => exact .whileFalse (by simp [Exp.test, hc])
+  | guard => exact .ok
   | call _ _ _ ih => exact .call ih
   | scope _ _ _ _ _ ih => exact .newLocal ih
   | store hfi => rw [toProg_store hfi]; exact .assign
@@ -1554,6 +1567,18 @@ theorem cond_code {L : Layout} {m : ℕ → UInt8} {a : ℕ} {c : Exp} {p q : St
   refine ⟨hE, hT, by convert hJ using 1, by convert hP using 1, by convert hJ' using 1; omega,
     by convert hQ using 1; omega⟩
 
+/-- The pieces of a `guard`'s code. -/
+theorem guard_code {L : Layout} {m : ℕ → UInt8} {a : ℕ} {c : Exp}
+    (h : CodeAt m a (scode L a (.guard c))) :
+    CodeAt m (a + (ecode L c).length + 3) (jmTo (a + (ecode L c).length + 13)) ∧
+      CodeAt m (a + (ecode L c).length + 8) (jmTo (a + (ecode L c).length + 13 + 6)) ∧
+      CodeAt m (a + (ecode L c).length + 13) ((0x97 :: le4 FAULT) ++ [0xFF]) := by
+  simp only [scode] at h
+  rw [CodeAt.append, CodeAt.append, CodeAt.append, CodeAt.append] at h
+  obtain ⟨⟨⟨⟨-, hT⟩, hJ⟩, hJ'⟩, hF⟩ := h
+  simp only [List.length_append, length_test, length_jmTo] at hT hJ hJ' hF
+  exact ⟨by convert hJ using 1, by convert hJ' using 1, by convert hF using 1⟩
+
 /-- The pieces of a `while`'s code. -/
 theorem loop_code {L : Layout} {m : ℕ → UInt8} {a : ℕ} {c : Exp} {p : Stmt}
     (h : CodeAt m a (scode L a (.loop c p))) :
@@ -1593,6 +1618,28 @@ theorem run_jm' {L : Layout} (hL : L.Ok) {s : State} {t : ℕ} (hw : WF s) (hlo 
     (ht' : t ≤ L.base) :
     WF (step s) ∧ getIP (step s) = t ∧ dstack (step s) = dstack s ∧ Same s (step s) :=
   run_jm hw hlo (by have := hL.2; omega) hc ht (by have := hL.2; omega)
+
+/-- A `guard` that holds: its code goes on to the end. -/
+theorem guard_runs (L : Layout) (hL : L.Ok) {d : ℕ} {c : Exp} {s : St} (hf : Fits L s c)
+    (hc : c.eval s = .bool true) : SRuns L d (.guard c) s s := by
+  intro σ a h
+  obtain ⟨hJ, hJ', -⟩ := guard_code h.code
+  have hdep := h.depth; simp only [sdepth] at hdep
+  have hhi := h.hi; simp only [slen] at hhi
+  have hlo := h.lo
+  have hcode := h.code; simp only [scode] at hcode
+  obtain ⟨σ₁, r₁, w₁, run₁, i₁, d₁, sm₁⟩ := run_cond (b := true) hL hf hc h.wf h.run h.ip h.lo
+    (rest := jmTo _ ++ jmTo _ ++ ((0x97 :: le4 FAULT) ++ [0xFF]))
+    (by simp; omega) (by simpa only [List.append_assoc] using hcode) h.vars
+    h.stack (by omega)
+  simp only [ite_true] at i₁
+  have hJ₁ := (show CodeAt (high σ₁) (getIP σ₁) (jmTo (a + (ecode L c).length + 13 + 6)) by
+    rw [i₁, sm₁.high]; exact hJ')
+  obtain ⟨w₂, i₂, d₂, sm₂⟩ := run_jm' hL w₁ (by rw [i₁]; omega) (by rw [i₁]; omega)
+    hJ₁ (by omega) (by omega)
+  exact ⟨step σ₁, r₁.tail ⟨run₁, notIo_jm (by rw [i₁]; omega) hJ₁, rfl⟩, w₂, sm₂.running run₁,
+    by rw [i₂]; simp [slen]; omega, by rw [d₂, d₁], by rw [sm₂.high, sm₁.high]; exact h.vars,
+    sm₁.keeps.trans sm₂.keeps⟩
 
 /-- **Statements**: the code of a statement, run from a state in which the
 variables hold `st`, ends where the code does with the variables holding `st'`,
@@ -1708,6 +1755,7 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {d : ℕ} {p : Stmt} {st st' : St}
       hJ₁ (by omega) (by omega)
     exact ⟨step σ₁, r₁.tail ⟨run₁, notIo_jm (by rw [i₁]; omega) hJ₁, rfl⟩, w₂, sm₂.running run₁, by rw [i₂]; simp [slen]; omega,
       by rw [d₂, d₁], by rw [sm₂.high, sm₁.high]; exact h.vars, sm₁.keeps.trans sm₂.keeps⟩
+  | guard hf hc => exact guard_runs L hL hf hc
 
   | @call d k s t hk hd _ ih =>
     intro σ a h

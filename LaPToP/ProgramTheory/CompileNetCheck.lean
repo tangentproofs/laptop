@@ -158,6 +158,7 @@ theorem act_sim (L : Layout) (hL : L.Ok) {net : SNet}
   | store hfi hf => exact local_case (.store hfi hf) (by simp) (by simp) (by simp)
   | fill hx hvs hl hf => exact local_case (.fill hx hvs hl hf) (by simp) (by simp) (by simp)
   | restore => exact local_case .restore (by simp) (by simp) (by simp)
+  | guard hf hc => exact local_case (.guard hf hc) (by simp) (by simp) (by simp)
   | @send ks' _ ch e hchi hf =>
     obtain ⟨s₂, hw₂, hp₂⟩ := send_sim L hL hs₁ hp₁ hd₁ hf (hchb pr hprm ch (.inl hchi))
       (hown hchi)
