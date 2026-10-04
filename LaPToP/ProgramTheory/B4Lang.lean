@@ -47,6 +47,7 @@ def Exp.divB4 (op : BinOp) (a b : Exp) : Exp :=
 def Exp.toB4 : Exp → Except String Exp
   | .lit (.int k) => .ok (.lit (.int k))
   | .lit (.bool b) => .ok (.lit (.bool b))
+  | .lit (.real x) => .ok (.lit (.real x))
   | .var x => .ok (.var x)
   | .un .neg (.lit (.int k)) => .ok (.lit (.int (-k)))
   | .un .neg a => do .ok (.un .neg (← a.toB4))
@@ -55,7 +56,8 @@ def Exp.toB4 : Exp → Except String Exp
     let a ← a.toB4
     let b ← b.toB4
     match op with
-    | .add | .sub | .mul | .eq | .lt | .and | .or => .ok (.bin op a b)
+    | .add | .sub | .mul | .eq | .lt | .and | .or | .rdiv | .radd | .rsub | .rmul | .rlt =>
+      .ok (.bin op a b)
     | .div | .mod => .ok (Exp.divB4 op a b)
     | .ne => .ok (.un .not (.bin .eq a b))
     | .le => .ok (.un .not (.bin .lt b a))
@@ -193,7 +195,7 @@ def B4Program.commsLook (bp : B4Program) : ℕ → List (Bool × ℕ) :=
 /-- Whether an expression is a binary, by its form. -/
 def Exp.isBin : Exp → Bool
   | .lit (.bool _) | .un .not _ => true
-  | .bin op _ _ => op == .eq || op == .lt || op == .and || op == .or
+  | .bin op _ _ => op == .eq || op == .lt || op == .and || op == .or || op == .rlt
   | .cond _ a b => a.isBin && b.isBin
   | _ => false
 
@@ -339,12 +341,101 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.flat2 (dims : ℕ → Option (ℕ
   | .ensure c => .ensure (c.flat2 dims)
   | p => p
 
+/-- Each expression of a statement changed by `f`. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.mapExp (f : Exp → Exp) : Stmt → Stmt
+  | .assign x e => .assign x (f e)
+  | .seq p q => .seq (p.mapExp f) (q.mapExp f)
+  | .cond c p q => .cond (f c) (p.mapExp f) (q.mapExp f)
+  | .loop c p => .loop (f c) (p.mapExp f)
+  | .send ch e => .send ch (f e)
+  | .scope x e p => .scope x (f e) (p.mapExp f)
+  | .store x i e => .store x (f i) (f e)
+  | .fill x es => .fill x (es.map f)
+  | .choice p q => .choice (p.mapExp f) (q.mapExp f)
+  | .ensure c => .ensure (f c)
+  | .prob a b p q => .prob (f a) (f b) (p.mapExp f) (q.mapExp f)
+  | p => p
+
+/-- Whether an expression is a real, given which variables (`rv`) and arrays
+(`ra`) hold reals: the language's operators are on reals when an operand is one. -/
+def Exp.realB (rv ra : ℕ → Bool) : Exp → Bool
+  | .lit (.real _) => true
+  | .var x => rv x
+  | .index (.var x) _ => ra x
+  | .bin op a b =>
+    [BinOp.rdiv, .radd, .rsub, .rmul].contains op ||
+      ([BinOp.add, .sub, .mul].contains op && (a.realB rv ra || b.realB rv ra))
+  | .un .neg a => a.realB rv ra
+  | .un .toReal _ | .un .rneg _ => true
+  | .cond _ a b => a.realB rv ra || b.realB rv ra
+  | _ => false
+
+/-- An expression with the operators on reals made explicit, as b4 needs them:
+`+ – × <` on a real become `fa fs fm fl`, an integer meeting a real is converted
+(`fi`), and `-x` on a real flips the sign bit. -/
+def Exp.realize (rv ra : ℕ → Bool) : Exp → Exp
+  | .bin op a b =>
+    let r := a.realB rv ra || b.realB rv ra
+    let toR := fun (e : Exp) (e' : Exp) => if e.realB rv ra then e' else .un .toReal e'
+    let a' := a.realize rv ra
+    let b' := b.realize rv ra
+    match op with
+    | .add => if r then .bin .radd (toR a a') (toR b b') else .bin .add a' b'
+    | .sub => if r then .bin .rsub (toR a a') (toR b b') else .bin .sub a' b'
+    | .mul => if r then .bin .rmul (toR a a') (toR b b') else .bin .mul a' b'
+    | .lt => if r then .bin .rlt (toR a a') (toR b b') else .bin .lt a' b'
+    | .rdiv => .bin .rdiv (toR a a') (toR b b')
+    | op => .bin op a' b'
+  | .un .neg a => if a.realB rv ra then .un .rneg (a.realize rv ra) else .un .neg (a.realize rv ra)
+  | .un op a => .un op (a.realize rv ra)
+  | .index a i => .index (a.realize rv ra) (i.realize rv ra)
+  | .cond c a b => .cond (c.realize rv ra) (a.realize rv ra) (b.realize rv ra)
+  | .cons a r => .cons (a.realize rv ra) (r.realize rv ra)
+  | e => e
+
+/-- Each variable with the expressions assigned to it whole, and each array with
+the items stored in it. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.assigned : Stmt → List (ℕ × Exp) × List (ℕ × Exp)
+  | .assign x e => ([(x, e)], [])
+  | .scope x e p => let (a, b) := p.assigned; ((x, e) :: a, b)
+  | .store x _ e => ([], [(x, e)])
+  | .fill x es => ([], es.map (x, ·))
+  | .seq p q | .cond _ p q | .choice p q | .prob _ _ p q =>
+    let (a, b) := p.assigned; let (c, d) := q.assigned; (a ++ c, b ++ d)
+  | .loop _ p => p.assigned
+  | _ => ([], [])
+
+/-- Which variables and arrays hold reals: those that start with one, or are
+assigned one (the least such sets, by iteration); and the first variable or array
+that would hold both kinds, which b4 cannot keep. -/
+def B4Program.reals (bp : B4Program) (s : St) : (ℕ → Bool) × (ℕ → Bool) × Option ℕ :=
+  let (vs, as) := ((bp.procs ++ bp.defs.map (·.2)).map Stmt.assigned).foldl
+    (fun (a, b) (c, d) => (a ++ c, b ++ d)) ([], [])
+  -- the sets as lists, so that each round costs the same
+  let xs := List.range bp.names.length
+  let rv₀ := xs.filter fun x => (s x).isReal
+  let ra₀ := xs.filter fun x => (s x).toList.any (·.isReal)
+  let step := fun ((rv, ra) : List ℕ × List ℕ) =>
+    let rvf := fun x => rv.contains x
+    let raf := fun x => ra.contains x
+    ((rv ++ (vs.filter fun (_, e) => e.realB rvf raf).map (·.1)).eraseDups,
+     (ra ++ (as.filter fun (_, e) => e.realB rvf raf).map (·.1)).eraseDups)
+  let (rvs, ras) := (List.range (vs.length + as.length + 1)).foldl (fun r _ => step r) (rv₀, ra₀)
+  let rv := fun x => rvs.contains x
+  let ra := fun x => ras.contains x
+  let ints := fun (e : Exp) => !e.realB rv ra && !(match e with | .lit (.int _) => true | _ => false)
+  let mixed := (vs.find? fun (x, e) => rv x && ints e).map (·.1) <|>
+    (as.find? fun (x, e) => ra x && ints e).map (·.1)
+  (rv, ra, mixed)
+
 /-- Whether the compiler has code for an expression. -/
 def Exp.b4Ok : Exp → Bool
   | .lit (.int _) | .lit (.bool _) | .var _ => true
+  | .lit (.real _) => true
   | .bin op a b =>
-    [BinOp.add, .sub, .mul, .div, .mod, .eq, .lt, .and, .or].contains op && a.b4Ok && b.b4Ok
-  | .un .neg a | .un .not a => a.b4Ok
+    [BinOp.add, .sub, .mul, .div, .mod, .eq, .lt, .and, .or, .radd, .rsub, .rmul, .rdiv,
+      .rlt].contains op && a.b4Ok && b.b4Ok
+  | .un .neg a | .un .not a | .un .toReal a | .un .rneg a => a.b4Ok
   | .un .len (.var _) => true
   | .index (.var _) i => i.b4Ok
   | .cond c a b => c.b4Ok && a.b4Ok && b.b4Ok
@@ -374,7 +465,7 @@ assigned to it, or else the array copied to it); check every literal and copy ha
 that length; write each copy `A:= B` as `A:= [B 0; …]`; and start an array that
 does not start as a list as that many zeros. -/
 def B4Program.prepare (bp : B4Program) (s : St) (seed : ℕ := 1) :
-    Except String (B4Program × St × List (ℕ × ℕ)) := do
+    Except String (B4Program × St × List (ℕ × ℕ) × List ℕ) := do
   -- the seed of the probabilistic choices: anything from 1 to 2³¹ – 2
   let s := match bp.names.idxOf? "#seed" with
     | some z => Function.update s z (.int (seed % 2147483646 + 1))
@@ -399,6 +490,32 @@ def B4Program.prepare (bp : B4Program) (s : St) (seed : ℕ := 1) :
   let s : St := fun x => match dims x, s x with
     | some _, .list rs => .list (rs.flatMap (·.toList))
     | _, v => v
+  -- reals: the operators on them made explicit, integer literals given to them made reals
+  let (rv, ra, mixed) := bp.reals s
+  if let some x := mixed then
+    throw s!"{name x} holds both integers and reals, but a b4 variable keeps one kind"
+  let lit := fun (rv : Bool) (e : Exp) => match rv, e with
+    | true, .lit (.int k) => Exp.lit (.real (Real32.ofInt k))
+    | _, e => e
+  let fixAssigns : Stmt → Stmt := fun p =>
+    let rec go : Stmt → Stmt
+      | .assign x e => .assign x (lit (rv x) e)
+      | .scope x e p => .scope x (lit (rv x) e) (go p)
+      | .store x i e => .store x i (lit (ra x) e)
+      | .fill x es => .fill x (es.map (lit (ra x)))
+      | .seq p q => .seq (go p) (go q)
+      | .cond c p q => .cond c (go p) (go q)
+      | .choice p q => .choice (go p) (go q)
+      | .prob a b p q => .prob a b (go p) (go q)
+      | .loop c p => .loop c (go p)
+      | p => p
+    (go p).mapExp (Exp.realize rv ra)
+  let bp : B4Program := ⟨bp.procs.map fixAssigns, bp.defs.map fun (k, p) => (k, fixAssigns p),
+    bp.names, bp.chans⟩
+  let s : St := fun x => match s x with
+    | .int k => if rv x then .real (Real32.ofInt k) else .int k
+    | .list vs => if ra x then .list (vs.map fun v => .real v.toReal) else .list vs
+    | v => v
   for p in bp.procs ++ bp.defs.map (·.2) do
     if !(p.exps.all Exp.b4Ok) then
       throw "the b4 compiler takes only integers, binaries, variables, items of arrays and \
@@ -439,7 +556,8 @@ def B4Program.prepare (bp : B4Program) (s : St) (seed : ℕ := 1) :
   for p in bp'.procs ++ bp'.defs.map (·.2) do
     if sdepth p > STACKSZ then
       throw "a list literal or array copy is too long for b4's stack of 256 words"
-  .ok (bp', s', ds.map fun (x, _, c) => (x, c))
+  .ok (bp', s', ds.map (fun (x, _, c) => (x, c)),
+    (List.range bp.names.length).filter fun x => rv x || ra x)
 
 /-- The array variables, each with as many cells as its list starts with. -/
 def B4Program.arrays (bp : B4Program) (s : St) : List (ℕ × ℕ) :=
@@ -495,6 +613,8 @@ structure B4Outcome where
   arrays : List (String × List ℤ) := []
   /-- The items per row of each two-dimensional array (its items are by rows). -/
   cols : List (String × ℕ) := []
+  /-- The variables and arrays that hold reals (their words are the reals' bits). -/
+  reals : List String := []
   deriving DecidableEq, Repr
 
 /-- Whether a statement backtracks (`or`, `ensure`). -/
@@ -509,12 +629,13 @@ def Value.b4Int : Value → ℤ
   | .int k => k
   | .bool b => if b then -1 else 0
   | .list _ => 0
+  | .real x => toInt32 x
 
 /-- Run a program that backtracks: on one machine, with as many choice points
 as fit above the cells (`CompileBT`). -/
 def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
     Except String B4Outcome := do
-  let (bp, s, cols) ← bp.prepare s seed
+  let (bp, s, cols, reals) ← bp.prepare s seed
   let p ← match bp.procs with
     | [p] => pure p
     | _ => throw "backtracking ('or', 'ensure') is compiled only for a program without ||"
@@ -547,14 +668,14 @@ def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
     (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && !isArr k).map fun (n, k) => (n, value k),
     [], (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && isArr k).map
       fun (n, k) => (n, cells k),
-    cols.map fun (x, c) => (bp.names.getD x "?", c)⟩
+    cols.map (fun (x, c) => (bp.names.getD x "?", c)), reals.map (bp.names.getD · "?")⟩
 
 /-- Run on b4: compile and load each process, run the swarm (a lone process is a
 swarm of one), and read back the result. -/
 def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
     Except String B4Outcome := do
   if (bp.procs ++ bp.defs.map (·.2)).any (·.backtracks) then return ← bp.runBT s fuel seed
-  let (bp, s, cols) ← bp.prepare s seed
+  let (bp, s, cols, reals) ← bp.prepare s seed
   let L := bp.layout s
   let name := fun x => bp.names.getD x "?"
   for (x, _) in L.arrays do
@@ -592,7 +713,7 @@ def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
       (n, (w.chans c).map fun (v, t) => (B4Program.value v, t.toNat)),
     (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && isArr k).map
       fun (n, k) => (n, cells k),
-    cols.map fun (x, c) => (bp.names.getD x "?", c)⟩
+    cols.map (fun (x, c) => (bp.names.getD x "?", c)), reals.map (bp.names.getD · "?")⟩
 
 /-- Parse and run on b4. -/
 def b4Outcome (names : List String) (ts : Toks) (s : St) (fuel : ℕ) (seed : ℕ := 1) :

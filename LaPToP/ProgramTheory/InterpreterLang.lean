@@ -50,6 +50,10 @@ inductive Value where
   | bool (b : Bool)
   /-- A list. -/
   | list (vs : List Value)
+  /-- A real, as an IEEE 754 single-precision number: the 32 bits of a `Float32`
+  (`Float32.ofBits`). Keeping the bits, not the float, gives values a decidable
+  equality and the compiler a definition to meet. -/
+  | real (bits : UInt32)
   deriving Repr
 
 mutual
@@ -64,8 +68,11 @@ def Value.decEq : (a b : Value) → Decidable (a = b)
     match Value.decEqList as bs with
     | isTrue h => isTrue (h ▸ rfl)
     | isFalse h => isFalse fun e => h (Value.list.inj e)
+  | .real a, .real b =>
+    if h : a = b then isTrue (h ▸ rfl) else isFalse fun e => h (Value.real.inj e)
   | .int _, .bool _ | .int _, .list _ | .bool _, .int _ | .bool _, .list _
-  | .list _, .int _ | .list _, .bool _ => isFalse Value.noConfusion
+  | .list _, .int _ | .list _, .bool _ | .int _, .real _ | .bool _, .real _ | .list _, .real _
+  | .real _, .int _ | .real _, .bool _ | .real _, .list _ => isFalse Value.noConfusion
 
 /-- Equality of lists of values is decidable. -/
 def Value.decEqList : (as bs : List Value) → Decidable (as = bs)
@@ -85,7 +92,44 @@ instance : DecidableEq Value := Value.decEq
 /-- The value of a variable that was never assigned. -/
 instance : Inhabited Value := ⟨.int 0⟩
 
+/-! ### Reals
+
+The book's reals are kept as IEEE 754 single-precision numbers, as b4's float
+instructions compute them (`B4.f32op`): each operation is `Float32`'s on the
+numbers the bits stand for. -/
+
+/-- `x + y` on the numbers the bits stand for. -/
+def Real32.add (x y : UInt32) : UInt32 := (Float32.ofBits x + Float32.ofBits y).toBits
+/-- `x – y`. -/
+def Real32.sub (x y : UInt32) : UInt32 := (Float32.ofBits x - Float32.ofBits y).toBits
+/-- `x × y`. -/
+def Real32.mul (x y : UInt32) : UInt32 := (Float32.ofBits x * Float32.ofBits y).toBits
+/-- `x / y`. -/
+def Real32.div (x y : UInt32) : UInt32 := (Float32.ofBits x / Float32.ofBits y).toBits
+/-- `x < y`. -/
+def Real32.lt (x y : UInt32) : Bool := decide (Float32.ofBits x < Float32.ofBits y)
+/-- `–x`: the sign bit flipped, IEEE 754's negation. -/
+def Real32.neg (x : UInt32) : UInt32 := x ^^^ 0x80000000
+/-- An integer as a real. -/
+def Real32.ofInt (k : ℤ) : UInt32 := (Float32.ofInt k).toBits
+
 namespace Value
+
+/-- Whether the value is a real. -/
+def isReal : Value → Bool
+  | .real _ => true
+  | _ => false
+
+@[simp] theorem isReal_int (k : ℤ) : (int k).isReal = false := rfl
+@[simp] theorem isReal_bool (b : Bool) : (bool b).isReal = false := rfl
+@[simp] theorem isReal_list (vs : List Value) : (list vs).isReal = false := rfl
+@[simp] theorem isReal_real (x : UInt32) : (real x).isReal = true := rfl
+
+/-- The value read as a real: an integer is converted; `0` if it is neither. -/
+def toReal : Value → UInt32
+  | .real x => x
+  | .int k => Real32.ofInt k
+  | _ => 0
 
 /-- The value read as an integer; `0` if it is not one. -/
 def toInt : Value → ℤ
@@ -122,6 +166,7 @@ def render : Value → String
   | .int k => toString k
   | .bool b => if b then "⊤" else "⊥"
   | .list vs => "[" ++ "; ".intercalate (vs.map render) ++ "]"
+  | .real x => (Float32.ofBits x).toString
 
 @[simp] theorem toInt_int (k : ℤ) : (int k).toInt = k := rfl
 @[simp] theorem toBool_bool (b : Bool) : (bool b).toBool = b := rfl
@@ -137,9 +182,13 @@ end Value
 
 /-! ### Expressions -/
 
-/-- The unary operators: `-x`, `¬x`, and the length `#L`. -/
+/-- The unary operators: `-x`, `¬x`, the length `#L`, and an integer as a real (which the b4 compiler inserts). -/
 inductive UnOp where
   | neg | not | len
+  /-- An integer as a real. -/
+  | toReal
+  /-- `–x` on a real only, which the b4 compiler uses once it knows `x` is one. -/
+  | rneg
   deriving Repr, DecidableEq
 
 /-- The binary operators. `+` is addition of integers and catenation of lists, as
@@ -148,33 +197,53 @@ inductive BinOp where
   | add | sub | mul | div | mod | pow
   | eq | ne | lt | le | gt | ge
   | and | or | imp
+  /-- `x / y`, always a real. -/
+  | rdiv
+  /-- `+ – × <` on reals only, which the b4 compiler uses once it knows the
+  operands are reals. -/
+  | radd | rsub | rmul | rlt
   deriving Repr, DecidableEq
 
 /-- What a unary operator does. -/
 def UnOp.apply : UnOp → Value → Value
-  | .neg, v => .int (-v.toInt)
+  | .neg, v => if v.isReal then .real (Real32.neg v.toReal) else .int (-v.toInt)
+  | .toReal, v => .real v.toReal
+  | .rneg, v => .real (Real32.neg v.toReal)
   | .not, v => .bool (!v.toBool)
   | .len, v => .int v.toList.length
 
 /-- What a binary operator does. `div` and `mod` are the book's floor division and
-its remainder. -/
+its remainder. `+ – × < ≤ > ≥` are on reals when an operand is one, and `/` always
+is; on reals, `a ≤ b` is `¬(b < a)` (which differs from IEEE 754 only for NaN). -/
 def BinOp.apply : BinOp → Value → Value → Value
   | .add, .list a, .list b => .list (a ++ b)
-  | .add, a, b => .int (a.toInt + b.toInt)
-  | .sub, a, b => .int (a.toInt - b.toInt)
-  | .mul, a, b => .int (a.toInt * b.toInt)
+  | .add, a, b => if a.isReal || b.isReal then .real (Real32.add a.toReal b.toReal)
+      else .int (a.toInt + b.toInt)
+  | .sub, a, b => if a.isReal || b.isReal then .real (Real32.sub a.toReal b.toReal)
+      else .int (a.toInt - b.toInt)
+  | .mul, a, b => if a.isReal || b.isReal then .real (Real32.mul a.toReal b.toReal)
+      else .int (a.toInt * b.toInt)
   | .div, a, b => .int (a.toInt.fdiv b.toInt)
   | .mod, a, b => .int (a.toInt.fmod b.toInt)
   | .pow, a, b => .int (if 0 ≤ b.toInt then a.toInt ^ b.toInt.toNat else 0)
   | .eq, a, b => .bool (decide (a = b))
   | .ne, a, b => .bool (!decide (a = b))
-  | .lt, a, b => .bool (decide (a.toInt < b.toInt))
-  | .le, a, b => .bool (decide (a.toInt ≤ b.toInt))
-  | .gt, a, b => .bool (decide (b.toInt < a.toInt))
-  | .ge, a, b => .bool (decide (b.toInt ≤ a.toInt))
+  | .lt, a, b => if a.isReal || b.isReal then .bool (Real32.lt a.toReal b.toReal)
+      else .bool (decide (a.toInt < b.toInt))
+  | .le, a, b => if a.isReal || b.isReal then .bool (!Real32.lt b.toReal a.toReal)
+      else .bool (decide (a.toInt ≤ b.toInt))
+  | .gt, a, b => if a.isReal || b.isReal then .bool (Real32.lt b.toReal a.toReal)
+      else .bool (decide (b.toInt < a.toInt))
+  | .ge, a, b => if a.isReal || b.isReal then .bool (!Real32.lt a.toReal b.toReal)
+      else .bool (decide (b.toInt ≤ a.toInt))
   | .and, a, b => .bool (a.toBool && b.toBool)
   | .or, a, b => .bool (a.toBool || b.toBool)
   | .imp, a, b => .bool (!a.toBool || b.toBool)
+  | .rdiv, a, b => .real (Real32.div a.toReal b.toReal)
+  | .radd, a, b => .real (Real32.add a.toReal b.toReal)
+  | .rsub, a, b => .real (Real32.sub a.toReal b.toReal)
+  | .rmul, a, b => .real (Real32.mul a.toReal b.toReal)
+  | .rlt, a, b => .bool (Real32.lt a.toReal b.toReal)
 
 /-- The states of the language: every variable holds a value. -/
 abbrev St := Spec.State ℕ Value
