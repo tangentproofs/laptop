@@ -543,7 +543,7 @@ theorem sim_act {L : Layout} (hL : L.Ok) {Λ : Scripts Value} {a b : List Stmt �
     (ht : ∀ ks, a.1 ≠ .tick :: ks) {s : State} (hr : BRel L ⟨a, cps⟩ s) :
     ∃ s', Steps s s' ∧ BRel L ⟨b, cps⟩ s' := by
   obtain ⟨s₁, r₁, hr₁, hd₁, -⟩ := hr.follow hL
-  obtain ⟨s₂, r₂, hp₂, lo₂, top₂⟩ := machine_sim L hL h (sact_not_send h) (sact_not_recv h) hr₁.p hd₁
+  obtain ⟨s₂, r₂, hp₂, lo₂, top₂, -⟩ := machine_sim L hL h (sact_not_send h) (sact_not_recv h) hr₁.p hd₁
   obtain ⟨et, er⟩ := sact_tr h ht
   have hw : ∀ j, L.W ≤ j → Wd L (high s₂) j = Wd L (high s₁) j := fun j hj => wd_of_top top₂ hj
   refine ⟨s₂, r₁.trans r₂, ⟨by rw [er]; exact hp₂, by rw [hw _ le_rfl]; exact hr₁.cnt,
