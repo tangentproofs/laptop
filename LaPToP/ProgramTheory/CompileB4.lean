@@ -39,11 +39,13 @@ theorem fromInt32_inj {a b : ℤ} (ha : InRange a) (hb : InRange b)
     (h : fromInt32 a = fromInt32 b) : a = b := by
   rw [← toInt32_fromInt32 ha, ← toInt32_fromInt32 hb, h]
 
-/-- How a value is kept in a word: an integer as itself, a binary as `-1` or `0`. -/
+/-- How a value is kept in a word: an integer as itself, a binary as `-1` or `0`,
+a real as its IEEE 754 single-precision bits. -/
 def enc : Value → UInt32
   | .int k => fromInt32 k
   | .bool b => if b then 0xFFFFFFFF else 0
   | .list _ => 0
+  | .real x => x
 
 /-- The little-endian bytes of a word, as b4 lays it out. -/
 def le4 (v : UInt32) : List UInt8 :=
@@ -252,7 +254,8 @@ def Rep (v : Value) : Prop := IsInt v ∨ ∃ b, v = .bool b
 /-- The opcode of a binary operator the compiler handles. -/
 def binByte : BinOp → UInt8
   | .add => 0x80 | .sub => 0x81 | .mul => 0x82 | .div => 0x83 | .mod => 0x84 | .eq => 0x8A
-  | .lt => 0x8B | .and => 0x86 | .or => 0x87 | _ => 0
+  | .lt => 0x8B | .and => 0x86 | .or => 0x87
+  | .radd => 0xA0 | .rsub => 0xA1 | .rmul => 0xA2 | .rdiv => 0xA3 | .rlt => 0xA4 | _ => 0
 
 /-- From an index on the stack to the address of its cell in an array at `a₀`:
 `li 4 ml li a₀ ad`. -/
@@ -268,6 +271,9 @@ def ecode (L : Layout) : Exp → List UInt8
   | .bin op a b => ecode L a ++ ecode L b ++ [binByte op]
   | .un .neg a => (0x97 :: le4 0) ++ ecode L a ++ [0x81]
   | .un .not a => ecode L a ++ [0x89]
+  | .un .toReal a => ecode L a ++ [0xA5]
+  -- flip the sign bit: `li $80000000 xr`
+  | .un .rneg a => ecode L a ++ ((0x97 :: le4 0x80000000) ++ [0x88])
   | .un .len (.var x) =>
     -- an array keeps its length: as many items as it has cells
     match L.arrayAt x with
@@ -288,6 +294,7 @@ def ecode (L : Layout) : Exp → List UInt8
 def depth : Exp → ℕ
   | .bin _ a b => max (depth a) (depth b + 1)
   | .un .neg a => depth a + 1
+  | .un .rneg a => depth a + 1
   | .un _ a => depth a
   | .index _ i => max (depth i) 2
   | .cond c a b => max (depth c) (max (depth a + 1) (depth b))
@@ -298,6 +305,8 @@ theorem depth_pos : ∀ e : Exp, 0 < depth e
   | .un .neg a => by simp [depth]
   | .un .not a => by simp only [depth]; exact depth_pos a
   | .un .len a => by simp only [depth]; exact depth_pos a
+  | .un .toReal a => by simp only [depth]; exact depth_pos a
+  | .un .rneg a => by simp [depth]
   | .index _ _ => by simp [depth]
   | .cond c _ _ => by simp only [depth]; have := depth_pos c; omega
   | .lit _ | .var _ | .nil | .cons _ _ => by simp [depth]
@@ -306,6 +315,7 @@ theorem depth_pos : ∀ e : Exp, 0 < depth e
 compiler handles, on integers and binaries as they expect, every variable has a
 cell, and no value leaves 32 bits. -/
 def Fits (L : Layout) (st : St) : Exp → Prop
+  | .lit (.real _) => True
   | .lit v => Rep v
   | .var x => x < L.n
   | .bin .add a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st) ∧
@@ -327,6 +337,13 @@ def Fits (L : Layout) (st : St) : Exp → Prop
       ∃ y, b.eval st = .bool y
   | .un .neg a => Fits L st a ∧ IsInt (a.eval st) ∧ InRange (-(a.eval st).toInt)
   | .un .not a => Fits L st a ∧ ∃ b, a.eval st = .bool b
+  | .un .toReal a => Fits L st a ∧ IsInt (a.eval st)
+  | .un .rneg a => Fits L st a ∧ ∃ x, a.eval st = .real x
+  | .bin .radd a b => Fits L st a ∧ Fits L st b ∧ (∃ x, a.eval st = .real x) ∧ ∃ y, b.eval st = .real y
+  | .bin .rsub a b => Fits L st a ∧ Fits L st b ∧ (∃ x, a.eval st = .real x) ∧ ∃ y, b.eval st = .real y
+  | .bin .rmul a b => Fits L st a ∧ Fits L st b ∧ (∃ x, a.eval st = .real x) ∧ ∃ y, b.eval st = .real y
+  | .bin .rdiv a b => Fits L st a ∧ Fits L st b ∧ (∃ x, a.eval st = .real x) ∧ ∃ y, b.eval st = .real y
+  | .bin .rlt a b => Fits L st a ∧ Fits L st b ∧ (∃ x, a.eval st = .real x) ∧ ∃ y, b.eval st = .real y
   | .un .len (.var x) => ∃ a₀ cap vs, L.arrayAt x = some (a₀, cap) ∧ st x = .list vs ∧
       vs.length = cap ∧ cap < 2 ^ 31
   | .index (.var x) i => Fits L st i ∧ ∃ a₀ cap vs j, L.arrayAt x = some (a₀, cap) ∧
@@ -541,6 +558,42 @@ theorem run_addr {L : Layout} {st : St} {s : State} {a₀ : ℕ} {rest : List UI
     have e : 4 * j + (a₀ : ℤ) = ((a₀ + 4 * j.toNat : ℕ) : ℤ) := by push_cast; omega
     rw [e, fromInt32_natCast (by omega)]
 
+/-- A one-operand instruction: it replaces the top of the stack by `f` of it. -/
+theorem step_unop (s : State) (op : UInt8) (f : UInt32 → UInt32) (xs : List UInt32) (x : UInt32)
+    (hw : WF s) (hip : 256 ≤ getIP s) (hlt : getIP s + 1 < 2 ^ 32) (hop : high s (getIP s) = op)
+    (hd : dstack s = xs ++ [x]) (hr : runOp s op = (let (x, s) := dpop s; dpush s (f x))) :
+    WF (step s) ∧ getIP (step s) = getIP s + 1 ∧ dstack (step s) = xs ++ [f x] ∧
+      Same s (step s) := by
+  refine step_next s _ _ hip hlt hop ?_
+  rw [hr]
+  obtain ⟨e1, w1, i1, d1, sm1⟩ := dpop_same s xs x hw hd
+  have hl : getDSH (dpop s).2 < STACKSZ := by
+    have h1 := dstack_length _ w1; have h2 := dstack_length s hw; have h3 := hw.dsh
+    rw [d1] at h1; rw [hd] at h2; simp at h2; omega
+  obtain ⟨w2, i2, d2, sm2⟩ := dpush_same _ (f x) w1 hl
+  simp only
+  rw [e1]
+  exact ⟨w2, by rw [i2, i1], by rw [d2, d1], sm1.trans sm2⟩
+
+theorem runOp_fa (s : State) : runOp s 0xA0 =
+    (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (f32op (· + ·) x y)) := by simp [runOp]
+theorem runOp_fs (s : State) : runOp s 0xA1 =
+    (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (f32op (· - ·) x y)) := by simp [runOp]
+theorem runOp_fm (s : State) : runOp s 0xA2 =
+    (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (f32op (· * ·) x y)) := by simp [runOp]
+theorem runOp_fd (s : State) : runOp s 0xA3 =
+    (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (f32op (· / ·) x y)) := by simp [runOp]
+theorem runOp_fl (s : State) : runOp s 0xA4 =
+    (let (y, s) := dpop s; let (x, s) := dpop s; dpush s (f32lt x y)) := by simp [runOp]
+theorem runOp_fi (s : State) : runOp s 0xA5 = (let (x, s) := dpop s; dpush s (itof x)) := by
+  simp [runOp]
+
+/-- b4's `fl` computes the language's `<` on reals. -/
+theorem enc_rlt (x y : UInt32) :
+    f32lt (enc (.real x)) (enc (.real y)) = enc (BinOp.apply .rlt (.real x) (.real y)) := by
+  simp only [f32lt, enc, BinOp.apply, Value.toReal, Real32.lt]
+  by_cases h : Float32.ofBits x < Float32.ofBits y <;> simp [h]
+
 theorem sbyte_small {k : ℕ} (h : k < 128) : sbyte (UInt8.ofNat k) = k := by
   have : (UInt8.ofNat k).toNat = k := by simp; omega
   have hn : ¬ (UInt8.ofNat k ≥ 128) := by rw [GE.ge, UInt8.le_iff_toNat_le, this]; simp; omega
@@ -614,6 +667,21 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
     · obtain ⟨fa, fb, ⟨x, ea⟩, ⟨y, eb⟩⟩ := hf
       exact run_bin L st _ a b 0x87 (· ||| ·) (fun s _ => runOp_or s) rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb]; cases x <;> cases y <;> rfl) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨x, ea⟩, ⟨y, eb⟩⟩ := hf
+      exact run_bin L st _ a b 0xA3 (f32op (· / ·)) (fun s _ => runOp_fd s) rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb]; rfl) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨x, ea⟩, ⟨y, eb⟩⟩ := hf
+      exact run_bin L st _ a b 0xA0 (f32op (· + ·)) (fun s _ => runOp_fa s) rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb]; rfl) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨x, ea⟩, ⟨y, eb⟩⟩ := hf
+      exact run_bin L st _ a b 0xA1 (f32op (· - ·)) (fun s _ => runOp_fs s) rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb]; rfl) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨x, ea⟩, ⟨y, eb⟩⟩ := hf
+      exact run_bin L st _ a b 0xA2 (f32op (· * ·)) (fun s _ => runOp_fm s) rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb]; rfl) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨x, ea⟩, ⟨y, eb⟩⟩ := hf
+      exact run_bin L st _ a b 0xA4 f32lt (fun s _ => runOp_fl s) rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb]; exact enc_rlt x y) iha ihb fa fb s h
   | un op a iha =>
     intro s hf h
     cases op <;> try simp only [Fits] at hf
@@ -660,6 +728,34 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
         simp only [Exp.eval, hvs, UnOp.apply, Value.toList_list, hl, enc_int]
         rw [fromInt32_natCast (by omega)]
       | _ => exact hf.elim
+    · -- an integer as a real: `fi`
+      obtain ⟨fa, ⟨k, ek, rk⟩⟩ := hf
+      simp only [ecode, depth] at h ⊢
+      obtain ⟨s₁, r₁, w₁, i₁, d₁, sm₁⟩ := iha s fa (h.left le_rfl)
+      have h₁ := h.after (d₂ := 0) (depth_pos a) w₁ i₁ d₁ sm₁
+      have hop : high s₁ (getIP s₁) = 0xA5 := by have := h₁.code 0 (by simp); simpa using this
+      obtain ⟨w₂, i₂, d₂, sm₂⟩ := step_unop s₁ 0xA5 itof (dstack s) (enc (a.eval st)) w₁ h₁.lo
+        (by have := h₁.hi; simp at this; unfold MAXBYTE at this; omega) hop d₁ (runOp_fi s₁)
+      refine ⟨step s₁, r₁.tail ⟨h₁.run, notIo_of_hop h₁.lo hop (by decide), rfl⟩, w₂,
+        by rw [i₂, i₁]; simp only [List.length_append, List.length_cons, List.length_nil]; omega,
+        ?_, sm₁.trans sm₂⟩
+      rw [d₂]; simp only [Exp.eval]; rw [ek]
+      simp [enc, itof, UnOp.apply, Value.toReal, Real32.ofInt, toInt32_fromInt32 rk]
+    · -- a real negated: flip the sign bit, `li $80000000 xr`
+      obtain ⟨fa, ⟨x, ex⟩⟩ := hf
+      simp only [ecode, depth] at h ⊢
+      obtain ⟨s₁, r₁, w₁, i₁, d₁, sm₁⟩ := iha s fa (h.left (d₂ := depth a) (Nat.le_succ _))
+      have h₁ := h.after (d₂ := 1) (by have := depth_pos a; omega) w₁ i₁ d₁ sm₁
+      obtain ⟨w₂, i₂, d₂, sm₂⟩ := run_li h₁ le_rfl
+      have h₂ := h₁.after (bs₁ := 0x97 :: le4 0x80000000) (d₂ := 0) le_rfl w₂ (by rw [i₂]; rfl) d₂ sm₂
+      have hop : high (step s₁) (getIP (step s₁)) = 0x88 := by have := h₂.code 0 (by simp); simpa using this
+      obtain ⟨w₃, i₃, d₃, sm₃⟩ := step_binop' (step s₁) 0x88 (· ^^^ ·) (dstack s) (enc (a.eval st))
+        0x80000000 w₂ h₂.lo (by have := h₂.hi; simp at this; unfold MAXBYTE at this; omega) hop
+        (by rw [d₂, d₁]; simp) runOp_xr
+      refine ⟨step (step s₁), (r₁.tail ⟨h₁.run, notIo_li h₁, rfl⟩).tail
+        ⟨h₂.run, notIo_of_hop h₂.lo hop (by decide), rfl⟩, w₃, by rw [i₃, i₂, i₁]; simp; omega, ?_,
+        sm₁.trans (sm₂.trans sm₃)⟩
+      rw [d₃]; simp only [Exp.eval]; rw [ex]; rfl
   | nil => intro s hf; exact hf.elim
   | cons => intro s hf; exact hf.elim
   | index a i _ ihi =>

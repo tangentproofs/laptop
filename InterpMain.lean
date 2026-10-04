@@ -106,7 +106,8 @@ statement := 'ok' | 'tick'
            | name (',' name)* ':=' exp (',' exp)*   -- simultaneous
            | name ('(' exp (',' exp)* ')')?         -- a call
            | name '!' exp | name '?'                -- output, input
-           | 'if' exp ('/' exp)? 'then' program ('else' program)? 'fi'
+           | 'if' exp 'then' program ('else' program)? 'fi'   -- 'if a/b then': a choice
+                                                            -- taken with probability a/b
            | name ':=' 'rand' atom
            | 'while' exp 'do' program 'od'
            | 'do' body 'od'
@@ -126,11 +127,11 @@ conj      := neg (('∧' | 'and') neg)*
 neg       := 'not' neg | cmp
 cmp       := sum (('=' | '≠' | '<' | '≤' | '>' | '≥') sum)?
 sum       := prod (('+' | '-') prod)*
-prod      := unary (('×' | '*' | 'div' | 'mod') unary)*
+prod      := unary (('×' | '*' | '/' | 'div' | 'mod') unary)*   -- '/' gives a real
 unary     := ('-' | '¬' | '#') unary | pow
 pow       := app ('^' unary)?
 app       := atom atom*
-atom      := integer | '⊤' | '⊥' | name | '(' exp ')'
+atom      := integer | real | '⊤' | '⊥' | name | '(' exp ')'   -- real: 1.5, IEEE single
            | '[' ']' | '[' exp (';' exp)* ']'
            | 'if' exp 'then' exp 'else' exp 'fi'
            | '√' name
@@ -312,6 +313,12 @@ def runSelfTest : IO UInt32 := do
   let opsToks := (tokenize (opsSrc.length + 1) opsSrc.toList).toOption.getD []
   let b4Tests := b4Tests ++
     [("operators", ["A"], opsToks, Function.update (given []) 0 (.list ([4, 5, 6].map .int)))]
+  -- Reals, on b4's float instructions.
+  let realsSrc := "x:= 1.5. y:= x * 2 - 0.25. z:= y / 4. b:= z < 1. c:= z ≥ 0.6875. n:= 7 / 2. \
+    w:= -x. k:= 3. r:= k + w. A 0:= A 1 * x"
+  let realsToks := (tokenize (realsSrc.length + 1) realsSrc.toList).toOption.getD []
+  let b4Tests := b4Tests ++
+    [("reals", ["A"], realsToks, Function.update (given []) 0 (.list [.real 0, .real 0x40000000]))]
   -- Whole lists: literals, copies, `#`, and two-dimensional arrays by rows.
   let srcToks := fun (src : String) => (tokenize (src.length + 1) src.toList).toOption.getD []
   let b4Tests := b4Tests ++
@@ -554,7 +561,9 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     if out.status == .failed then
       IO.println "no poststate: every choice ends in an ensure that fails"
       return 2
+    let real := fun (v : ℤ) => (Float32.ofBits (B4.fromInt32 v)).toString
     let shown := fun (w : String) (v : ℤ) =>
+      if out.reals.contains w then real v else
       match bp.names.idxOf? w with
       | some x => if bp.isBinVar x then (if v == 0 then "⊥" else "⊤") else toString v
       | none => toString v
@@ -562,7 +571,8 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
       match out.vars.lookup w, out.arrays.lookup w with
       | some v, _ => some s!"{w} = {shown w v}"
       | none, some l =>
-        let list := fun (l : List ℤ) => s!"[{"; ".intercalate (l.map toString)}]"
+        let item := fun (v : ℤ) => if out.reals.contains w then real v else toString v
+        let list := fun (l : List ℤ) => s!"[{"; ".intercalate (l.map item)}]"
         match out.cols.lookup w with
         | some c =>
           if c == 0 then some s!"{w} = []" else

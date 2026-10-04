@@ -67,6 +67,8 @@ inductive Tok where
   | word (w : String)
   /-- A symbol. -/
   | sym (s : String)
+  /-- A decimal literal: `m × 10⁻ᵉ`, written with `e` digits after the point. -/
+  | real (m e : Nat)
   deriving DecidableEq, Repr
 
 /-- A token as it was written, for error messages. -/
@@ -74,6 +76,10 @@ def Tok.render : Tok → String
   | .num k => toString k
   | .word w => w
   | .sym s => s
+  | .real m e =>
+    let ds := toString m
+    let ds := String.ofList (List.replicate (e + 1 - ds.length) '0') ++ ds
+    String.ofList (ds.toList.take (ds.length - e)) ++ "." ++ String.ofList (ds.toList.drop (ds.length - e))
 
 /-- A list of tokens. -/
 abbrev Toks := List Tok

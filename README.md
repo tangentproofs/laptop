@@ -50,6 +50,7 @@ lake exe interp --L='[5;3;9;1]' sort.ap   # a program in a file, with an initial
 lake exe interp --demo=listSum --L='[3;1;4;1;5]'   # the refinements of Section 4.1.1
 lake exe interp --demo=deepExit                    # do ... exit 2 when ... od
 echo 'b:= true /\ false == false /\ true' | lake exe interp   # => b = ⊤
+echo 'x:= 7 / 2. y:= x * 1.5' | lake exe interp       # => x = 3.500000, y = 5.250000
 ```
 
 A program file may be written the book's way, as refinements; a name on the
@@ -129,7 +130,8 @@ not build it.
 
 `LaPToP/ProgramTheory/CompileB4.lean` compiles the integer fragment of the
 language (assignment, sequence, `if`, `while`, calls of named statements, local
-variables, over `+ - × div mod`, `<`, `=`, `¬ ∧ ∨` and conditional expressions
+variables, over `+ - × div mod`, `<`, `=`, `¬ ∧ ∨`, reals (as IEEE single-precision
+floats, on b4's float instructions) and conditional expressions
 `if c then a else b fi`, whose code hops relatively with `h0`) to bytecode for
 [b4](https://github.com/tangentstorm/b4), a small stack machine with
 implementations in many languages. Named statements are laid out from `0x100`

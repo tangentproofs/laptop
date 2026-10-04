@@ -160,7 +160,16 @@ def tokenize : ℕ → List Char → Except String Toks
     else if isDigitChar c then
       let ds := (c :: cs).takeWhile isDigitChar
       let rest := (c :: cs).dropWhile isDigitChar
-      do let ts ← tokenize f rest; .ok (.num (Int.ofNat (digitsToNat 0 ds)) :: ts)
+      match rest with
+      | '.' :: d :: more =>
+        -- a decimal literal, `1.5`: a point between digits (`1. x` ends a statement)
+        if isDigitChar d then
+          let fs := (d :: more).takeWhile isDigitChar
+          let rest := (d :: more).dropWhile isDigitChar
+          do let ts ← tokenize f rest
+             .ok (.real (digitsToNat 0 (ds ++ fs)) fs.length :: ts)
+        else do let ts ← tokenize f rest; .ok (.num (Int.ofNat (digitsToNat 0 ds)) :: ts)
+      | _ => do let ts ← tokenize f rest; .ok (.num (Int.ofNat (digitsToNat 0 ds)) :: ts)
     else if isWordStart c then
       let ws := (c :: cs).takeWhile isWordChar
       let rest := (c :: cs).dropWhile isWordChar
@@ -442,7 +451,7 @@ def plural (n : ℕ) (thing : String) : String :=
 /-- Whether a token can begin an atom, so that juxtaposition continues: not a
 keyword, and not the name of a specification. -/
 def startsAtom (procs : List String) : Tok → Bool
-  | .num _ => true
+  | .num _ | .real _ _ => true
   | .word w => w == "true" || w == "false" || (!isKeyword w && !procs.contains w)
   | .sym s => s == "(" || s == "[" || s == "√"
 
@@ -457,6 +466,7 @@ def leftOp : ℕ → Tok → Option BinOp
   | 5, .sym "*" => some .mul
   | 5, .word "div" => some .div
   | 5, .word "mod" => some .mod
+  | 5, .sym "/" => some .rdiv
   | _, _ => none
 
 /-- The comparisons. -/
@@ -626,6 +636,7 @@ def parseAtom (fuel : ℕ) (st : PS) : Except String (Exp × PS) :=
   | f + 1 =>
     match st.toks with
     | .num k :: ts => .ok (.lit (.int k), st.at ts)
+    | .real m e :: ts => .ok (.lit (.real (Float32.ofScientific m true e).toBits), st.at ts)
     | .word "true" :: ts => .ok (.lit (.bool true), st.at ts)
     | .word "false" :: ts => .ok (.lit (.bool false), st.at ts)
     | .sym "(" :: ts => do
@@ -888,8 +899,8 @@ def parseItem (fuel : ℕ) (st : PS) : Except String (Raw × PS) :=
     | .word "if" :: ts => do
       let st₀ := st
       let (c, st) ← parseExp f (st.at ts)
-      match st.toks with
-      | .sym "/" :: _ => do
+      match c with
+      | .bin .rdiv _ _ => do
         -- a probabilistic `if`, which may not exit: read it as a statement
         let (p, st) ← parseStmt f st₀
         .ok (.stmt p, st)
@@ -931,11 +942,10 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
       .ok (st.withChecks (PB.no (assert c) "'assert'"))
     | .word "if" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
-      let (d, st) ← match st.toks with
-        | .sym "/" :: ts => do
-          let (d, st) ← parseExp f (st.at ts)
-          .ok (some d, st)
-        | _ => .ok (none, st)
+      -- `if a/b then`: a probabilistic choice, `P` with probability `a/b`
+      let (c, d) := match c with
+        | .bin .rdiv a b => (a, some b)
+        | c => (c, none)
       let (cs, st) := st.takePending
       let st ← expectWord "then" st
       let (p, st) ← parseProg f st

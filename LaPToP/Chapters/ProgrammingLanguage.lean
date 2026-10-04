@@ -1303,7 +1303,13 @@ compares them instantly, which keeps the demonstrations proofs by reduction.
 Expressions have the book's operators: arithmetic with floor $`\mathrm{div}` and
 $`\mathrm{mod}`, comparisons, $`\lnot`, $`\land`, $`\lor`, $`\Rightarrow`,
 list literals $`[a; b; c]`, catenation $`+`, length $`\#`, indexing by
-juxtaposition, and $`\mathbf{if}` in expressions.
+juxtaposition, and $`\mathbf{if}` in expressions. Reals are written `1.5`, and
+$`/` divides to a real. A real is kept as an IEEE 754 single-precision number,
+the 32 bits of a `Float32`. The operators $`+ - \times < \le > \ge` are on reals
+when an operand is one, and an integer meeting a real is converted. The book's
+reals are exact; these round. $`a \le b` on reals is $`\lnot(b < a)`, which
+differs from IEEE 754 only for NaN. $`\mathbf{if}\ a/b\ \mathbf{then}` is the
+probabilistic choice, as before.
 
 The book writes $`=`, $`\Rightarrow` and $`\Leftarrow` at two precedences: small,
 binding tighter than $`\land` and $`\lor`, and large, below every other operator,
@@ -1345,8 +1351,8 @@ one level.
 Honest scope. The language is untyped: each operator reads its operands at the
 kind it expects, so an ill-typed expression has a value rather than an error, and
 where the book leaves a value undefined — division by zero, an index outside the
-list — a fixed one is chosen. The book's types, bunches, sets, strings, records
-and reals are not here. As before, the parser theorems are stated of token lists,
+list — a fixed one is chosen. The book's types, bunches, sets, strings and
+records are not here, and its reals are approximated by single-precision floats. As before, the parser theorems are stated of token lists,
 and the tokenizer's agreement with the source text is checked when the binary runs.
 :::
 
@@ -1665,7 +1671,7 @@ are finite. That is an infinite descent in a well-founded order. Each step short
 written exactly the book's scripts.
 :::
 
-:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, LaPToP.ProgramTheory.CompileB4.Layout.Image, LaPToP.ProgramTheory.CompileB4.Layout.Laid, LaPToP.ProgramTheory.CompileB4.Layout.image_of_laid, LaPToP.ProgramTheory.CompileB4.Layout.Fit, LaPToP.ProgramTheory.CompileB4.Layout.build, LaPToP.ProgramTheory.CompileB4.Layout.build_laid, LaPToP.ProgramTheory.CompileB4.enter_runs, LaPToP.ProgramTheory.CompileB4.restore_runs, LaPToP.ProgramTheory.CompileB4.enc_div, LaPToP.ProgramTheory.CompileB4.enc_mod, LaPToP.ProgramTheory.CompileB4.ArrOk, LaPToP.ProgramTheory.CompileB4.VarsOk, LaPToP.ProgramTheory.CompileB4.addrCode, LaPToP.ProgramTheory.CompileB4.run_addr, LaPToP.ProgramTheory.CompileB4.store_runs, LaPToP.ProgramTheory.CompileB4.varsOk_store, LaPToP.ProgramTheory.CompileB4.writeArrs, LaPToP.ProgramTheory.CompileB4.sbyte_small, LaPToP.ProgramTheory.CompileB4.push_runs, LaPToP.ProgramTheory.CompileB4.store_loop, LaPToP.ProgramTheory.CompileB4.fill_runs, B4.step_cl, B4.step_rt, B4.step_dc, B4.step_cd, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
+:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, LaPToP.ProgramTheory.CompileB4.Layout.Image, LaPToP.ProgramTheory.CompileB4.Layout.Laid, LaPToP.ProgramTheory.CompileB4.Layout.image_of_laid, LaPToP.ProgramTheory.CompileB4.Layout.Fit, LaPToP.ProgramTheory.CompileB4.Layout.build, LaPToP.ProgramTheory.CompileB4.Layout.build_laid, LaPToP.ProgramTheory.CompileB4.enter_runs, LaPToP.ProgramTheory.CompileB4.restore_runs, LaPToP.ProgramTheory.CompileB4.enc_div, LaPToP.ProgramTheory.CompileB4.enc_mod, LaPToP.ProgramTheory.CompileB4.ArrOk, LaPToP.ProgramTheory.CompileB4.VarsOk, LaPToP.ProgramTheory.CompileB4.addrCode, LaPToP.ProgramTheory.CompileB4.run_addr, LaPToP.ProgramTheory.CompileB4.store_runs, LaPToP.ProgramTheory.CompileB4.varsOk_store, LaPToP.ProgramTheory.CompileB4.writeArrs, LaPToP.ProgramTheory.CompileB4.sbyte_small, LaPToP.ProgramTheory.CompileB4.push_runs, LaPToP.ProgramTheory.CompileB4.store_loop, LaPToP.ProgramTheory.CompileB4.fill_runs, LaPToP.ProgramTheory.CompileB4.step_unop, LaPToP.ProgramTheory.CompileB4.enc_rlt, LaPToP.ProgramTheory.Interpreter.Lang.Real32.add, LaPToP.ProgramTheory.Interpreter.Lang.Real32.lt, B4.step_cl, B4.step_rt, B4.step_dc, B4.step_cd, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
 A compiler from the integer fragment of the language to the b4 virtual machine,
 proved correct. b4 is a small stack machine with byte-addressed memory, its
 registers mapped into the first bytes, and data and control stacks; it has
@@ -1693,7 +1699,17 @@ the list it starts with; the address of item $`i` is computed on the stack
 (`li 4 ml li a ad`) and read with `ri` or written with `wi`. An array keeps its
 length, so $`\#A` is a literal, and a list literal assigned whole,
 $`A:= [e_0; …; e_{k-1}]`, pushes every item before storing any, from the last,
-so that each item is computed from the old list. The theorem: whenever the
+so that each item is computed from the old list.
+
+A real is kept in a cell as its IEEE 754 single-precision bits, and the language's
+operations on reals are defined as `Float32`'s on the numbers those bits stand
+for, which is what b4's float instructions `fa fs fm fd fl` compute. So the
+compiler is proved correct for reals relative to single-precision floats, not to
+the book's exact reals. An integer meeting a real is converted with `fi`, and a
+real is negated by flipping its sign bit (`li $80000000 xr`). Before compiling,
+`interp --b4` works out which variables and arrays hold reals, from their initial
+values and what is assigned to them, and makes each operator on reals explicit.
+A variable that would hold both kinds is refused. The theorem: whenever the
 language's execution takes a state $`σ` to $`σ'` with every value evaluated
 fitting in 32 bits, the loaded machine, run long enough, halts with the cells
 holding $`σ'`. Execution in 32 bits is an execution of the language, by the
