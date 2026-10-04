@@ -1177,7 +1177,9 @@ theorem sact_evalK {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ
     exact ⟨fun ⟨u, hu, v, hv, h⟩ => by cases hv; exact ⟨_, .newLocal hu, h⟩,
       fun ⟨v, hv, h⟩ => by cases hv with | newLocal hu => exact ⟨_, hu, _, .assign, h⟩⟩
   | restore => exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
-  | store => exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+  | store hfi =>
+    simp only [EvalK]; rw [toProg_store hfi]
+    exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
   | fill => exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
 
 /-- **A step of backtracking keeps the solutions**: the same, before and after. -/
