@@ -29,6 +29,7 @@ import LaPToP.ProgramTheory.NetworkBook
 import LaPToP.ProgramTheory.CompileB4
 import LaPToP.ProgramTheory.CompileNet
 import LaPToP.ProgramTheory.CompileNetDeadlock
+import LaPToP.ProgramTheory.CompileNetCheck
 import LaPToP.ProgramTheory.B4Lang
 import LaPToP.ProgramTheory.Alloc
 import LaPToP.ProgramTheory.CompileConverse
@@ -1745,7 +1746,7 @@ exactly the state the theorem asks for, and the layout to put each named
 statement where its calls go.
 :::
 
-:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.SStep.msteps, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.Cont.frames, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.swarm_check, LaPToP.ProgramTheory.CompileNet.check_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.PB, LaPToP.ProgramTheory.Interpreter.Lang.parseToksShadow, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees, LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.LStep, LaPToP.ProgramTheory.Interpreter.Lang.PB.Sound, LaPToP.ProgramTheory.Interpreter.Lang.PB.one_sound, LaPToP.ProgramTheory.Interpreter.Lang.resolvePar_toProg, LaPToP.ProgramTheory.Interpreter.Lang.shadow_sound, LaPToP.ProgramTheory.Interpreter.Lang.Exp.toB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.Stmt.toB4_toProg, LaPToP.ProgramTheory.Interpreter.Lang.divB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.powB4_eval")
+:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.SStep.msteps, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.Cont.frames, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.PB, LaPToP.ProgramTheory.Interpreter.Lang.parseToksShadow, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees, LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.LStep, LaPToP.ProgramTheory.Interpreter.Lang.PB.Sound, LaPToP.ProgramTheory.Interpreter.Lang.PB.one_sound, LaPToP.ProgramTheory.Interpreter.Lang.resolvePar_toProg, LaPToP.ProgramTheory.Interpreter.Lang.shadow_sound, LaPToP.ProgramTheory.Interpreter.Lang.Exp.toB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.Stmt.toB4_toProg, LaPToP.ProgramTheory.Interpreter.Lang.divB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.powB4_eval")
 Communicating processes, compiled to b4, run as a swarm of machines, proved to
 compute the network. Each process of a network becomes its own b4 machine; the
 machines run side by side and reach their channels through b4's `io`
@@ -1777,17 +1778,8 @@ the interpreter and the network machine do, and a run warns when a value left
 
 Honest scope. Forward simulation, and the correspondence of deadlocks
 ({uses "interpreter_swarm_deadlock"}[]); that the swarm does nothing else
-in general is not proved. $`\surd c` runs on the swarm too. A check `io` whose
-message is there is answered whether the message was sent before the machine's
-clock, which is the network machine's answer (`swarm_check`, `check_sim`), so
-the simulation covers it. A check whose message is not there is settled to false
-by the runner, when no machine can move, for the earliest machine waiting at
-one; the network machine settles one when no process can send before now
-(`Quiet`). That these agree is checked by the self-test against the network
-machine but not proved: the runner settles only once the swarm is stuck, so
-matching a network run that settles early takes the swarm's runs being
-interchangeable, which is the confluence argument of
-{uses "interpreter_swarm_deadlock"}[] carried through clocks. That the statements the parser builds beside a program are that
+in general is not proved. $`\surd c` runs on the swarm too, proved in
+{uses "interpreter_swarm_check"}[]. That the statements the parser builds beside a program are that
 program is proved: every pair the parser builds carries the proof
 (`PB.sound`), and `shadow_sound` lifts it to the parser's two results. That the
 compiler's rewrites (`≠ ≤ > ≥ ⇒`, $`a ^ n`, $`\mathbf{div}` and $`\mathbf{mod}` by
@@ -1848,6 +1840,48 @@ script, which the swarm holds, does not have: no machine can move. If the
 network could also finish in 32 bits, the simulation would bring the swarm to a
 state with every machine halted, also stuck — the same state, by uniqueness,
 which is a contradiction.
+:::
+
+:::theorem "interpreter_swarm_check" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileNet.swarm_check, LaPToP.ProgramTheory.CompileNet.io_pre, LaPToP.ProgramTheory.CompileNet.answer_sim, LaPToP.ProgramTheory.CompileNet.check_sim, LaPToP.ProgramTheory.CompileNet.Parked, LaPToP.ProgramTheory.CompileNet.MRel, LaPToP.ProgramTheory.CompileNet.RelK, LaPToP.ProgramTheory.CompileNet.sim_stepK, LaPToP.ProgramTheory.CompileNet.SNet.Pending, LaPToP.ProgramTheory.CompileNet.SCfg.Earliest, LaPToP.ProgramTheory.CompileNet.QStep, LaPToP.ProgramTheory.CompileNet.quiet_of_pending, LaPToP.ProgramTheory.CompileNet.QStep.msteps, LaPToP.ProgramTheory.CompileNet.KStep, LaPToP.ProgramTheory.CompileNet.runK_spec, LaPToP.ProgramTheory.CompileNet.park_all, LaPToP.ProgramTheory.CompileNet.bestF_spec, LaPToP.ProgramTheory.CompileNet.settle_step, LaPToP.ProgramTheory.CompileNet.settle_sim, LaPToP.ProgramTheory.CompileNet.swarm_simulatesK, LaPToP.ProgramTheory.CompileNet.swarm_correctK, LaPToP.ProgramTheory.CompileNet.swarm_bookK, B4.Swarm.settle, B4.Swarm.runK")
+$`\surd c` on the swarm. A check compiles to `c 'k' io` and stores the answer.
+When the message at the read cursor is there, the swarm answers whether it was
+sent before the machine's clock. That is the network machine's answer, so a
+check of this kind is one more step in the simulation of
+{uses "interpreter_swarm"}[]. When the message is not there, the runner
+(`Swarm.runK`) waits until no machine can move. It then settles the check of
+the machine with the earliest clock (the first of those) to false. The network
+machine of {uses "interpreter_network"}[] settles a check to false once no
+process can send before now.
+
+The theorems take the network's runs in 32 bits in the runner's order: a step
+of a process, or, when every process has finished or waits for a message that
+is not there, the earliest check answered false. Such a settling is a step of
+the network machine: everything waits, so no process can send before the
+earliest check's time. The swarm runs on to the same point, and its runner
+settles the same check. So every such run is a run of the swarm with its
+runner. When every process finishes, every machine halts holding its process's
+final state and time, and the channels hold the scripts — a behaviour of the
+book's semantics.
+
+Honest scope. The network machine may also settle a check early, while other
+processes can still move, provided none can send before now. Such runs are not
+in the runner's order and are not covered. The network machine is confluent,
+so every run that finishes ends in the same final state. But it is not proved
+that a network with such a run also has a run in the runner's order.
+:::
+
+:::proof "interpreter_swarm_check"
+With the message there, the machine runs `li c; li 'k'`, the swarm answers
+from the message's time and the machine's clock, which encode the network's
+times, and `li x; wi` stores the answer: `ready`. To relate a swarm whose
+machines wait, a machine may also have run on to the `io` its process waits at,
+or have halted when its process has finished; the simulation of a step carries
+over, an input or a check resuming from the `io`. When everything waits, each
+machine runs on to its `io` or halts. Then none can move: an input or a check
+finds no message, and a halted machine does nothing. The machines the runner
+may settle are exactly those at a check, with clocks the processes' times. Its
+search keeps the first with the least clock, which is the process the network
+settles, since the earliest is unique. The answer, false, is stored as before.
 :::
 
 :::theorem "interpreter_alloc" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, arrays, memory allocation") (effort := "large") (lean := "LaPToP.ProgramTheory.Alloc.Blk, LaPToP.ProgramTheory.Alloc.absorb, LaPToP.ProgramTheory.Alloc.claim, LaPToP.ProgramTheory.Alloc.alloc, LaPToP.ProgramTheory.Alloc.free, LaPToP.ProgramTheory.Alloc.Chain, LaPToP.ProgramTheory.Alloc.allocStmt, LaPToP.ProgramTheory.Alloc.allocSrc, LaPToP.ProgramTheory.Alloc.freeStmt, LaPToP.ProgramTheory.Alloc.merge_runs, LaPToP.ProgramTheory.Alloc.take_runs, LaPToP.ProgramTheory.Alloc.search_runs, LaPToP.ProgramTheory.Alloc.alloc_sEval, LaPToP.ProgramTheory.Alloc.free_sEval, LaPToP.ProgramTheory.Alloc.alloc_eval, LaPToP.ProgramTheory.Alloc.alloc_on_b4, LaPToP.ProgramTheory.Alloc.alloc_on_b4'")
