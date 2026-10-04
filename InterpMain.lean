@@ -55,7 +55,8 @@ def usage : String :=
 usage: interp [options] [file]
 
   file               read the program from this file (default: standard input)
-  --demo=NAME        run a demonstration program: sumTo, backtrack, arrays,
+  --demo=NAME        run a demonstration program (with sample inputs, which
+                     --NAME=EXP overrides): sumTo, backtrack, arrays,
                      listSum, exitLoop, deepExit, forLoop, gcd, swap, sort,
                      subset, even,
                      channel, parSwap, seqPar, parTime, probEx1, probEx2, rand,
@@ -114,7 +115,7 @@ item      := 'exit' integer? ('when' exp)?
            | 'do' body 'od'
            | choice
 exp       := imp (('==' | '-->' | '<--') imp)*   -- large = ⇒ ⇐, lowest
-imp       := disj (('⇒' | '->' | '<-') imp)?
+imp       := disj (('⇒' | '->' | '<-') imp)?   -- '<-' before a digit is '<' '-'
 disj      := conj ('∨' conj)*
 conj      := neg (('∧' | 'and') neg)*
 neg       := 'not' neg | cmp
@@ -200,6 +201,16 @@ def parseArgs : List String → Options → Except String Options
       match o.file with
       | none => parseArgs rest { o with file := some a }
       | some _ => .error "give at most one program file"
+
+/-- Initial values for the demonstrations that need input; a value given on the
+command line overrides one of these. -/
+def demoDefaults : String → List (String × String)
+  | "sumTo" => [("n", "10")]
+  | "forLoop" => [("n", "10")]
+  | "gcd" => [("x", "12"), ("y", "18")]
+  | "sort" => [("n", "6"), ("A", "[5;3;9;1;4;2]")]
+  | "subset" => [("n", "6"), ("A", "[3;34;4;12;5;2]"), ("X", "[0;0;0;0;0;0]"), ("t", "9")]
+  | _ => []
 
 /-- The demonstration programs that can be named on the command line: their
 sources, which the self-test checks tokenize to the token lists the theorems of
@@ -370,7 +381,7 @@ def runProgram (o : Options) (names : List String) (st : St) (prog : Program) : 
       IO.eprintln "interp: no poststate — the program has none, or the fuel ran out"
       return 2
     for r in results do
-      IO.println s!"{shown r.mem}, t = {renderTime r.t}"
+      IO.println s!"{shown r.mem}, time = {renderTime r.t}"
     return 0
   -- The deterministic runs use the array interpreters, which compute what `run`
   -- and `runT` compute (`Program.runFast_eq`, `Program.runTFast_eq`).
@@ -378,7 +389,7 @@ def runProgram (o : Options) (names : List String) (st : St) (prog : Program) : 
   if o.timed then
     match prog.runTFast o.fuel (arr, 0) with
     | some (r, t) =>
-      IO.println s!"{shown (toFun r)}, t = {renderTime t}"
+      IO.println s!"{shown (toFun r)}, time = {renderTime t}"
       return 0
     | none =>
       IO.eprintln
@@ -422,7 +433,7 @@ def runNetwork (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 :=
     let time := match status with
       | .deadlock => "∞"
       | _ => renderTime (finishTime c)
-    IO.println (if vars.isEmpty then s!"t = {time}" else s!"{vars}, t = {time}")
+    IO.println (if vars.isEmpty then s!"time = {time}" else s!"{vars}, time = {time}")
     for (w, sc) in out.scripts do
       let vs := "; ".intercalate (sc.map fun (v, _) => v.render)
       let ts := "; ".intercalate (sc.map fun (_, t) => renderTime t)
@@ -495,7 +506,7 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
       | none, some l => some s!"{w} = [{"; ".intercalate (l.map toString)}]"
       | none, none => none)
     let time := if out.status == .deadlock then "∞" else toString out.time
-    IO.println (if vars.isEmpty then s!"t = {time}" else s!"{vars}, t = {time}")
+    IO.println (if vars.isEmpty then s!"time = {time}" else s!"{vars}, time = {time}")
     for (w, sc) in out.scripts do
       let vs := "; ".intercalate (sc.map fun (v, _) => toString v)
       let tts := "; ".intercalate (sc.map fun (_, t) => toString t)
@@ -529,8 +540,12 @@ def main (args : List String) : IO UInt32 := do
       | some name =>
         match demoSrc name with
         | some src => pure (Except.ok src)
-        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, listSum, exitLoop, deepExit, forLoop, gcd, swap, even, channel, parSwap, seqPar, parTime, probEx1, probEx2, rand, sendRecv, buffer, deadlock, doubler or pipeline)")
+        | none => pure (.error s!"unknown demonstration '{name}' (try sumTo, backtrack, arrays, sort, subset, listSum, exitLoop, deepExit, forLoop, gcd, swap, even, channel, parSwap, seqPar, parTime, probEx1, probEx2, rand, sendRecv, buffer, deadlock, doubler or pipeline)")
       | none => readSource o
+    let o := match o.demo with
+      | some name =>
+        { o with sets := (demoDefaults name).filter (fun d => !o.sets.any (·.1 == d.1)) ++ o.sets }
+      | none => o
     for (w, _) in o.sets do
       if !validName w then
         IO.eprintln s!"interp: '{w}' cannot be a variable name"

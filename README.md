@@ -60,7 +60,7 @@ MovePile ⇐ if n = 0 then ok
            else n:= n-1. MovePile. moves:= moves+1. tick. MovePile. n:= n+1 fi
 ```
 
-`lake exe interp --n=10 --timed hanoi.ap` reports `moves = 1023, t = 1023`.
+`lake exe interp --n=10 --timed hanoi.ap` reports `moves = 1023, time = 1023`.
 A specification may take parameters, `MovePile(from, to, using) ⇐ ...`, called as
 `MovePile(0, 1, 2)`; `x, y:= y, x` assigns simultaneously.
 
@@ -89,9 +89,9 @@ runs any program this way, for a process fed from the command line:
 
 ```bash
 echo '(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)' | lake exe interp
-# => y = 3, x = 4, t = 2
+# => y = 3, x = 4, time = 2
 #    c = [3; 4] sent at [0; 1]
-echo '(c?. d! 2) || (d?. c! 1)' | lake exe interp     # => t = ∞, deadlock
+echo '(c?. d! 2) || (d?. c! 1)' | lake exe interp     # => time = ∞, deadlock
 echo 'S ⇐ c?. d! 2×c. S' | lake exe interp --net --c='[1;2;5]'
 # => d = [2; 4; 10] sent at [1; 1; 1], then waits for more input
 ```
@@ -151,12 +151,12 @@ that stops so is a network that cannot finish (`no_finish_of_stuck`).
 `interp --b4` compiles and runs a program or a network there:
 
 ```bash
-lake exe interp --b4 --demo=sumTo --n=10        # => n = 10, i = 10, s = 55, t = 0
+lake exe interp --b4 --demo=sumTo --n=10        # => n = 10, i = 10, s = 55, time = 0
 echo '(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)' | lake exe interp --b4
-# => y = 3, x = 4, t = 2
+# => y = 3, x = 4, time = 2
 #    c = [3; 4] sent at [0; 1]
 printf 'Fact(k) ⇐ if k = 0 then r:= 1 else Fact(k-1). r:= r × k fi\nFact(n)' \
-  | lake exe interp --b4 --n=10               # => n = 10, k = 0, r = 3628800, t = 0
+  | lake exe interp --b4 --n=10               # => n = 10, k = 0, r = 3628800, time = 0
 ```
 The language's own parser builds the compiler's statements beside each program
 it reads, so `--b4` takes `do`/`exit` and `for` loops, `new`, simultaneous
@@ -176,9 +176,9 @@ language's backtracking does, finding a poststate the program has
 (`bt_success`, `bt_sound`) or, when the search fails, none at all
 (`bt_failure`, `bt_fail_sound`):
 ```sh
-echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --b4          # => s = 1, t = 0
+echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --b4          # => s = 1, time = 0
 lake exe interp --b4 --demo=subset --n=6 --t=19 '--A=[3;34;4;12;5;2]' '--X=[0;0;0;0;0;0]'
-# => ... X = [0; 0; 0; 1; 1; 1], i = 6, s = 19, t = 0
+# => ... X = [0; 0; 0; 1; 1; 1], i = 6, s = 19, time = 0
 ```
 
 ## Prove a theorem by calculation (`lake exe netty`)

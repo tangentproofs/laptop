@@ -95,7 +95,8 @@ variable named `c`, so an input script is given as its initial value.
 Juxtaposition is indexing, as in the book: `A i` is item `i` of `A`, and
 `A i j:= e` assigns an item of a two-dimensional array. Each symbol has an ASCII
 spelling: `<==` `=>` `\/` `/\` `!=` `<=` `>=` `*` `true` `false`, and `⧧` is
-accepted for `≠`. The implications are also `->` and `<-`. The book's large
+accepted for `≠`. The implications are also `->` and `<-`, except that `<-` right
+before a digit is `<` then `-`, so `x<-1` is `x < -1` (write `x <- 1` for `x ⇐ 1`). The book's large
 `= ⇒ ⇐` — the same operators at the lowest precedence, below every other — are
 `==` `-->` `<--` (or `≡` `⟹` `⟸`), so `a ∧ b == b ∧ a` is `(a ∧ b) = (b ∧ a)`;
 the glyph `⇐` is kept for refinement. `¬` binds tightest, as in the book, so `¬x = y` is `(¬x) = y`;
@@ -169,7 +170,11 @@ def tokenize : ℕ → List Char → Except String Toks
       | '-', '-' :: '>' :: rest => do let ts ← tokenize f rest; .ok (.sym "-->" :: ts)
       | '-', '-' :: rest => tokenize f (rest.dropWhile (· != '\n'))
       | '<', '-' :: '-' :: rest => do let ts ← tokenize f rest; .ok (.sym "<--" :: ts)
-      | '<', '-' :: rest => do let ts ← tokenize f rest; .ok (.sym "<-" :: ts)
+      | '<', '-' :: d :: rest =>
+        -- `x<-1` is `x < -1`: a `<-` right before a digit is `<` then `-`
+        if isDigitChar d then do let ts ← tokenize f ('-' :: d :: rest); .ok (.sym "<" :: ts)
+        else do let ts ← tokenize f (d :: rest); .ok (.sym "<-" :: ts)
+      | '<', ['-'] => .ok [.sym "<-"]
       | '-', '>' :: rest => do let ts ← tokenize f rest; .ok (.sym "=>" :: ts)
       | '=', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym "==" :: ts)
       | ':', '=' :: rest => do let ts ← tokenize f rest; .ok (.sym ":=" :: ts)
@@ -1328,6 +1333,13 @@ theorem big_ops :
     ((tokenize 100 "b:= true /\\ false == false /\\ true. c:= false <-- true. d:= true -> false --> false".toList).toOption.bind
       fun ts => (parseToks ts).toOption.bind fun prog => prog.run 10 init).map
         (fun s => (s 0, s 1, s 2)) = some (.bool true, .bool false, .bool true) := by
+  decide +kernel
+
+/-- `<-` right before a digit is `<` then `-`: `x<-1` is `x < -1`, while `x <- 1`
+is `x ⇐ 1`. -/
+theorem lt_neg_tokens :
+    tokenize 10 "x<-1".toList = .ok [.word "x", .sym "<", .sym "-", .num 1] ∧
+    tokenize 10 "x <- 1".toList = .ok [.word "x", .sym "<-", .num 1] := by
   decide +kernel
 
 /-- `A 2:= 3. i:= 2. A i:= 4. A i = A 2` "should equal ⊤", and does. -/
