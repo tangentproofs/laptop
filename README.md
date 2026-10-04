@@ -32,7 +32,8 @@ does **not** build PDF (`--pdf` is intentionally omitted from CI).
 
 The programming notations of Chapters 4 and 5 are not only specified but
 executed: `LaPToP/ProgramTheory/Interpreter.lean` is an interpreter for them,
-and `interp` runs programs written in the concrete syntax of its demonstrations.
+and `interp` runs programs written in the language of
+`LaPToP/ProgramTheory/InterpreterLang.lean`.
 
 ```bash
 lake build interp                      # first time: compiles the exe (a few minutes)
@@ -40,19 +41,165 @@ lake exe interp --help                 # options
 lake exe interp --grammar              # the grammar of the concrete syntax
 lake exe interp --demo=sumTo --n=10    # => n = 10, i = 10, s = 55
 lake exe interp --selftest             # the sources parse to the proved programs
-echo 'i:= 0. s:= 0. while i != n do i:= i+1. s:= s+i od' | lake exe interp --n=20
+echo 'i:= 0. s:= 0. while i ≠ n do i:= i+1. s:= s+i od' | lake exe interp --n=20
 echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --all   # backtracking
-echo 'while i != n do i:= i+1. tick od' | lake exe interp --n=7 --timed
+echo 'while i ≠ n do i:= i+1. tick od' | lake exe interp --n=7 --timed
+echo '(s:= 1 or s:= 2). assert s = 1' | lake exe interp --timed --all
+echo 'A:= [0;0;0;0;0]. A 2:= 3. i:= 2. A i:= 4. b:= A i = A 2' | lake exe interp
+lake exe interp --L='[5;3;9;1]' sort.ap   # a program in a file, with an initial list
+lake exe interp --demo=listSum --L='[3;1;4;1;5]'   # the refinements of Section 4.1.1
+lake exe interp --demo=deepExit                    # do ... exit 2 when ... od
 ```
 
-The state is the three integer variables `n`, `i`, `s`. `--all` searches for
-every poststate (`runAll`) instead of running the deterministic interpreter
-once, which is what a choice needs. `--timed` adds a clock: `tick` advances it,
-and a false `assert` waits until `∞` where a false `ensure` has no poststate at
-all. Exit status is 1 for a parse error and 2
-when there is no poststate. Building the executable links the whole import
+A program file may be written the book's way, as refinements; a name on the
+right is a call, and may be recursive:
+
+```
+-- Towers of Hanoi (Section 4.3): one tick per disk move
+MovePile ⇐ if n = 0 then ok
+           else n:= n-1. MovePile. moves:= moves+1. tick. MovePile. n:= n+1 fi
+```
+
+`lake exe interp --n=10 --timed hanoi.ap` reports `moves = 1023, time = 1023`.
+A specification may take parameters, `MovePile(from, to, using) ⇐ ...`, called as
+`MovePile(0, 1, 2)`; `x, y:= y, x` assigns simultaneously.
+
+Channels are the book's (Section 9.1.1): `c! e` outputs, `c?` inputs, `c` is the
+last message input and `√c` says one is waiting. A channel's script is the list
+variable of its name, so input is supplied on the command line:
+
+```bash
+echo 'keyboard?. a:= keyboard. keyboard?. screen! a + keyboard' | lake exe interp --keyboard='[3;4]'
+# => keyboard = [3; 4], screen = [7], a = 3
+```
+
+`P || Q` is concurrent composition (Section 8.0): each process owns the
+variables it assigns and sees the other's only at their initial values, so
+`x:= y || y:= x` swaps; on the clock it finishes when both processes have.
+
+A program with channels and a `||` is a network of communicating processes
+(Chapter 9, `LaPToP/ProgramTheory/Network.lean`): the processes of the main `||`,
+each parenthesized, run concurrently with their own variables, communicate only
+on channels, and a message arrives one unit of time after it is sent (§9.1.2).
+The machine that runs them is proved determinate (any order of turns gives the
+same result), sound and complete for the book's semantics, in which the scripts
+are constants some choice makes consistent; a run that stops with a process
+waiting for input that never comes is a deadlock, and the time is `∞`. `--net`
+runs any program this way, for a process fed from the command line:
+
+```bash
+echo '(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)' | lake exe interp
+# => y = 3, x = 4, time = 2
+#    c = [3; 4] sent at [0; 1]
+echo '(c?. d! 2) || (d?. c! 1)' | lake exe interp     # => time = ∞, deadlock
+echo 'S ⇐ c?. d! 2×c. S' | lake exe interp --net --c='[1;2;5]'
+# => d = [2; 4; 10] sent at [1; 1; 1], then waits for more input
+```
+
+Probabilistic programs are the book's (Section 5.7): `if 1/3 then x:= 0 else x:= 1 fi`
+and `x:= rand n`, and `--dist` prints the exact distribution of the final states:
+
+```bash
+echo 'x:= rand 6. y:= rand 6. ensure x + y = 7' | lake exe interp --dist
+# => 1/36: x = 2, y = 5   (and three more)   8/9: no final state ...
+```
+`do ... exit when b ... od` is the exit-loop (`exit n when b` leaves `n` loops) and
+`for i:= m;..n do P od` the for-loop; both are compiled to the refinements the
+book defines them by.
+
+Variables have any names; their values are integers, binaries (`⊤`, `⊥`) and
+lists (`[3; 1; 2]`), and a variable never assigned is `0`. `--NAME=EXP` gives a
+variable its initial value. An array is a list variable, as in the book:
+juxtaposition indexes (`A i`), and `A i:= e` is the book's `A:= i→e | A`. The
+book's symbols (`≠ ≤ ≥ ∧ ∨ ¬ ⇒ ×`) are accepted, each with an ASCII spelling.
+`--all` searches for every poststate (`runAll`) instead of running the
+deterministic interpreter once, which is what a choice needs. `--timed` adds a
+clock: `tick` advances it, and a false `assert` waits until `∞` where a false
+`ensure` has no poststate at all. `--timed --all` searches on the clock
+(`runAllT`), so a choice and a clock combine. Exit status is 1 for a parse error
+and 2 when there is no poststate. `--fuel` bounds the depth of the execution, so a
+loop of `n` iterations needs at least `n`; a deterministic run keeps its state in
+an array, proved to compute what the interpreter computes, and a million loop
+iterations take well under a second. Building the executable links the whole import
 chain, so it is a separate target: plain `lake build` and the Blueprint site do
 not build it.
+
+## Compile to the b4 virtual machine
+
+`LaPToP/ProgramTheory/CompileB4.lean` compiles the integer fragment of the
+language (assignment, sequence, `if`, `while`, calls of named statements, local
+variables, over `+ - × div mod`, `<`, `=`, `¬ ∧ ∨` and conditional expressions
+`if c then a else b fi`, whose code hops relatively with `h0`) to bytecode for
+[b4](https://github.com/tangentstorm/b4), a small stack machine with
+implementations in many languages. Named statements are laid out from `0x100`
+and called with b4's `cl`; a local variable keeps its old value on the control
+stack. Its Lean implementation (required from git, `imp/lean`, with its theory
+in `B4/Theory.lean`) runs the code, and `load_correct` proves the result:
+whenever the language takes a state to another without any value leaving 32
+bits (or the control stack overflowing), the loaded machine halts with the
+variables holding the final state. The `sumTo` loop compiles to 86 bytes, and
+b4 computes `s = 55` from `n = 10`.
+
+Networks run on a swarm of b4 machines (`CompileNet.lean`, and `B4/Swarm.lean`
+in b4): each process on its own machine, channels reached through b4's `io`
+(`'s'` sends, `'r'` receives), time in register `T`. `swarm_correct` proves that
+every 32-bit run of the network machine is matched by the swarm, which halts
+with the network's variables, times and scripts — the book's semantics, by
+`swarm_book`. Each channel has one writer, so the swarm is confluent and stops
+in at most one state (`CompileNetDeadlock.lean`): a network that deadlocks is a
+swarm that stops with machines still waiting (`stuck_of_waiting`), and a swarm
+that stops so is a network that cannot finish (`no_finish_of_stuck`).
+`interp --b4` compiles and runs a program or a network there:
+
+```bash
+lake exe interp --b4 --demo=sumTo --n=10        # => n = 10, i = 10, s = 55, time = 0
+echo '(c! 3. tick. c! 4) || (c?. y:= c. c?. x:= c)' | lake exe interp --b4
+# => y = 3, x = 4, time = 2
+#    c = [3; 4] sent at [0; 1]
+printf 'Fact(k) ⇐ if k = 0 then r:= 1 else Fact(k-1). r:= r × k fi\nFact(n)' \
+  | lake exe interp --b4 --n=10               # => n = 10, k = 0, r = 3628800, time = 0
+```
+The language's own parser builds the compiler's statements beside each program
+it reads, so `--b4` takes `do`/`exit` and `for` loops, `new`, simultaneous
+assignment, specifications with parameters and recursion, `c! e`, `c?` and a `||`
+of processes, over 32-bit integers and binaries. `≠ ≤ > ≥ ⇒ ⇐` and the big
+`== --> <--` are rewritten into the compiled operators, `a ^ n` for a literal
+`n` into a product, and `div`/`mod` by a divisor that may be negative into a
+conditional expression (b4's `dv`/`md` agree with the book's floor division
+only for a positive divisor). It names the first construct
+it does not take, and warns when a value leaves 32 bits. `interp --selftest`
+checks it against the interpreters on the demonstrations.
+
+Arrays — a variable holding a list, read as `A i` and written as `A i:= e` —
+get a cell per item after the variables (`run_addr`, `store_runs`), and keep
+their length: `#A` is a literal (proved in `exp_runs`), and `A:= [e₀; …]` pushes
+every item before storing any (`fill_runs`), so `A:= [A 2; A 1; A 0]` reverses
+`A`. `A:= B` is copied item by item, an array that starts as a number starts
+as zeros, and a two-dimensional array (`A i j`, `A i j:= e`, a list of lists)
+is laid out by rows. On them,
+`Alloc.lean` writes the memory allocator of b4's `mm.b4a` in the language and
+proves it against its model of blocks (`alloc_sEval`, `free_sEval`), on b4 as
+well (`alloc_on_b4`). Backtracking — `P or Q`, `ensure c` — runs too
+(`CompileBT.lean`): a choice keeps a choice point above the cells, a failed
+`ensure` takes the last one back, and the machine is proved to do what the
+language's backtracking does, finding a poststate the program has
+(`bt_success`, `bt_sound`) or, when the search fails, none at all
+(`bt_failure`, `bt_fail_sound`):
+```sh
+echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --b4          # => s = 1, time = 0
+lake exe interp --b4 --demo=subset --t=19
+# => ... X = [0; 0; 0; 1; 1; 1], i = 6, s = 19, time = 0
+echo 'A:= [[1;2];[3;4]]. A 0 1:= A 1 0 + A 1 1' | lake exe interp --b4
+# => A = [[1; 7]; [3; 4]], time = 0
+```
+A probabilistic choice — `if a/b then P else Q fi`, `x:= rand n` — is made
+deterministic over a hidden seed, advanced by a 32-bit Lehmer generator at each
+choice (`CompileProb.lean`), and then compiled as any other program;
+`det_sound` proves that whatever it computes the original program may compute.
+The seed comes from the clock, or `--seed=K`:
+```sh
+lake exe interp --b4 --demo=rand      # => x = 3, r = 2, time = 0  (or another outcome)
+```
 
 ## Prove a theorem by calculation (`lake exe netty`)
 

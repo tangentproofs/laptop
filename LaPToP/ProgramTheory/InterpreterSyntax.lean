@@ -9,8 +9,9 @@ first-order abstract syntax (`Exp`, `Bexp`, and the helpers `set`, `ifThen`,
 example programs are data. This module adds the last missing layer for running
 them outside Lean: a tokenizer and a recursive-descent parser from text to that
 same abstract syntax, plus a rendering of states. The command-line binary
-(`InterpMain`, `lake exe interp`) is thin glue over `parseProgram`,
-`Interpreter.run` and `Interpreter.runAll`.
+(`InterpMain`, `lake exe interp`) has since moved to the fuller language of
+`InterpreterLang` and `InterpreterLangSyntax`; this syntax stays as the one the
+three-variable demonstrations of `Interpreter.Demo` are proved against.
 
 Nothing new is denoted here. The parser produces `Demo.P = Prog Vr ℤ`, so a
 parsed program is executed by the same `run` / `runAll` and means the same

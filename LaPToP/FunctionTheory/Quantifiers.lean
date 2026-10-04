@@ -114,7 +114,7 @@ theorem sup_sols : sup (lam (sols (lam D b)) n) = sup (lam D fun v => if b v = t
   · refine sSup_le_iff.2 ?_
     rintro y ⟨v, hv, rfl⟩
     by_cases hb : b v = true
-    · simp only [hb, if_true]; exact le_sSup ⟨v, ⟨hv, hb⟩, rfl⟩
+    · simp only [hb, ite_true]; exact le_sSup ⟨v, ⟨hv, hb⟩, rfl⟩
     · simp [hb]
 
 /-- `⇓v: (§v: D· b)· n = ⇓v: D· if b then n else ∞`. -/
@@ -124,7 +124,7 @@ theorem inf_sols : inf (lam (sols (lam D b)) n) = inf (lam D fun v => if b v = t
   · refine le_sInf_iff.2 ?_
     rintro y ⟨v, hv, rfl⟩
     by_cases hb : b v = true
-    · simp only [hb, if_true]; exact sInf_le ⟨v, ⟨hv, hb⟩, rfl⟩
+    · simp only [hb, ite_true]; exact sInf_le ⟨v, ⟨hv, hb⟩, rfl⟩
     · simp [hb]
   · refine le_sInf_iff.2 ?_
     rintro y ⟨v, ⟨hv, hb⟩, rfl⟩
@@ -146,7 +146,7 @@ theorem sum_sols : sum (lam (sols (lam D b)) n) = sum (lam D fun v => if b v = t
   show (∑ᶠ x ∈ sols (lam D b), n x) = ∑ᶠ x ∈ D, (if b x = true then n x else 0)
   rw [sols_lam,
     finsum_mem_inter_support_eq' (fun v => if b v = true then n v else 0) D {x | x ∈ D ∧ b x = true}]
-  · exact (finsum_mem_congr rfl fun v (hv : v ∈ {x | x ∈ D ∧ b x = true}) => if_pos hv.2).symm
+  · exact (finsum_mem_congr rfl fun v (hv : v ∈ {x | x ∈ D ∧ b x = true}) => ite_eq_left hv.2).symm
   · intro v hv
     have : b v = true := by
       by_contra h
@@ -169,7 +169,7 @@ theorem prod_sols : prod (lam (sols (lam D b)) n) = prod (lam D fun v => if b v 
   show (∏ᶠ x ∈ sols (lam D b), n x) = ∏ᶠ x ∈ D, (if b x = true then n x else 1)
   rw [sols_lam,
     finprod_mem_inter_mulSupport_eq' (fun v => if b v = true then n v else 1) D {x | x ∈ D ∧ b x = true}]
-  · exact (finprod_mem_congr rfl fun v (hv : v ∈ {x | x ∈ D ∧ b x = true}) => if_pos hv.2).symm
+  · exact (finprod_mem_congr rfl fun v (hv : v ∈ {x | x ∈ D ∧ b x = true}) => ite_eq_left hv.2).symm
   · intro v hv
     have : b v = true := by
       by_contra h
@@ -568,7 +568,7 @@ theorem forall_exists_iff_exists_fun [Nonempty β] (E : Bunch β) (q : α → β
     classical
     refine ⟨fun x => if hx : x ∈ D then Classical.choose (h x hx) else Classical.arbitrary β,
       fun x hx => ?_⟩
-    simp only [dif_pos hx]
+    simp only [dite_eq_left hx]
     exact Classical.choose_spec (h x hx)
   · rintro ⟨f, hf⟩ x hx
     exact ⟨f x, (hf x hx).1, (hf x hx).2⟩

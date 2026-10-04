@@ -67,7 +67,7 @@ theorem orElse_self (f : Fn α β) : orElse f f = f := by
   classical
   refine Fn.ext (Set.union_self _) fun x hf hg => ?_
   change (f.orElse f).apply x hf = f.apply x hg
-  rw [apply_orElse, dif_pos hg]
+  rw [apply_orElse, dite_eq_left hg]
 
 /-- `f | (g | h) = (f | g) | h` (Selective Union). -/
 theorem orElse_assoc (f g h : Fn α β) : orElse f (orElse g h) = orElse (orElse f g) h := by
@@ -95,12 +95,12 @@ theorem orElse_comp (g h : Fn β γ) (f : Fn α β) : (orElse g h).comp f = orEl
     · have hgd : f.body x h₁.1 ∈ g.dom := hg.2 hg.1
       show (if hg' : f.body x h₁.1 ∈ g.dom then g.body _ hg' else _) =
         if hg' : x ∈ (g.comp f).dom then (g.comp f).body x hg' else _
-      rw [dif_pos hgd, dif_pos hg]
+      rw [dite_eq_left hgd, dite_eq_left hg]
       rfl
     · have hgd : f.body x h₁.1 ∉ g.dom := fun hgd => hg ⟨h₁.1, fun _ => hgd⟩
       show (if hg' : f.body x h₁.1 ∈ g.dom then _ else h.body _ _) =
         if hg' : x ∈ (g.comp f).dom then _ else (h.comp f).body x (h₂.resolve_left hg')
-      rw [dif_neg hgd, dif_neg hg]
+      rw [dite_eq_right hgd, dite_eq_right hg]
       rfl
 
 /-- An operator composed with a function: `h f` for an operator `h`, applied to

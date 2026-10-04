@@ -21,6 +21,16 @@ import LaPToP.ProgramTheory.Functional
 import LaPToP.ProgramTheory.Interpreter
 import LaPToP.ProgramTheory.InterpreterSyntax
 import LaPToP.ProgramTheory.InterpreterTime
+import LaPToP.ProgramTheory.InterpreterLangSyntax
+import LaPToP.ProgramTheory.InterpreterProb
+import LaPToP.ProgramTheory.InterpreterFast
+import LaPToP.ProgramTheory.NetworkLang
+import LaPToP.ProgramTheory.NetworkBook
+import LaPToP.ProgramTheory.CompileB4
+import LaPToP.ProgramTheory.CompileNet
+import LaPToP.ProgramTheory.CompileNetDeadlock
+import LaPToP.ProgramTheory.B4Lang
+import LaPToP.ProgramTheory.Alloc
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1213,7 +1223,7 @@ the string library for the same reason. The four agreements are then reflexivity
 on closed terms.
 :::
 
-:::theorem "interpreter_time" (parent := "programming_language_core") (tags := "programs, interpreter, time, assertions, hehner-4.2") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.run_tick, LaPToP.ProgramTheory.Interpreter.run_assert, LaPToP.ProgramTheory.Interpreter.denote_tick, LaPToP.ProgramTheory.Interpreter.denote_assert, LaPToP.ProgramTheory.Interpreter.runAll_tick, LaPToP.ProgramTheory.Interpreter.runAll_assert, LaPToP.ProgramTheory.Interpreter.writes_tick, LaPToP.ProgramTheory.Interpreter.writes_assert, LaPToP.ProgramTheory.Interpreter.Timed.TState, LaPToP.ProgramTheory.Interpreter.Timed.denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_ne_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT, LaPToP.ProgramTheory.Interpreter.Timed.runT_le, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_of_runT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.denote_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT_assert_of_not, LaPToP.ProgramTheory.Interpreter.Timed.runT_ensure_of_not, LaPToP.ProgramTheory.Interpreter.Timed.implementableT_assert, LaPToP.ProgramTheory.Interpreter.Timed.not_implementable_ensure, LaPToP.ProgramTheory.Interpreter.Timed.refines_assertSpec, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_unfold, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_tick, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_whileDo, LaPToP.ProgramTheory.Interpreter.Timed.renderTime, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount_seven, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.ensure_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_ne_ensure")
+:::theorem "interpreter_time" (parent := "programming_language_core") (tags := "programs, interpreter, time, assertions, hehner-4.2") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.run_tick, LaPToP.ProgramTheory.Interpreter.run_assert, LaPToP.ProgramTheory.Interpreter.denote_tick, LaPToP.ProgramTheory.Interpreter.denote_assert, LaPToP.ProgramTheory.Interpreter.runAll_tick, LaPToP.ProgramTheory.Interpreter.runAll_assert, LaPToP.ProgramTheory.Interpreter.writes_tick, LaPToP.ProgramTheory.Interpreter.writes_assert, LaPToP.ProgramTheory.Interpreter.Timed.TState, LaPToP.ProgramTheory.Interpreter.Timed.denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.time_ne_top_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT, LaPToP.ProgramTheory.Interpreter.Timed.runT_le, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_of_runT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runAllT, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_le, LaPToP.ProgramTheory.Interpreter.Timed.evalT_of_mem_runAllT, LaPToP.ProgramTheory.Interpreter.Timed.exists_mem_runAllT_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.mem_runAllT_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.denote_iff_denoteT, LaPToP.ProgramTheory.Interpreter.Timed.runT_assert_of_not, LaPToP.ProgramTheory.Interpreter.Timed.runT_ensure_of_not, LaPToP.ProgramTheory.Interpreter.Timed.implementableT_assert, LaPToP.ProgramTheory.Interpreter.Timed.not_implementable_ensure, LaPToP.ProgramTheory.Interpreter.Timed.refines_assertSpec, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_unfold, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_whileDo_tick, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_whileDo, LaPToP.ProgramTheory.Interpreter.Timed.renderTime, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.timedCount_seven, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.ensure_false_run, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.assert_ne_ensure, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.backtrack_runAllT, LaPToP.ProgramTheory.Interpreter.Timed.Demonstration.quickOrSlow_runAllT")
 A clock in the interpreter. Two of the notations are invisible to the state of
 {uses "interpreter"}[]: $`t := t+1` does nothing observable, and
 $`\mathbf{assert}\ b` cannot be told from $`\mathbf{ensure}\ b`, because what
@@ -1227,8 +1237,9 @@ Time is not charged automatically. The programmer advances it with `tick`, as
 the book writes $`t := t+1`, so a loop takes time exactly when its body ticks;
 nothing here claims a cost model for the other notations. `denoteT` is the timed
 specification of a program, `runT` its fuelled interpreter — sound always,
-complete on the deterministic fragment — and `EvalT` the fuel-free execution
-relation, equal to `denoteT` as in
+complete on the deterministic fragment — `runAllT` its searching interpreter,
+which keeps both branches of a choice and so is sound and complete for every
+program, and `EvalT` the fuel-free execution relation, equal to `denoteT` as in
 {uses "interpreter_partial_correctness"}[]. Two facts hold of every program:
 time does not decrease, which is the base axiom of {uses "loop_definition"}[]
 holding here of the whole language, and $`\infty` is absorbing — after a
@@ -1248,8 +1259,10 @@ With the clock the two part company, closing the gap left by
 forever, so its run succeeds and ends at $`t = \infty`, while a false
 $`\mathbf{ensure}` has no poststate and no run at any fuel. The demonstration
 shows both, and a counting loop whose body ticks ending at $`t = 7` after seven
-iterations, computed in the kernel. The command line runs timed programs with
-`--timed`.
+iterations, computed in the kernel. With the search, the backtracking example
+finds its one poststate at the time it started, and `tick or (tick. tick)` is
+reported at both of its times. The command line runs timed programs with
+`--timed`, and searches on the clock with `--timed --all`.
 
 What remains. The memory of a false assertion is left as it was, where the book
 says nothing about the memory variables, so what is implemented refines the
@@ -1258,9 +1271,8 @@ modelled. The loop whose body ends in `tick` has exactly the body
 $`P.\ t := t+1` of the axioms of {uses "loop_definition"}[] and satisfies the
 first of them, but those axioms are stated over the concrete state of that node;
 generalizing them to an arbitrary clocked state, and so restating the
-terminating-runs bridge over programs, is left. There is no searching timed
-interpreter, so a choice and a clock cannot yet be combined. Concurrency and
-channels are untouched.
+terminating-runs bridge over programs, is left. Concurrency and channels are
+untouched.
 :::
 
 :::proof "interpreter_time"
@@ -1275,4 +1287,619 @@ does not decrease to know each intermediate time is finite. The assertion case i
 where the two sides differ: a failed assertion has a timed behaviour, but only at
 $`t = \infty`, which the finiteness condition excludes — and that is exactly the
 untimed reading, where it has no behaviour at all.
+:::
+
+:::theorem "interpreter_language" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, arrays, cli, hehner-5.1.0") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Lang.Value, LaPToP.ProgramTheory.Interpreter.Lang.Value.decEq, LaPToP.ProgramTheory.Interpreter.Lang.Value.index, LaPToP.ProgramTheory.Interpreter.Lang.Value.update, LaPToP.ProgramTheory.Interpreter.Lang.Value.update_single, LaPToP.ProgramTheory.Interpreter.Lang.UnOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.BinOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.Exp, LaPToP.ProgramTheory.Interpreter.Lang.Exp.eval, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx_nil, LaPToP.ProgramTheory.Interpreter.Lang.getElem?_set_ite, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_iff, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_seq, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_test, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₂_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.twoDim_run, LaPToP.ProgramTheory.Interpreter.Lang.tokenize, LaPToP.ProgramTheory.Interpreter.Lang.parseProg, LaPToP.ProgramTheory.Interpreter.Lang.parseExp, LaPToP.ProgramTheory.Interpreter.Lang.parseToksWith, LaPToP.ProgramTheory.Interpreter.Lang.parseProgramWith, LaPToP.ProgramTheory.Interpreter.Lang.renderState, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_sumTo, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sumTo_ten, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_backtrack, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_runAll, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrays_run")
+The interpreter's own language. The syntax of {uses "interpreter_cli"}[] ran the
+demonstrations over three integer variables with fixed names; this is the
+language the command line now runs. Programs are still the core syntax of
+{uses "interpreter"}[], with variables numbered and values that are integers,
+binaries or lists, so every theorem of {uses "interpreter_soundness"}[],
+{uses "interpreter_partial_correctness"}[] and {uses "interpreter_time"}[] applies
+to a parsed program unchanged. The parser keeps a table from numbers to the names
+written in the source. Numbers, not strings, are the variables because the kernel
+compares them instantly, which keeps the demonstrations proofs by reduction.
+
+Expressions have the book's operators: arithmetic with floor $`\mathrm{div}` and
+$`\mathrm{mod}`, comparisons, $`\lnot`, $`\land`, $`\lor`, $`\Rightarrow`,
+list literals $`[a; b; c]`, catenation $`+`, length $`\#`, indexing by
+juxtaposition, and $`\mathbf{if}` in expressions.
+
+Arrays are what {uses "data_structures"}[] says they are: "in program theory, an
+array is a list variable, and array element assignment assigns the list variable
+to a new list that is like the old list but differs in one item". So there is no
+array construct. $`A\,i := e` is *defined* as the book's rewriting
+$`A := i \to e \mid A`, and it is proved to be the book's definition
+$`A'i = e \land (\forall j \cdot j \neq i \Rightarrow A'j = A\,j) \land x' = x \land \ldots`
+for an index inside the list, item by item. Written this way the Substitution Law
+is sound for it. A two-dimensional $`A\,i\,j := e` is the same construct with a
+path. This closes the gap {uses "interpreter_arrays"}[] recorded, where an array
+had to be a family of slots because a flat state had no room for a list value.
+
+The demonstrations are reductions in the kernel. The summation from a source
+given on the command line ends at $`55`. The backtracking example is found by the
+search and missed by the deterministic run. The book's two array examples end as
+the book says they should, the first read from source text: after
+$`A\,2 := 3.\ i := 2.\ A\,i := 4`, the test $`A\,i = A\,2` is $`\top`.
+
+Honest scope. The language is untyped: each operator reads its operands at the
+kind it expects, so an ill-typed expression has a value rather than an error, and
+where the book leaves a value undefined — division by zero, an index outside the
+list — a fixed one is chosen. The book's types, bunches, sets, strings, records
+and reals are not here. As before, the parser theorems are stated of token lists,
+and the tokenizer's agreement with the source text is checked when the binary runs.
+:::
+
+:::proof "interpreter_language"
+Equality of values, which are a nested inductive type, is decided by a mutual
+recursion that the kernel reduces. The element-assignment theorem unfolds the
+assignment to a single `List.set` of the list variable, and then compares lists
+by their items. The Substitution Law form is unfolding. The demonstrations are
+reflexivity, or `decide` evaluated by the kernel where the elaborator's own
+reduction is too slow.
+:::
+
+:::theorem "interpreter_recursion" (parent := "programming_language_core") (tags := "programs, interpreter, recursion, refinement, exit-loop, for-loop, hehner-4.1.1, hehner-5.2.1, hehner-5.2.3") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Prog, LaPToP.ProgramTheory.Interpreter.Defs, LaPToP.ProgramTheory.Interpreter.DetDefs, LaPToP.ProgramTheory.Interpreter.Eval, LaPToP.ProgramTheory.Interpreter.run_call, LaPToP.ProgramTheory.Interpreter.runAll_call, LaPToP.ProgramTheory.Interpreter.denote_call, LaPToP.ProgramTheory.Interpreter.writes_call, LaPToP.ProgramTheory.Interpreter.exists_run_of_eval, LaPToP.ProgramTheory.Interpreter.denoteWith, LaPToP.ProgramTheory.Interpreter.denote_eq_denoteWith, LaPToP.ProgramTheory.Interpreter.denote_call_eq, LaPToP.ProgramTheory.Interpreter.refines_denote_call, LaPToP.ProgramTheory.Interpreter.run_call_sound, LaPToP.ProgramTheory.Interpreter.CallFree, LaPToP.ProgramTheory.Interpreter.denoteWith_callFree, LaPToP.ProgramTheory.Interpreter.refines_exitLoop, LaPToP.ProgramTheory.Interpreter.Timed.EvalT, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_call, LaPToP.ProgramTheory.Interpreter.Timed.runT_call, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_call, LaPToP.ProgramTheory.Interpreter.Timed.time_le_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.exists_runT_of_evalT, LaPToP.ProgramTheory.Interpreter.Timed.evalT_of_eval, LaPToP.ProgramTheory.Interpreter.Timed.eval_of_evalT, LaPToP.ProgramTheory.Interpreter.Lang.assigns, LaPToP.ProgramTheory.Interpreter.Lang.Program, LaPToP.ProgramTheory.Interpreter.Lang.Program.body, LaPToP.ProgramTheory.Interpreter.Lang.Program.env, LaPToP.ProgramTheory.Interpreter.Lang.Program.run, LaPToP.ProgramTheory.Interpreter.Lang.Program.runAll, LaPToP.ProgramTheory.Interpreter.Lang.Program.runT, LaPToP.ProgramTheory.Interpreter.Lang.Program.runAllT, LaPToP.ProgramTheory.Interpreter.Lang.Raw, LaPToP.ProgramTheory.Interpreter.Lang.compile, LaPToP.ProgramTheory.Interpreter.Lang.parseBody, LaPToP.ProgramTheory.Interpreter.Lang.parseItem, LaPToP.ProgramTheory.Interpreter.Lang.parseFile, LaPToP.ProgramTheory.Interpreter.Lang.scanDefs, LaPToP.ProgramTheory.Interpreter.Lang.Demo.listSum_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_exitLoop, LaPToP.ProgramTheory.Interpreter.Lang.Demo.exitLoop_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.exitLoop_run_above, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deepExit_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.forLoop_run, LaPToP.ProgramTheory.Interpreter.Lang.scanParams, LaPToP.ProgramTheory.Interpreter.Lang.internParams, LaPToP.ProgramTheory.Interpreter.Lang.declareAll, LaPToP.ProgramTheory.Interpreter.Lang.callWith, LaPToP.ProgramTheory.Interpreter.Lang.assignAll, LaPToP.ProgramTheory.Interpreter.Lang.Demo.gcd_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.swap_run")
+Named specifications, recursion, and the loops the book defines by refinement.
+The book develops a program by refining named specifications, and a name on the
+right of a refinement is a call of the program that refines it, as in
+{uses "list_summation"}[], the name being refined included. The core syntax of
+{uses "interpreter"}[] gains `call k`, which runs the program refining the `k`-th named
+specification. The definitions in scope are a class with an empty default, so a
+program with no calls, and every theorem proved before, need not mention them.
+
+A call is denoted by its executions, and that is the book's reading of a
+recursive refinement. The calls solve their refinements with equality: the
+specification a call names is its body, with each call in the body read as the
+specification it names. And they are the strongest solution: any family of
+specifications that satisfies the refinements is refined by the calls, exactly as
+{uses "interpreter_soundness"}[] has it for the while-loop. So whatever a
+development proves by refinement holds of every terminating run, and nothing is
+claimed about termination. Soundness and completeness of both interpreters, the
+searching interpreters, and the projection theorem of {uses "interpreter_time"}[]
+extend to calls. The ones that went by induction on the program now go by
+induction on the execution, since a call's body is not a part of the call.
+
+The exit-loop of {uses "exit_loop"}[] is "an alternative notation for $`L \Leftarrow A.\ \mathbf{if}\ b\ \mathbf{then}\ ok\ \mathbf{else}\ C.\ L`",
+and the parser compiles `do A. exit when b. C od` to exactly that: a fresh
+specification refined by that body, the loop being a call of it. The book's
+exit-loop rule is proved for such a loop: every terminating run satisfies each
+$`L` the rule establishes. `exit n when b` leaves $`n` loops, and the inner loop
+is then named as the book names it, so $`P \Leftarrow \mathbf{do}\ A.\ \mathbf{do}\ B.\ \mathbf{exit}\ 2\ \mathbf{when}\ c.\ D\ \mathbf{od}.\ E\ \mathbf{od}`
+becomes $`P \Leftarrow A.\ Q` with $`Q \Leftarrow B.\ \mathbf{if}\ c\ \mathbf{then}\ ok\ \mathbf{else}\ D.\ Q`.
+The for-loop of {uses "for_loop"}[] is the refinement
+$`F \Leftarrow \mathbf{if}\ i < n\ \mathbf{then}\ P.\ i := i+1.\ F\ \mathbf{else}\ ok`,
+with the index local, the bound evaluated once, and a body that assigns the
+index rejected, as the book requires.
+
+The demonstrations are reductions in the kernel from parsed source:
+- the list summation of Section 4.1.1, run from its two refinements;
+- the exit-loop that counts up to $`n`, from below and from above;
+- a deep exit;
+- a for-loop summing $`1` to $`10`.
+
+A specification may have parameters, `P(x, y) ⇐ ...`, called as `P(e, f)`.
+That is the translation {uses "function_and_procedure"}[] proves,
+$`\langle x: D \cdot B\rangle\,e = (\mathbf{new}\ x: D := e \cdot B)` when $`B` does not
+assign $`x`: the arguments are all computed before any parameter is bound, and a
+body that assigns a parameter is rejected. A simultaneous assignment
+$`x, y := e, f` likewise computes both values before assigning either. Euclid's
+algorithm as a recursive procedure and the swap $`x, y := y, x` are among the
+kernel-checked demonstrations.
+
+From the command line, the Towers of Hanoi of Section 4.3, with a `tick` per
+disk move, reports $`2^n - 1` moves in time $`2^n - 1`, and with the parameters
+`from`, `to`, `using` it records the moves themselves.
+
+Honest scope. The exit-loop rule is proved for the loop whose parts contain no
+calls; nested loops rest on the general theorem about calls. The for-loop is
+justified by the general theorem too, not by the book's for-loop rule, whose
+index is a parameter where here it is a local variable. Parameters are value
+parameters only; the book's variable parameters, whose aliasing it warns
+against, are not here, nor are `go to` with labels in the middle of a program or
+a call's write set.
+:::
+
+:::proof "interpreter_recursion"
+A call is denoted by the execution relation, which is defined inductively with a
+rule for a call, so the denotation stays structural. That the calls solve their
+refinements is the agreement of execution and denotation, read through the
+definition of a call. That they are the strongest solution is an induction on
+executions, each rule matching the corresponding specification combinator and
+the call rule being the hypothesis. The exit-loop rule instantiates this with the
+family that is the loop's specification at the loop and everything elsewhere, the
+loop's parts, having no calls, meaning the same under any reading of calls.
+Completeness of the fuelled interpreters and the projection theorem are
+inductions on executions, the intermediate times of a finite execution being
+finite because time does not decrease.
+:::
+
+:::theorem "interpreter_channels" (parent := "programming_language_core") (tags := "programs, interpreter, channels, input, output, hehner-9.1.1") (effort := "medium") (lean := "LaPToP.ProgramTheory.Interpreter.Lang.output, LaPToP.ProgramTheory.Interpreter.Lang.input, LaPToP.ProgramTheory.Interpreter.Lang.message, LaPToP.ProgramTheory.Interpreter.Lang.check, LaPToP.ProgramTheory.Interpreter.Lang.denote_output, LaPToP.ProgramTheory.Interpreter.Lang.scanChans, LaPToP.ProgramTheory.Interpreter.Lang.internChans, LaPToP.ProgramTheory.Interpreter.Lang.Demo.even_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.even_run_empty, LaPToP.ProgramTheory.Interpreter.Lang.Demo.even_runT_empty, LaPToP.ProgramTheory.Interpreter.Lang.Demo.channel_run")
+Input and output. {uses "communication"}[] describes a channel $`c` by a message
+script, a time script and two cursors, with
+$`c!\,e = M_w = e \land T_w = t \land (w := w+1)`, $`c? = (r := r+1)`,
+$`c = M_{r-1}` and $`\surd c = T_r \le t`. A sequential program sees of the
+message script only the messages written so far or supplied to it. So a channel
+here is a list variable holding that prefix of the script, with the write cursor
+its length, and a hidden read cursor. Output appends; output is proved to be the
+book's $`M_w = e \land (w := w+1)` on that prefix, the messages before the cursor
+unchanged. Input advances the read cursor, and when no message is there it waits:
+it is an assertion that a message is there, so with the clock of
+{uses "interpreter_time"}[] it waits until $`\infty`, as the book's input must
+wait for a message that never comes, and without a clock it has no poststate.
+The last message input is $`M_{r-1}`, and $`\surd c` says one is waiting.
+
+In the language a name written $`c!\,e` or $`c?` is a channel. An input script
+is the channel's initial value, given on the command line, and the script a
+program writes prints as the list of its messages. The demonstrations run the
+first example of {uses "input_output_examples"}[], $`c?.\ d!\ \mathrm{even}\ c`:
+from the script $`[4]` it writes $`[\top]`, and with nothing to input it has no
+poststate untimed and ends at $`t = \infty` timed. A loop that inputs while
+$`\surd c` and outputs the total is also run.
+
+Honest scope. The time script is not kept, so input does not wait for a message
+to arrive at a later time. There is no concurrency here, so a message a program
+reads was supplied to it rather than written by another process. A recursive
+process such as $`S \Leftarrow c?.\ d!\ 2 \times c.\ S` has no terminating run,
+and so shows no output.
+:::
+
+:::proof "interpreter_channels"
+Output is an assignment of the script variable, so its poststate is computed
+directly and the three facts about the script are list lemmas. The input
+demonstrations are decided in the kernel, the timed one through the timed
+interpreter.
+:::
+
+:::theorem "interpreter_concurrency" (parent := "programming_language_core") (tags := "programs, interpreter, concurrency, hehner-8.0") (effort := "medium") (lean := "LaPToP.ProgramTheory.Spec.merge, LaPToP.ProgramTheory.Spec.parOwn, LaPToP.ProgramTheory.Interpreter.run_par, LaPToP.ProgramTheory.Interpreter.denote_par, LaPToP.ProgramTheory.Interpreter.runAll_par, LaPToP.ProgramTheory.Interpreter.writes_par, LaPToP.ProgramTheory.Interpreter.denote_par_iff, LaPToP.ProgramTheory.Interpreter.Timed.mergeT, LaPToP.ProgramTheory.Interpreter.Timed.denoteT_par, LaPToP.ProgramTheory.Interpreter.Timed.runT_par, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_par, LaPToP.ProgramTheory.Interpreter.Lang.parsePar, LaPToP.ProgramTheory.Interpreter.Lang.assigned, LaPToP.ProgramTheory.Interpreter.Lang.procWrites, LaPToP.ProgramTheory.Interpreter.Lang.resolvePar, LaPToP.ProgramTheory.Interpreter.Lang.resolveProgram, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parSwap_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.seqPar_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parTime_runT")
+Concurrent composition. {uses "concurrent_composition"}[] requires that "$`P`
+and $`Q` have completely different state variables", lets each process mention
+the other's "only as constants", their initial values, and concludes that
+"if we ignore time and space, concurrent composition is conjunction:
+$`P \| Q = P \land Q`". With time, the composition finishes when both
+processes have: $`t' = t_P \uparrow t_Q`.
+
+The core syntax gains $`p \| q` with the variables partitioned between the two
+processes. Both run from the prestate, so each sees the other's variables only
+at their initial values, and the poststate has each process's own variables
+from that process's run. That is proved to be the book's conjunction: a
+poststate of $`p \| q` is one in which $`p`'s variables are as a run of $`p` leaves
+them and $`q`'s as a run of $`q` leaves them. On the clock the composition ends at
+the later of the two times. Soundness and completeness of every interpreter, the
+recursion theorems and the projection theorem extend to it. A process writes
+only its own variables of those it writes, so the frame check covers it.
+
+In the language $`P \| Q` binds tighter than sequential composition and looser
+than a choice. Each process owns the variables it may assign, the calls it makes
+being followed through the definitions to their least solution, and two
+processes that may assign the same variable are rejected. The demonstrations
+run the book's examples:
+- $`x := y \| y := x` exchanges the values;
+- in $`(x := x+1.\ x := x-1) \| y := x`, $`y` sees only the initial $`x`;
+- a process that ticks twice beside one that ticks once ends at $`t = 2`.
+
+Honest scope. The processes cannot communicate: both start from the prestate
+and neither reads what the other writes, so the communicating processes of
+Chapter 9, where one inputs what the other outputs, are not executed. Which
+process owns a variable is decided by what it may assign, which is the book's
+partition when every variable is assigned by at most one process.
+:::
+
+:::proof "interpreter_concurrency"
+The conjunction theorem compares the merged poststate with each run on its own
+variables, pointwise. The interpreters run both processes and merge, and each
+proof's new case pairs the two runs, with the larger of the two fuels where one
+is needed. The timed finite-time projection needs the finishing time of the
+composition finite exactly when both processes' are, which holds of a maximum.
+:::
+
+:::theorem "interpreter_probability" (parent := "programming_language_core") (tags := "programs, interpreter, probability, hehner-5.7") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.run_prob, LaPToP.ProgramTheory.Interpreter.denote_prob, LaPToP.ProgramTheory.Interpreter.runAll_prob, LaPToP.ProgramTheory.Interpreter.writes_prob, LaPToP.ProgramTheory.Interpreter.Timed.runT_prob, LaPToP.ProgramTheory.Interpreter.Timed.runAllT_prob, LaPToP.ProgramTheory.Interpreter.leftProb, LaPToP.ProgramTheory.Interpreter.rightProb, LaPToP.ProgramTheory.Interpreter.scaleDist, LaPToP.ProgramTheory.Interpreter.bindDist, LaPToP.ProgramTheory.Interpreter.runDist, LaPToP.ProgramTheory.Interpreter.mass, LaPToP.ProgramTheory.Interpreter.eval_of_mem_runDist, LaPToP.ProgramTheory.Interpreter.denote_of_mem_runDist, LaPToP.ProgramTheory.Interpreter.SubDist, LaPToP.ProgramTheory.Interpreter.subDist_runDist, LaPToP.ProgramTheory.Interpreter.runDist_nonneg, LaPToP.ProgramTheory.Interpreter.runDist_mass_le, LaPToP.ProgramTheory.Interpreter.Lang.ratio, LaPToP.ProgramTheory.Interpreter.Lang.probIf, LaPToP.ProgramTheory.Interpreter.Lang.randBody, LaPToP.ProgramTheory.Interpreter.Lang.Program.runDist, LaPToP.ProgramTheory.Interpreter.Lang.Demo.probEx1_dist, LaPToP.ProgramTheory.Interpreter.Lang.Demo.probEx2_dist, LaPToP.ProgramTheory.Interpreter.Lang.Demo.probEx2_average, LaPToP.ProgramTheory.Interpreter.Lang.Demo.rand_one")
+Probabilistic programs. {uses "probabilistic_programming"}[] generalizes the
+notations "to allow probabilistic operands":
+$`\mathbf{if}\ b\ \mathbf{then}\ P\ \mathbf{else}\ Q = b \times P + (1-b) \times Q`
+with $`b` a probability, and sequential composition sums over the intermediate
+states. A program then denotes a distribution of final states, and "after
+execution of $`P`, the average value of $`e` is $`(P.\ e)`".
+
+The core syntax gains the probabilistic $`\mathbf{if}`. The interpreters of
+{uses "interpreter_soundness"}[] read it as the choice between the branches that
+have a chance, which is its support, so all their theorems extend to it. A new
+interpreter reads it as the book does: from a prestate it computes the list of
+final states, each with the probability of reaching it, exactly, in rationals.
+Every state it gives is an execution of the program, so the support lies inside
+the denotation. Every weight is a probability, and the weights sum to at most
+$`1`. What is missing is the probability of not finishing within the fuel, of not
+finishing at all, or of a failed $`\mathbf{ensure}`.
+
+In the language, $`\mathbf{if}\ a/b\ \mathbf{then}\ P\ \mathbf{else}\ Q\ \mathbf{fi}`
+is the book's notation. A `/` at the top of a condition can only be a
+probability, since integer division is written `div`. $`x := \mathrm{rand}\ n`
+gives $`x` each value below $`n` with probability $`1/n`. It is built from
+probabilistic choices: take the counter with probability $`1/(n-i)` or count on.
+The command line prints the distribution with `--dist`.
+
+The demonstrations are the book's examples, decided in the kernel from their
+token lists, and they agree with the values {uses "probabilistic_programming"}[]
+proves:
+- $`\mathbf{if}\ 1/3\ \mathbf{then}\ x := 0\ \mathbf{else}\ x := 1` gives $`1/3` and $`2/3`;
+- the "slightly more elaborate example" gives
+  $`(x'=2)/6 + (x'=3)/6 + (x'=5)/6 + (x'=6)/2`, with average $`4 + 2/3`;
+- $`x := \mathrm{rand}\ 2.\ x := x + \mathrm{rand}\ 3`, with the book's fresh
+  variable, ends at $`x = 1` with probability $`1/3`.
+
+Honest scope. The agreement with the book's distributions is computed for these
+examples, not proved for every program: no theorem says the interpreter's
+weights are the book's sums in general. `rand` may be used only as the whole of
+an assignment, with the book's own advice of a fresh variable for any other use.
+A probability outside $`[0, 1]` is clamped, a nondeterministic choice is resolved
+by its first branch, and time is not kept.
+:::
+
+:::proof "interpreter_probability"
+That every state is an execution is an induction on the fuel, each probabilistic
+branch being taken exactly when its probability is positive, which is the
+condition of the corresponding execution rule. That the weights form a
+sub-distribution is the same induction. Sequencing multiplies each weight by the
+inner masses, which are at most $`1`, so the total does not grow. The
+probabilistic $`\mathbf{if}`'s two branches have masses at most $`r` and $`1-r`. The
+demonstrations are decided by kernel reduction of the parser and the
+interpreter on rationals.
+:::
+
+:::theorem "interpreter_fast" (parent := "programming_language_core") (tags := "programs, interpreter, implementation") (effort := "small") (lean := "LaPToP.ProgramTheory.Interpreter.toFun, LaPToP.ProgramTheory.Interpreter.store, LaPToP.ProgramTheory.Interpreter.toFun_store, LaPToP.ProgramTheory.Interpreter.mergeArr, LaPToP.ProgramTheory.Interpreter.toFun_mergeArr, LaPToP.ProgramTheory.Interpreter.runFast, LaPToP.ProgramTheory.Interpreter.runFast_eq, LaPToP.ProgramTheory.Interpreter.Timed.runTFast, LaPToP.ProgramTheory.Interpreter.Timed.toTState, LaPToP.ProgramTheory.Interpreter.Timed.runTFast_eq, LaPToP.ProgramTheory.Interpreter.Lang.Program.runFast, LaPToP.ProgramTheory.Interpreter.Lang.Program.runFast_eq, LaPToP.ProgramTheory.Interpreter.Lang.Program.runTFast, LaPToP.ProgramTheory.Interpreter.Lang.Program.runTFast_eq")
+A faster interpreter that computes the same thing. The interpreters keep the
+state as a function, and each assignment wraps it in one more update, so reading
+a variable after $`k` assignments takes $`k` steps and a loop runs in time
+quadratic in its iterations. That is an implementation detail, so the
+deterministic interpreter and its timed version are given again on a state kept
+in an array, where a variable is read in constant time. Each is proved to reach
+a state exactly when the interpreter of {uses "interpreter_soundness"}[], or its
+timed version in {uses "interpreter_time"}[], does, and the same state.
+
+The command line runs these, so what it prints for a deterministic run is still,
+by those theorems, what the proved interpreter computes. A summation loop of a
+million iterations takes a fraction of a second, where eight thousand took two.
+
+Honest scope. The searching interpreters and the distribution interpreter still
+use the function-based state. The conversion of the command line's initial
+values into an array is not itself proved, though the state it builds has the
+default value past the variables the program names, as the array does.
+:::
+
+:::proof "interpreter_fast"
+Storing into the array, growing it with default values when the variable is past
+its end, is assignment, by extensionality item by item. Merging two arrays is
+merging two states, likewise. Each interpreter is then the other with the state
+converted, by induction on the fuel, each case unfolding one step of both and
+using those two facts.
+:::
+
+:::theorem "interpreter_network" (parent := "programming_language_core") (tags := "programs, interpreter, channels, concurrency, deadlock, hehner-9.1") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.PStep, LaPToP.ProgramTheory.Interpreter.Network.NetSpec, LaPToP.ProgramTheory.Interpreter.Network.Net.WF, LaPToP.ProgramTheory.Interpreter.Network.Act, LaPToP.ProgramTheory.Interpreter.Network.MStep, LaPToP.ProgramTheory.Interpreter.Network.act_comm, LaPToP.ProgramTheory.Interpreter.Network.ready, LaPToP.ProgramTheory.Interpreter.Network.MCfg.Quiet, LaPToP.ProgramTheory.Interpreter.Network.MStep.quiet, LaPToP.ProgramTheory.Interpreter.Network.Waits, LaPToP.ProgramTheory.Interpreter.Network.writer_waits, LaPToP.ProgramTheory.Interpreter.Network.mstep_diamond, LaPToP.ProgramTheory.Interpreter.Network.mstep_confluent, LaPToP.ProgramTheory.Interpreter.Network.normal_unique, LaPToP.ProgramTheory.Interpreter.Network.Inv, LaPToP.ProgramTheory.Interpreter.Network.netSpec_of_reach, LaPToP.ProgramTheory.Interpreter.Network.Path.stamp, LaPToP.ProgramTheory.Interpreter.Network.blocked_descent, LaPToP.ProgramTheory.Interpreter.Network.progress, LaPToP.ProgramTheory.Interpreter.Network.reach_of_netSpec, LaPToP.ProgramTheory.Interpreter.Network.netSpec_unique, LaPToP.ProgramTheory.Interpreter.Network.deadlock_top, LaPToP.ProgramTheory.Interpreter.Network.runNet, LaPToP.ProgramTheory.Interpreter.Network.runNet_correct, LaPToP.ProgramTheory.Interpreter.Lang.toNP, LaPToP.ProgramTheory.Interpreter.Lang.toNet, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sendRecv_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.buffer_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.deadlock_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.doubler_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.pipeline_net, LaPToP.ProgramTheory.Interpreter.Lang.Demo.poll_net, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv_exists, LaPToP.ProgramTheory.Interpreter.Network.Book.sendRecv_book, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer_reach, LaPToP.ProgramTheory.Interpreter.Network.Book.buffer_book, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait_normal, LaPToP.ProgramTheory.Interpreter.Network.Book.mutualWait_book")
+Communicating processes, run by a machine proved equal to the book's semantics.
+A network is processes, each with its own variables, its own clock and its own
+read and write cursors, joined by channels, each with one writer and any number
+of readers. In the book's semantics the scripts of the channels are constants
+that some choice makes consistent: every process runs to completion against
+them, an output finding its message, stamped with the writer's time, at its
+write cursor ($`M w = e ∧ T w = t`) and an input taking the message at its read
+cursor at time $`t ↑ (T r + 1)`, as in {uses "communication_timing"}[]; a channel
+declaration quantifies the scripts existentially, as in
+{uses "channel_declaration"}[]. A message never written makes its input wait
+until $`∞`.
+
+The machine runs the processes in turns, an output appending its message to the
+channel's script, an input waiting while its message is not there. The check
+$`\surd c` is the book's timed one, $`T\,r + 1 ≤ t`: it is answered once it is
+settled — the next message is there, or no process can send one before now
+(each has finished, or is at time $`t`, or waits for input that would bring it
+there). It is *determinate* (Kahn): two steps of different processes commute — an
+output only appends, two outputs are on different channels, and a settled check
+stays settled, since no process can send before $`t` ever again once none can —
+so the machine is confluent and reaches at most one configuration in which nothing can move,
+whatever the order of turns. It is *sound*: when every process finishes, the
+final states and the scripts it wrote are a behaviour of the book's semantics.
+It is *complete*: a behaviour of the book's semantics in which every process
+finishes at a finite time is reached by the machine. So the book's semantics has
+exactly one behaviour with finite times when the machine finishes, and when the
+machine stops with a process unfinished, every behaviour of the book's semantics
+has a process at time $`∞`: the deadlock of {uses "deadlock"}[], derived for
+every network. An executable round-robin runner computes the behaviour, and the
+concrete syntax runs a program with channels and a $`\|` as a network, with
+kernel-checked demonstrations: a message received one unit after it is sent, the
+book's buffer, a three-stage pipeline, the deadlock, and the recursive doubler
+$`S ⇐ c?. d!\,2×c. S` on input from the command line. This extends
+{uses "interpreter_time"}[].
+
+The hand expansions of Chapter 9 come out of it: as networks,
+$`c!\,e \| (c?. x:= c)`, the buffer, and the mutual wait have exactly the
+behaviours their channel declarations were computed to have — $`x′=e ∧ t′=t+1`,
+$`x′=7 ∧ t′=t+1`, and $`t′=∞` — each shown by running the machine and the
+theorems above.
+
+Honest scope. Each process is deterministic: its chunks are in the deterministic
+fragment. In the concrete syntax, a choice or a $`\|` may not surround
+communication (a local variable may: it is a scope of the process). Uniqueness and
+completeness are for behaviours with finite times; with a deadlock the book
+leaves the messages sent at time $`∞` arbitrary, and so does this account.
+:::
+
+:::proof "interpreter_network"
+Determinacy: a step of a process is determined (its chunks are deterministic,
+so their timed executions are unique); steps of two processes commute, by
+commuting list updates and function updates; Church–Rosser then gives
+confluence, and a configuration without steps is reached only by the empty run.
+Soundness: an invariant of every reachable configuration says each process got
+where it is by the book's steps against any scripts extending those written so
+far by messages sent no earlier than any time before which no process can send
+(so a check settled by quiet gets the book's answer), and each writer's cursor
+counts what it has written. Quiet lasts: a process that steps while none can
+send before $`t` is at $`t` or later after its step, and sends at $`t` or
+later. Completeness: follow the book's histories, which are determined by the
+scripts. While some process has not finished, one can take its next step on the
+machine; otherwise each unfinished process waits — for a message not yet
+written, until one unit after it was sent, or at a check not settled, until its
+own time. The writer of an awaited message waits until no later than it was
+sent, and a check not settled waits for a message sent before now or for a
+process behind it, which can only be waiting at a check itself; and the times
+are finite. That is an infinite descent in a well-founded order. Each step shortens the histories left, so the machine finishes, having
+written exactly the book's scripts.
+:::
+
+:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, LaPToP.ProgramTheory.CompileB4.Layout.Image, LaPToP.ProgramTheory.CompileB4.Layout.Laid, LaPToP.ProgramTheory.CompileB4.Layout.image_of_laid, LaPToP.ProgramTheory.CompileB4.Layout.Fit, LaPToP.ProgramTheory.CompileB4.Layout.build, LaPToP.ProgramTheory.CompileB4.Layout.build_laid, LaPToP.ProgramTheory.CompileB4.enter_runs, LaPToP.ProgramTheory.CompileB4.restore_runs, LaPToP.ProgramTheory.CompileB4.enc_div, LaPToP.ProgramTheory.CompileB4.enc_mod, LaPToP.ProgramTheory.CompileB4.ArrOk, LaPToP.ProgramTheory.CompileB4.VarsOk, LaPToP.ProgramTheory.CompileB4.addrCode, LaPToP.ProgramTheory.CompileB4.run_addr, LaPToP.ProgramTheory.CompileB4.store_runs, LaPToP.ProgramTheory.CompileB4.varsOk_store, LaPToP.ProgramTheory.CompileB4.writeArrs, LaPToP.ProgramTheory.CompileB4.sbyte_small, LaPToP.ProgramTheory.CompileB4.push_runs, LaPToP.ProgramTheory.CompileB4.store_loop, LaPToP.ProgramTheory.CompileB4.fill_runs, B4.step_cl, B4.step_rt, B4.step_dc, B4.step_cd, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
+A compiler from the integer fragment of the language to the b4 virtual machine,
+proved correct. b4 is a small stack machine with byte-addressed memory, its
+registers mapped into the first bytes, and data and control stacks; it has
+implementations in many languages, among them one in Lean, and that one is
+given a theory here: memory cells read back what was written, the stacks are
+lists, a fuelled run, and what each instruction the compiler uses does to the
+pointer, the stacks and memory.
+
+Variables live in 32-bit cells above the code; an integer is kept as its two's
+complement word and a binary as $`-1` or $`0`. An expression is computed on the
+data stack, a conditional expression with relative hops (so the code of an
+expression is the same wherever it is placed), $`∧` and $`∨` with b4's bitwise
+`an` and `or` on $`-1` and $`0`; an assignment stores the top of the stack in the variable's cell;
+$`\mathbf{if}` and $`\mathbf{while}` complement the condition, test it with a
+conditional hop, and jump with absolute jumps. Named statements — the
+specifications a program refines, and the ones the parser makes of
+$`\mathbf{do}`/$`\mathbf{exit}` and $`\mathbf{for}` loops — are laid out end
+to end from the start of code, each followed by a return, and a call is b4's
+`cl`, which keeps the return address on the control stack. A local variable
+(as parameters and simultaneous assignments use) keeps the variable's old value
+on the control stack while its scope runs, and puts it back at the end. An
+array — a variable holding a list, indexed $`A i` and assigned item by item,
+$`A i:= e` — has a cell for each item, after the variables' cells, as many as
+the list it starts with; the address of item $`i` is computed on the stack
+(`li 4 ml li a ad`) and read with `ri` or written with `wi`. An array keeps its
+length, so $`\#A` is a literal, and a list literal assigned whole,
+$`A:= [e_0; …; e_{k-1}]`, pushes every item before storing any, from the last,
+so that each item is computed from the old list. The theorem: whenever the
+language's execution takes a state $`σ` to $`σ'` with every value evaluated
+fitting in 32 bits, the loaded machine, run long enough, halts with the cells
+holding $`σ'`. Execution in 32 bits is an execution of the language, by the
+semantics of {uses "interpreter_soundness"}[].
+
+Honest scope. The fragment is assignment, sequence, $`\mathbf{if}`,
+$`\mathbf{while}`, calls of named statements (so recursion, procedures with
+parameters, and the loops the parser compiles to calls) and local variables,
+over integer and binary expressions with $`+ - ×`, $`\mathbf{div}` and
+$`\mathbf{mod}` by a positive divisor, $`<`, $`=`, negation and $`¬`, and items
+of arrays, at an index inside them; time and channels are compiled for networks
+({uses "interpreter_swarm"}[]); lists are compiled only as arrays of fixed
+length, never assigned whole, and the converse direction (that the machine does
+nothing the language does not allow) is not proved.
+:::
+
+:::proof "interpreter_b4"
+Each instruction's effect is proved from b4's definitions: a word written into
+memory reads back, as four bytes reassembled (by bit-blasting), and writing a
+cell leaves disjoint cells alone; the stack heights live in register cells, so
+pushing and popping is shown to append to and remove from a list. An
+expression's code is proved by induction on the expression to push its value,
+changing nothing else. A statement's code is proved by induction on the
+32-bit execution to take the cells from $`σ` to $`σ'` and end at the end of its
+code with the control stack as it found it, keeping everything below the
+variables — so the code itself — intact, which is what lets a loop run its own
+code again and a call find its named statement where it was laid. The
+execution carries the height of the control stack, which a call or a scope
+raises by one, so that the stack never overflows. The loader is shown to set up
+exactly the state the theorem asks for, and the layout to put each named
+statement where its calls go.
+:::
+
+:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.SStep.msteps, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.Cont.frames, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.PB, LaPToP.ProgramTheory.Interpreter.Lang.parseToksShadow, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees, LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.LStep")
+Communicating processes, compiled to b4, run as a swarm of machines, proved to
+compute the network. Each process of a network becomes its own b4 machine; the
+machines run side by side and reach their channels through b4's `io`
+instruction: with a value, a channel and `'s'` on the stack, the message goes on
+the channel's script stamped with the machine's clock (register `T`); with a
+channel and `'r'`, the next message is taken, waiting while there is none, and
+the clock moves to one past its sending time if that is later. `t:= t+1` adds
+one to the clock.
+
+The theorem: every run of the network machine of {uses "interpreter_network"}[]
+in which no value or time leaves 32 bits is matched step for step by a run of
+the swarm, and when every process has finished, every machine halts with its
+process's final variables in its cells and final time on its clock, and the
+channels hold the scripts the network wrote — which is the book's semantics of
+the network. The compiled statements are those of {uses "interpreter_b4"}[],
+with time and communication added: a process may call named statements and
+keep local variables around its communication (the network machine has a
+scope of its own for that, `NProc.scope`), so a $`\mathbf{for}` loop of
+outputs is a process.
+
+The command line runs programs this way with `interp --b4`: the language's own
+parser builds the compiler's statements beside each program it reads, and
+reports the first construct the compiler does not take; the program is
+compiled and run on one machine or a swarm. The self-test checks on the
+demonstrations (among them recursion, $`\mathbf{for}`, $`\mathbf{do}` with
+$`\mathbf{exit}`, and simultaneous assignment) that the machines compute what
+the interpreter and the network machine do, and a run warns when a value left
+32 bits, outside what the theorems cover.
+
+Honest scope. Forward simulation, and the correspondence of deadlocks
+({uses "interpreter_swarm_deadlock"}[]); that the swarm does nothing else
+in general is not proved. $`\surd c` runs on the swarm too — a check `io`
+answered when the message is there, and settled to false by the runner, when no
+machine can move, for the earliest machine waiting at one — and the self-test
+checks it against the network machine, but the simulation theorems do not yet
+cover it. That the statements the parser builds beside a
+program are that program (`Stmt.toProg`) is checked on the demonstrations, not
+proved.
+:::
+
+:::proof "interpreter_swarm"
+What is left of a process is related to the machine's code by a relation that
+lays the statements out one after another from the pointer, allowing the jumps
+that `if` and `while` leave behind. Each step of the network is then simulated:
+the machine first follows any jumps, then runs the code of the statement at
+hand, by the lemmas for expressions, assignments and conditions of the
+compiler's proof, by a lemma for the clock, or by the swarm's `io` for
+communication; runs of a single machine are runs of the swarm, since they never
+touch `io`. Writes go to the cells above the code, so the code, and with it what
+is left of every process, survives them. Returns and the ends of scopes are
+part of what is left, matched entry by entry with the control stack. At the
+end each machine follows its jumps to `hl` and halts.
+:::
+
+:::theorem "interpreter_swarm_deadlock" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency, deadlock, hehner-9.1.8") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileNet.Eff, LaPToP.ProgramTheory.CompileNet.stepAt_eff, LaPToP.ProgramTheory.CompileNet.apply_comm, LaPToP.ProgramTheory.CompileNet.swarm_diamond, LaPToP.ProgramTheory.CompileNet.swarm_confluent, LaPToP.ProgramTheory.CompileNet.Stuck, LaPToP.ProgramTheory.CompileNet.stuck_unique, LaPToP.ProgramTheory.CompileNet.run_spec, LaPToP.ProgramTheory.CompileNet.SNet.Waiting, LaPToP.ProgramTheory.CompileNet.SNet.Waiting.normal, LaPToP.ProgramTheory.CompileNet.waiting_book, LaPToP.ProgramTheory.CompileNet.wait_one, LaPToP.ProgramTheory.CompileNet.stuck_of_waiting, LaPToP.ProgramTheory.CompileNet.never_halts, LaPToP.ProgramTheory.CompileNet.no_finish_of_stuck, LaPToP.ProgramTheory.CompileNet.no_finish_of_run, B4.Swarm.owner")
+A swarm that stops is a network that deadlocks. Each channel of the swarm has
+one writer, its owner; a send by any other machine waits forever. Then steps of
+different machines commute — a send appends to its own channel, and a receive
+that could take a message still finds it after another machine's send — so the
+swarm is confluent, and reaches at most one state in which no machine can move,
+whatever order its machines run in.
+
+The theorems, for a network compiled as in {uses "interpreter_swarm"}[]: when
+the network, in 32 bits, reaches a deadlock — every process finished or waiting
+for input on its channel that has no message at its cursor, and not all
+finished — the swarm reaches a state where no machine can move and some machine
+is still waiting, and every run of the swarm that stops, stops there; the
+network machine of {uses "interpreter_network"}[] is then deadlocked as well,
+so in every behaviour of the book's semantics some process ends at time
+$`∞`. Conversely, when the swarm stops with some machine not halted, the
+network has no run in 32 bits in which every process finishes — which is what
+`interp --b4` reports as a deadlock.
+
+Honest scope. Within 32 bits: a network whose only runs leave 32 bits is not
+covered, and the converse speaks of runs in 32 bits.
+:::
+
+:::proof "interpreter_swarm_deadlock"
+A step of a machine is an effect — replace the machine, and append to a channel
+or replace its cursors — and the step is the same effect in any swarm that has
+the same machine and cursors and whose channels have grown. Two effects of
+different machines commute: replacements of different machines and cursors do,
+and two appends are on different channels, by the owners. So the swarm has the
+diamond property, is confluent by Church–Rosser, and has at most one stuck state
+reachable. From a deadlock of the network, the simulation brings the swarm into
+agreement with it; each machine whose process finished then halts, and each one
+whose process waits runs to its `io` and waits for a message that its channel's
+script, which the swarm holds, does not have: no machine can move. If the
+network could also finish in 32 bits, the simulation would bring the swarm to a
+state with every machine halted, also stuck — the same state, by uniqueness,
+which is a contradiction.
+:::
+
+:::theorem "interpreter_alloc" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, arrays, memory allocation") (effort := "large") (lean := "LaPToP.ProgramTheory.Alloc.Blk, LaPToP.ProgramTheory.Alloc.absorb, LaPToP.ProgramTheory.Alloc.claim, LaPToP.ProgramTheory.Alloc.alloc, LaPToP.ProgramTheory.Alloc.free, LaPToP.ProgramTheory.Alloc.Chain, LaPToP.ProgramTheory.Alloc.allocStmt, LaPToP.ProgramTheory.Alloc.allocSrc, LaPToP.ProgramTheory.Alloc.freeStmt, LaPToP.ProgramTheory.Alloc.merge_runs, LaPToP.ProgramTheory.Alloc.take_runs, LaPToP.ProgramTheory.Alloc.search_runs, LaPToP.ProgramTheory.Alloc.alloc_sEval, LaPToP.ProgramTheory.Alloc.free_sEval, LaPToP.ProgramTheory.Alloc.alloc_eval, LaPToP.ProgramTheory.Alloc.alloc_on_b4, LaPToP.ProgramTheory.Alloc.alloc_on_b4'")
+A memory allocator, written in the language and proved. It is the allocator of
+b4's `mm.b4a` (first fit, merging free neighbours as it searches, splitting off
+what a request leaves), rewritten over an array $`M` of cells: the heap is a
+chain of blocks, each a three-cell header — the next block ($`-1` at the last),
+the size of its data, and whether it is used — followed by its data.
+
+The theorems: on a heap whose chain holds the blocks $`bs`, asked for $`n`
+cells, the program runs in 32 bits and leaves a heap holding exactly what the
+list-level model $`\mathit{alloc}\ n\ bs` says — the blocks merged as far as
+the search went, the one taken split when what is left is at least four cells
+— answering in $`r` where the data of the block taken starts, or $`-1` when no
+block is big enough; $`M\ (r-1):= 0` frees it again, as the model's
+$`\mathit{free}`. Being execution in 32 bits, this is an execution of the
+language and, by {uses "interpreter_b4"}[], what the compiled program does on
+b4: loaded with a heap of up to 16000 cells, the machine halts with the
+heap's cells holding the model's blocks.
+
+Honest scope. The program's source text, read by the parser, is checked to be
+the statement proved by `interp --selftest`, not by a theorem; the model counts
+in cells, where `mm.b4a` counts in bytes (a header of 12, a split at 16).
+:::
+
+:::proof "interpreter_alloc"
+The heap is related to the blocks by a chain predicate that reads only the
+headers it reaches, so writing any other cell keeps it (a frame lemma), and
+blocks before a position are kept as a continuation: whatever chain starts
+there, the whole heap holds those blocks followed by it, in any memory that
+agrees below. The merging loop is proved by induction on the blocks after the
+current one: a free neighbour is absorbed by two header writes, and the chain
+after it is untouched. Taking a block is six writes when it splits — a new
+header inside the block's data, before the next block — and one otherwise. The
+search loop is proved by induction on the number of blocks, each round taking
+a used block or a merged free block that is too small into the blocks before.
+Every expression is shown to fit in 32 bits from the heap's bound.
+:::
+
+:::theorem "interpreter_backtrack" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, backtracking, hehner-5.4.0") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileBT.BCfg, LaPToP.ProgramTheory.CompileBT.BStep, LaPToP.ProgramTheory.CompileBT.BFails, LaPToP.ProgramTheory.CompileBT.RecOk, LaPToP.ProgramTheory.CompileBT.BRel, LaPToP.ProgramTheory.CompileBT.copy_runs, LaPToP.ProgramTheory.CompileBT.save_runs, LaPToP.ProgramTheory.CompileBT.pop_runs, LaPToP.ProgramTheory.CompileBT.rt_runs, LaPToP.ProgramTheory.CompileBT.sim_act, LaPToP.ProgramTheory.CompileBT.sim_choice, LaPToP.ProgramTheory.CompileBT.sim_ensureT, LaPToP.ProgramTheory.CompileBT.sim_ensureF, LaPToP.ProgramTheory.CompileBT.sim_fail, LaPToP.ProgramTheory.CompileBT.sim_done, LaPToP.ProgramTheory.CompileBT.bt_step, LaPToP.ProgramTheory.CompileBT.bt_steps, LaPToP.ProgramTheory.CompileBT.bt_init, LaPToP.ProgramTheory.CompileBT.bt_success, LaPToP.ProgramTheory.CompileBT.bt_failure, LaPToP.ProgramTheory.CompileBT.EvalK, LaPToP.ProgramTheory.CompileBT.Sol, LaPToP.ProgramTheory.CompileBT.bstep_sol, LaPToP.ProgramTheory.CompileBT.bt_sound, LaPToP.ProgramTheory.CompileBT.bt_fail_sound, LaPToP.ProgramTheory.CompileB4.Layout.rt, LaPToP.ProgramTheory.CompileB4.RT.copy, LaPToP.ProgramTheory.CompileB4.RT.save, LaPToP.ProgramTheory.CompileB4.RT.pop, LaPToP.ProgramTheory.CompileB4.failCode, LaPToP.ProgramTheory.CompileB4.Keeps")
+Backtracking — $`P\ \mathbf{or}\ Q` and $`\mathbf{ensure}\ c` of Section 5.4.0 —
+compiled to b4 and proved. A choice keeps a *choice point* above the variables'
+cells: the address of the code of the other choice, and a copy of every cell;
+then it runs the first choice. A false $`\mathbf{ensure}` takes the last
+choice point back — the copy into the cells — and jumps to the other choice;
+with none left, it sets a flag and halts. The code that keeps choice points is
+itself written in the language, over one array of memory's words, and compiled
+by the verified compiler; only the indirect jump to the other choice is
+written by hand.
+
+The language's backtracking is an abstract machine: what is left to run, its
+state, and the choice points, each what is left and the state to go back to.
+The theorems: the loaded machine simulates it step for step, so when
+backtracking runs to the end, the machine halts with the flag clear and the
+cells holding the state it ends in, and when backtracking fails, the machine
+halts with the flag set. What backtracking ends with is a poststate of the
+program, by the semantics of {uses "interpreter_soundness"}[], and when it
+fails the program has no poststate at all. `interp --b4` runs it, and its
+self-test checks it against the interpreter's search.
+
+Honest scope. Choices and failing $`\mathbf{ensure}`s are covered outside
+calls and local scopes, for a lone program (no channels, no $`\|`), without
+time, and in 32 bits; a search that never ends, or keeps more choice points
+than fit, is not.
+:::
+
+:::proof "interpreter_backtrack"
+The runtime's three programs — copy words, keep a choice point, take one back
+— are proved as programs, by induction on the words left to copy, about a list
+of integers; the verified compiler runs them on the machine's words. Statement
+runs are shown to leave memory above the cells alone, and below the base the
+code, so choice points survive the program's own steps, which are simulated as
+for a network's process. A choice is the runtime's save, then the first
+choice's code; a false $`\mathbf{ensure}` jumps to the failure code, which
+reads the count, takes the copy back and jumps, through the control stack, to
+the other choice's code — which, kept with the choice point, runs what is left.
+Every step of the abstract machine keeps the set of solutions — what is left
+and every choice point — exactly, so its end is a solution of the start, and a
+failure, with nothing left, shows the start has none.
+:::
+
+:::theorem "interpreter_prob_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, probability, hehner-5.7") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileB4.randStmt, LaPToP.ProgramTheory.CompileB4.randStmt_toProg, LaPToP.ProgramTheory.CompileProb.next, LaPToP.ProgramTheory.CompileProb.fix, LaPToP.ProgramTheory.CompileProb.coin, LaPToP.ProgramTheory.CompileProb.Des, LaPToP.ProgramTheory.CompileProb.des_det, LaPToP.ProgramTheory.CompileProb.Agree, LaPToP.ProgramTheory.CompileProb.eval_agree, LaPToP.ProgramTheory.CompileProb.coin_true, LaPToP.ProgramTheory.CompileProb.coin_false, LaPToP.ProgramTheory.CompileProb.det_sound, LaPToP.ProgramTheory.CompileProb.det_eval")
+Probabilistic choice — $`\mathbf{if}\ a/b\ \mathbf{then}\ P\ \mathbf{else}\ Q\ \mathbf{fi}`
+and $`x:= \mathit{rand}\ n` of Section 5.7 — on b4. Before it is compiled, each
+choice is made deterministic: a hidden variable holds a seed, which the choice
+advances by one step of the Lehmer generator $`z ↦ 16807 z \bmod (2^{31}-1)`
+(by Schrage's method, so every value stays within 32 bits), and the choice
+takes $`P` when $`z \bmod b < a`. The deterministic program is compiled and
+proved like any other ({uses "interpreter_b4"}[]). The theorem: whatever it
+computes in 32 bits, the original program may compute, but for the seed — a
+branch is taken only when it has a chance, since $`0 ≤ z \bmod b < b`. That the
+coin is fair, $`z \bmod b` spread evenly, is the generator's quality and is not
+proved; `interp --b4` seeds it from the clock (or `--seed`), and its self-test
+checks, over many seeds, that every outcome is one the program may have.
+:::
+
+:::proof "interpreter_prob_b4"
+By induction on the 32-bit execution of the deterministic program, related to the
+original by a relation that also admits a choice part way through, after the
+seed has moved on: the seed's own statements keep every other variable, the
+original's expressions do not read the seed and so have the same values in
+states that agree but for it, and a coin that comes up heads ($`z \bmod b < a`)
+shows $`0 < a/b`, tails ($`a ≤ z \bmod b`) shows $`a/b < 1`.
 :::

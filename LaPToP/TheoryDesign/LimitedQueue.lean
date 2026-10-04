@@ -342,9 +342,9 @@ theorem leave_refines (hn : 0 < n) :
       rcases hmode with ⟨hm, hfb, hpe, hQ⟩ | ⟨hm, hpe, hQ⟩
       · have hlt : f < b := lt_of_le_of_ne hfb fun h => hne (Or.inl ⟨hm, h⟩)
         refine ⟨by omega, by omega, hb, Or.inl ⟨hm, by omega, by omega, fun k hk => ?_⟩⟩
-        rw [if_pos (by omega), hQ (k + 1) (by omega), show f + (k + 1) = f + 1 + k by omega]
+        rw [ite_eq_left (by omega), hQ (k + 1) (by omega), show f + (k + 1) = f + 1 + k by omega]
       · refine ⟨by omega, by omega, hb, Or.inr ⟨hm, by omega, fun k hk => ?_⟩⟩
-        rw [if_pos (by omega), hQ (k + 1) (by omega), show f + (k + 1) = f + 1 + k by omega]
+        rw [ite_eq_left (by omega), hQ (k + 1) (by omega), show f + (k + 1) = f + 1 + k by omega]
     · dsimp only [D, Inside, Outside] at hfn ⊢
       have hfn' : f = n := by omega
       rcases hmode with ⟨hm, hfb, hpe, hQ⟩ | ⟨hm, hpe, hQ⟩
@@ -353,7 +353,7 @@ theorem leave_refines (hn : 0 < n) :
           by_contra h0
           exact hne (Or.inr ⟨hm, by omega, hfn'⟩)
         refine ⟨by omega, by omega, hb, Or.inl ⟨trivial, hb1, by omega, fun k hk => ?_⟩⟩
-        rw [if_pos (by omega), hQ (k + 1) (by omega), hfn', Nat.add_mod_left, Nat.mod_eq_of_lt (by omega),
+        rw [ite_eq_left (by omega), hQ (k + 1) (by omega), hfn', Nat.add_mod_left, Nat.mod_eq_of_lt (by omega),
           show 1 + k = k + 1 by omega]
   · rcases h with ⟨-, rfl⟩ | ⟨-, rfl⟩ <;> rfl
 

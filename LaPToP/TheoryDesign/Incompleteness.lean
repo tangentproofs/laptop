@@ -95,7 +95,7 @@ theorem transform_step : transform Dz step = (ok : Spec (Fin 3 × Unit)) := by
   constructor
   · intro h
     obtain ⟨_, rfl, h2⟩ := h 0 rfl
-    simp only [Fin.val_zero, lt_irrefl, if_false] at h2
+    simp only [Fin.val_zero, lt_irrefl, ite_false] at h2
     exact Prod.ext (Prod.mk.inj h2).1 rfl
   · rintro rfl _ rfl
     exact ⟨0, rfl, by simp⟩

@@ -139,11 +139,11 @@ theorem apply_orElse (hx : x ∈ (orElse f g).domain) :
 
 /-- `(f | g) x = f x` for `x: ☐f`. -/
 theorem apply_orElse_left (h : x ∈ f.domain) :
-    (orElse f g).apply x (Or.inl h) = f.apply x h := dif_pos h
+    (orElse f g).apply x (Or.inl h) = f.apply x h := dite_eq_left h
 
 /-- `(f | g) x = g x` for `x: ☐g` with `¬ x: ☐f`. -/
 theorem apply_orElse_right (h : x ∉ f.domain) (hg : x ∈ g.domain) :
-    (orElse f g).apply x (Or.inr hg) = g.apply x hg := dif_neg h
+    (orElse f g).apply x (Or.inr hg) = g.apply x hg := dite_eq_right h
 
 end SelectiveUnion
 

@@ -119,10 +119,10 @@ theorem randAssign_id (n : ℤ) : randAssign n (fun _ r => r) = fun _ x' => uran
   simp only [randAssign, urand, ind]
   congr 1
   by_cases h : 0 ≤ x' ∧ x' < n
-  · rw [if_pos h]
-    exact (Finset.sum_eq_single_of_mem x' (Finset.mem_Ico.2 h) fun r _ hr => if_neg (Ne.symm hr)).trans (if_pos rfl)
-  · rw [if_neg h]
-    refine Finset.sum_eq_zero fun r hr => if_neg fun heq => h ?_
+  · rw [ite_eq_left h]
+    exact (Finset.sum_eq_single_of_mem x' (Finset.mem_Ico.2 h) fun r _ hr => ite_eq_right (Ne.symm hr)).trans (ite_eq_left rfl)
+  · rw [ite_eq_right h]
+    refine Finset.sum_eq_zero fun r hr => ite_eq_right fun heq => h ?_
     subst heq
     exact Finset.mem_Ico.1 hr
 
@@ -245,7 +245,7 @@ theorem diceBody_tdist : diceBody tdist = tdist := by
     have h2 : t + 1 ≤ t' := h
     have h3 : t' ≠ t := by omega
     have h4 : t' - t = (t' - (t + 1)) + 1 := by omega
-    simp only [h1, h2, h3, if_true, if_false]
+    simp only [h1, h2, h3, ite_true, ite_false]
     rw [h4, pow_succ]
     ring
 
