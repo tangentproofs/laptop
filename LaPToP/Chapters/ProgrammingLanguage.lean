@@ -31,6 +31,7 @@ import LaPToP.ProgramTheory.CompileNet
 import LaPToP.ProgramTheory.CompileNetDeadlock
 import LaPToP.ProgramTheory.B4Lang
 import LaPToP.ProgramTheory.Alloc
+import LaPToP.ProgramTheory.CompileConverse
 
 open Verso.Genre
 open Verso.Genre.Manual
@@ -1914,6 +1915,37 @@ the other choice's code — which, kept with the choice point, runs what is left
 Every step of the abstract machine keeps the set of solutions — what is left
 and every choice point — exactly, so its end is a solution of the start, and a
 failure, with nothing left, shows the start has none.
+:::
+
+:::theorem "interpreter_b4_converse" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, backtracking") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileNet.Idle, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileConverse.RunsFor, LaPToP.ProgramTheory.CompileConverse.le_of_halts, LaPToP.ProgramTheory.CompileConverse.size, LaPToP.ProgramTheory.CompileConverse.bt_step_progress, LaPToP.ProgramTheory.CompileConverse.Final, LaPToP.ProgramTheory.CompileConverse.reaches_final, LaPToP.ProgramTheory.CompileConverse.Stuck, LaPToP.ProgramTheory.CompileConverse.converse")
+The converse of {uses "interpreter_b4"}[] and {uses "interpreter_backtrack"}[]: the
+machine does nothing the language disallows. If the loaded machine halts, one of
+three things holds:
+- the program ends in a state $`t` that the language's semantics allows, the
+  machine's cells hold $`t`, and the failure flag is clear;
+- the program has no poststate at all, and the flag is set;
+- the language's own 32-bit execution got stuck on the way: some value would
+  have left 32 bits, an index its array, or the program used what the compiler
+  leaves out.
+
+The theorem is stated of backtracking's abstract machine. For a program without
+$`\mathbf{or}` and $`\mathbf{ensure}` that is simply its 32-bit run.
+
+Honest scope. A machine that does not halt is not covered, and neither are
+networks on a swarm.
+:::
+
+:::proof "interpreter_b4_converse"
+Every step of the 32-bit execution either moves the machine at least one
+instruction, or is idle (an $`\mathbf{ok}`, the split of a sequence, an empty list
+literal, a true $`\mathbf{ensure}`) and makes what is left to run smaller. A choice
+or a failure changes the machine's count of choice points, so it moves it. The
+machine is deterministic, so a machine that halts after $`N` instructions reached
+every state on its way within $`N` instructions. The pair (instructions still to
+come, size of what is left) then goes down at every step of the execution, which
+therefore reaches a configuration with no step after it: the end, a failure, or
+stuck. At the end, the forward theorem puts the end state in the machine's cells,
+and a halted machine stays as it is. At a failure, the machine has set its flag.
 :::
 
 :::theorem "interpreter_prob_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, probability, hehner-5.7") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileB4.randStmt, LaPToP.ProgramTheory.CompileB4.randStmt_toProg, LaPToP.ProgramTheory.CompileProb.next, LaPToP.ProgramTheory.CompileProb.fix, LaPToP.ProgramTheory.CompileProb.coin, LaPToP.ProgramTheory.CompileProb.Des, LaPToP.ProgramTheory.CompileProb.des_det, LaPToP.ProgramTheory.CompileProb.Agree, LaPToP.ProgramTheory.CompileProb.eval_agree, LaPToP.ProgramTheory.CompileProb.coin_true, LaPToP.ProgramTheory.CompileProb.coin_false, LaPToP.ProgramTheory.CompileProb.det_sound, LaPToP.ProgramTheory.CompileProb.det_eval")
