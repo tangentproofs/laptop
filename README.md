@@ -49,6 +49,7 @@ echo 'A:= [0;0;0;0;0]. A 2:= 3. i:= 2. A i:= 4. b:= A i = A 2' | lake exe interp
 lake exe interp --L='[5;3;9;1]' sort.ap   # a program in a file, with an initial list
 lake exe interp --demo=listSum --L='[3;1;4;1;5]'   # the refinements of Section 4.1.1
 lake exe interp --demo=deepExit                    # do ... exit 2 when ... od
+echo 'b:= true /\ false == false /\ true' | lake exe interp   # => b = ⊤
 ```
 
 A program file may be written the book's way, as refinements; a name on the
