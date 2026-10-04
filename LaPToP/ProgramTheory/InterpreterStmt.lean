@@ -68,7 +68,8 @@ def Stmt.toProg : Stmt → P
   -- Communication means something only in a network (`CompileNet`); alone, it has
   -- no behaviour.
   | .send _ _ | .recv _ _ | .check _ _ => .ensure fun _ => false
-  | .store x i e => assignIdx x [i] e
+  -- `A i j:= e` is kept with the path as a list literal, `[i; j]`
+  | .store x i e => assignIdx x (i.items?.getD [i]) e
   | .choice p q => .or p.toProg q.toProg
   | .ensure c => Lang.ensure c
   | .fill x es => Lang.assign x (Exp.ofList es)
@@ -77,6 +78,14 @@ def Stmt.toProg : Stmt → P
   | .scope x e p => declare x e p.toProg
   | .ret => .ok
   | .restore x v => .assign x fun _ => v
+
+/-- A statement with no communication: `toProg` means it (the parser's program
+for a communication is the network's mark, `netSend`, `netRecv`, `netCheck`). -/
+def Stmt.commFree : Stmt → Bool
+  | .send _ _ | .recv _ _ | .check _ _ => false
+  | .seq p q | .cond _ p q | .choice p q | .prob _ _ p q => p.commFree && q.commFree
+  | .loop _ p | .scope _ _ p => p.commFree
+  | _ => true
 
 /-- The body of `x:= rand n` as a statement (`Lang.randBody`). -/
 def randStmt (k x hn hi : ℕ) : Stmt :=

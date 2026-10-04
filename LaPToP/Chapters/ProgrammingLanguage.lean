@@ -1719,12 +1719,13 @@ semantics of {uses "interpreter_soundness"}[].
 Honest scope. The fragment is assignment, sequence, $`\mathbf{if}`,
 $`\mathbf{while}`, calls of named statements (so recursion, procedures with
 parameters, and the loops the parser compiles to calls) and local variables,
-over integer and binary expressions with $`+ - ×`, $`\mathbf{div}` and
-$`\mathbf{mod}` by a positive divisor, $`<`, $`=`, negation and $`¬`, and items
-of arrays, at an index inside them; time and channels are compiled for networks
-({uses "interpreter_swarm"}[]); lists are compiled only as arrays of fixed
-length, never assigned whole, and the converse direction (that the machine does
-nothing the language does not allow) is not proved.
+over integer, binary and real expressions with $`+ - ×`, $`\mathbf{div}` and
+$`\mathbf{mod}` by a positive divisor, $`<`, $`=`, negation, $`¬ ∧ ∨`, conditional
+expressions, items of arrays at an index inside them, and their lengths; time and
+channels are compiled for networks ({uses "interpreter_swarm"}[]). Lists are
+compiled only as arrays of fixed length. The converse direction, that a machine
+that halts does nothing the language does not allow, is
+{uses "interpreter_b4_converse"}[].
 :::
 
 :::proof "interpreter_b4"
@@ -1744,7 +1745,7 @@ exactly the state the theorem asks for, and the layout to put each named
 statement where its calls go.
 :::
 
-:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.SStep.msteps, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.Cont.frames, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.PB, LaPToP.ProgramTheory.Interpreter.Lang.parseToksShadow, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees, LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.LStep")
+:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.SStep.msteps, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.Cont.frames, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.PB, LaPToP.ProgramTheory.Interpreter.Lang.parseToksShadow, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees, LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.LStep, LaPToP.ProgramTheory.Interpreter.Lang.PB.Sound, LaPToP.ProgramTheory.Interpreter.Lang.PB.one_sound, LaPToP.ProgramTheory.Interpreter.Lang.resolvePar_toProg, LaPToP.ProgramTheory.Interpreter.Lang.shadow_sound, LaPToP.ProgramTheory.Interpreter.Lang.Exp.toB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.Stmt.toB4_toProg, LaPToP.ProgramTheory.Interpreter.Lang.divB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.powB4_eval")
 Communicating processes, compiled to b4, run as a swarm of machines, proved to
 compute the network. Each process of a network becomes its own b4 machine; the
 machines run side by side and reach their channels through b4's `io`
@@ -1780,9 +1781,14 @@ in general is not proved. $`\surd c` runs on the swarm too — a check `io`
 answered when the message is there, and settled to false by the runner, when no
 machine can move, for the earliest machine waiting at one — and the self-test
 checks it against the network machine, but the simulation theorems do not yet
-cover it. That the statements the parser builds beside a
-program are that program (`Stmt.toProg`) is checked on the demonstrations, not
-proved.
+cover it. That the statements the parser builds beside a program are that
+program is proved: every pair the parser builds carries the proof
+(`PB.sound`), and `shadow_sound` lifts it to the parser's two results. That the
+compiler's rewrites (`≠ ≤ > ≥ ⇒`, $`a ^ n`, $`\mathbf{div}` and $`\mathbf{mod}` by
+a negative divisor) keep the meaning is proved too (`Exp.toB4_eval`,
+`Stmt.toB4_toProg`). The further rewrites `interp --b4` makes just before
+compiling are checked by the self-test, not proved: two-dimensional arrays by
+rows, the operators on reals made explicit, and array copies item by item.
 :::
 
 :::proof "interpreter_swarm"

@@ -313,11 +313,12 @@ theorem det_sound {L : Layout} {z : ℕ} (Od : ℕ → Stmt) (hdefs : ∀ k, L.d
       refine ⟨_, .newLocal ev, ?_⟩
       rw [hs x hxz]; exact a.update _
     | leaf hl => simp [Stmt.leaf] at hl
-  | @store d x i e s _ _ =>
+  | @store d x i e s hfi _ =>
     refine ⟨fun O hD hO s₀ hs => ?_, fun hso => by cases hso⟩
     cases hD with
     | store =>
       obtain ⟨hxz, hri, hre⟩ := hO
+      rw [toProg_store hfi]
       refine ⟨_, .assign, ?_⟩
       simp only [List.map]
       rw [← hs x hxz, ← eval_agree hs i hri, ← eval_agree hs e hre]; exact hs.update _

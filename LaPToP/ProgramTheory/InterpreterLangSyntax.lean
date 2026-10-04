@@ -260,21 +260,33 @@ def validName (w : String) : Bool :=
 
 open LaPToP.ProgramTheory.CompileB4 (Stmt randStmt)
 
+/-- What the shadow statements must be: one or more, and when there is one, with
+no communication, the program as read. -/
+def PB.Sound (p : P) (s : Except String (List Stmt)) : Prop :=
+  ∀ ss, s = .ok ss → ss ≠ [] ∧ ∀ st, ss = [st] → st.commFree = true → st.toProg = p
+
 /-- A program as read, with what the b4 compiler makes of it (`CompileB4.Stmt`):
-the statements of its processes — one, unless it is a `||` — or why it has none. -/
+the statements of its processes — one, unless it is a `||` — or why it has none.
+The two agree (`sound`): a lone statement without communication means the program
+(`Stmt.toProg`). -/
 structure PB where
   /-- The program. -/
   p : P
   /-- Its processes' statements, or why the compiler does not take it. -/
   s : Except String (List Stmt)
+  /-- They agree. -/
+  sound : PB.Sound p s
 
 namespace PB
 
 /-- A program the compiler takes as the statement `s`. -/
-def of (p : P) (s : Stmt) : PB := ⟨p, .ok [s]⟩
+def of (p : P) (s : Stmt) (h : s.commFree = true → s.toProg = p) : PB :=
+  ⟨p, .ok [s], fun ss e => by
+    cases e; exact ⟨by simp, fun st hs hc => by cases hs; exact h hc⟩⟩
 
 /-- A program the compiler does not take. -/
-def no (p : P) (what : String) : PB := ⟨p, .error s!"the b4 compiler does not take {what}"⟩
+def no (p : P) (what : String) : PB :=
+  ⟨p, .error s!"the b4 compiler does not take {what}", fun _ e => by cases e⟩
 
 /-- The one statement of a program that is not a `||`. -/
 def one (b : PB) : Except String Stmt := do
@@ -282,36 +294,107 @@ def one (b : PB) : Except String Stmt := do
   | [s] => .ok s
   | _ => .error "the b4 compiler takes a || only as the whole program, each process in parentheses"
 
+theorem one_ok {b : PB} {st : Stmt} (h : b.one = .ok st) : b.s = .ok [st] := by
+  unfold one at h
+  cases hs : b.s with
+  | error e => rw [hs] at h; cases h
+  | ok ss =>
+    rw [hs] at h
+    match ss, h with
+    | [s], h => cases h; rfl
+
+/-- The statement of a lone program means it, if it does not communicate. -/
+theorem one_sound {b : PB} {st : Stmt} (h : b.one = .ok st) (hc : st.commFree = true) :
+    st.toProg = b.p :=
+  (b.sound _ (one_ok h)).2 st rfl hc
+
+/-- A statement built of the lone statements of parts. -/
+theorem sound_of {p : P} {mk : Stmt → Stmt → Stmt} {a b : PB}
+    (h : ∀ sa sb, a.one = .ok sa → b.one = .ok sb → (mk sa sb).commFree = true →
+      (mk sa sb).toProg = p) :
+    Sound p (do .ok [mk (← a.one) (← b.one)]) := by
+  intro ss e
+  cases ha : a.one with
+  | error _ => rw [ha] at e; cases e
+  | ok sa =>
+    cases hb : b.one with
+    | error _ => rw [ha, hb] at e; cases e
+    | ok sb =>
+      rw [ha, hb] at e; cases e
+      exact ⟨by simp, fun st hs hc => by cases hs; exact h sa sb ha hb hc⟩
+
+theorem sound_of₁ {p : P} {mk : Stmt → Stmt} {a : PB}
+    (h : ∀ sa, a.one = .ok sa → (mk sa).commFree = true → (mk sa).toProg = p) :
+    Sound p (do .ok [mk (← a.one)]) := by
+  intro ss e
+  cases ha : a.one with
+  | error _ => rw [ha] at e; cases e
+  | ok sa =>
+    rw [ha] at e; cases e
+    exact ⟨by simp, fun st hs hc => by cases hs; exact h sa ha hc⟩
+
 /-- `ok`. -/
-def ok : PB := of .ok .ok
+def ok : PB := of .ok .ok fun _ => rfl
 
 /-- A call. -/
-def call (k : ℕ) : PB := of (.call k) (.call k)
+def call (k : ℕ) : PB := of (.call k) (.call k) fun _ => rfl
 
 /-- `x:= e`. -/
-def assign (x : ℕ) (e : Exp) : PB := of (Lang.assign x e) (.assign x e)
+def assign (x : ℕ) (e : Exp) : PB := of (Lang.assign x e) (.assign x e) fun _ => rfl
 
 /-- `P. Q`. -/
-def seq (a b : PB) : PB := ⟨.seq a.p b.p, do .ok [.seq (← a.one) (← b.one)]⟩
+def seq (a b : PB) : PB :=
+  ⟨.seq a.p b.p, do .ok [.seq (← a.one) (← b.one)], sound_of fun sa sb ha hb hc => by
+    simp only [Stmt.commFree, Bool.and_eq_true] at hc
+    simp [Stmt.toProg, one_sound ha hc.1, one_sound hb hc.2]⟩
 
 /-- `if c then P else Q fi`. -/
-def ifThen (c : Exp) (a b : PB) : PB := ⟨Lang.ifThen c a.p b.p, do .ok [.cond c (← a.one) (← b.one)]⟩
+def ifThen (c : Exp) (a b : PB) : PB :=
+  ⟨Lang.ifThen c a.p b.p, do .ok [.cond c (← a.one) (← b.one)], sound_of fun sa sb ha hb hc => by
+    simp only [Stmt.commFree, Bool.and_eq_true] at hc
+    simp [Stmt.toProg, one_sound ha hc.1, one_sound hb hc.2]⟩
 
 /-- `while c do P od`. -/
-def loop (c : Exp) (a : PB) : PB := ⟨Lang.loop c a.p, do .ok [.loop c (← a.one)]⟩
+def loop (c : Exp) (a : PB) : PB :=
+  ⟨Lang.loop c a.p, do .ok [.loop c (← a.one)], sound_of₁ fun sa ha hc => by
+    simp only [Stmt.commFree] at hc
+    simp [Stmt.toProg, one_sound ha hc]⟩
 
 /-- `new x := e in P end`. -/
-def declare (x : ℕ) (e : Exp) (a : PB) : PB := ⟨Lang.declare x e a.p, do .ok [.scope x e (← a.one)]⟩
+def declare (x : ℕ) (e : Exp) (a : PB) : PB :=
+  ⟨Lang.declare x e a.p, do .ok [.scope x e (← a.one)], sound_of₁ fun sa ha hc => by
+    simp only [Stmt.commFree] at hc
+    simp [Stmt.toProg, one_sound ha hc]⟩
 
 /-- `P or Q`. -/
-def choice (a b : PB) : PB := ⟨.or a.p b.p, do .ok [.choice (← a.one) (← b.one)]⟩
+def choice (a b : PB) : PB :=
+  ⟨.or a.p b.p, do .ok [.choice (← a.one) (← b.one)], sound_of fun sa sb ha hb hc => by
+    simp only [Stmt.commFree, Bool.and_eq_true] at hc
+    simp [Stmt.toProg, one_sound ha hc.1, one_sound hb hc.2]⟩
 
 /-- `if a/b then P else Q fi`. -/
 def prob (a b : Exp) (p q : PB) : PB :=
-  ⟨probIf a b p.p q.p, do .ok [.prob a b (← p.one) (← q.one)]⟩
+  ⟨probIf a b p.p q.p, do .ok [.prob a b (← p.one) (← q.one)], sound_of fun sa sb ha hb hc => by
+    simp only [Stmt.commFree, Bool.and_eq_true] at hc
+    simp [Stmt.toProg, one_sound ha hc.1, one_sound hb hc.2]⟩
 
 /-- `P || Q`. -/
-def par (a b : PB) : PB := ⟨.par (fun _ => false) a.p b.p, do .ok ((← a.s) ++ (← b.s))⟩
+def par (a b : PB) : PB :=
+  ⟨.par (fun _ => false) a.p b.p, do .ok ((← a.s) ++ (← b.s)), fun ss e => by
+    cases ha : a.s with
+    | error _ => rw [ha] at e; cases e
+    | ok sa =>
+      cases hb : b.s with
+      | error _ => rw [ha, hb] at e; cases e
+      | ok sb =>
+        rw [ha, hb] at e; cases e
+        have h₁ := (a.sound _ ha).1; have h₂ := (b.sound _ hb).1
+        refine ⟨by simp [h₁], fun st hs _ => ?_⟩
+        -- two processes, each with a statement, are never one statement
+        have := congrArg List.length hs
+        simp only [List.length_append, List.length_singleton] at this
+        have := List.length_pos_of_ne_nil h₁; have := List.length_pos_of_ne_nil h₂
+        omega⟩
 
 end PB
 
@@ -383,7 +466,7 @@ def PS.checksThen (st : PS) (cs : List ℕ) (p : PB) : PB :=
   cs.eraseDups.foldr (fun k acc => match st.chans[k]? with
     | some (c, _, _) =>
       match st.names.idxOf? ("#" ++ c ++ ".ready") with
-      | some q => PB.seq (PB.of (netCheck q) (.check k q)) acc
+      | some q => PB.seq (PB.of (netCheck q) (.check k q) fun h => by simp [Stmt.commFree] at h) acc
       | none => acc
     | none => acc) p
 
@@ -933,10 +1016,10 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
   | f + 1 =>
     match st.toks with
     | .word "ok" :: ts => .ok (PB.ok, st.at ts)
-    | .word "tick" :: ts => .ok (PB.of .tick .tick, st.at ts)
+    | .word "tick" :: ts => .ok (PB.of .tick .tick fun _ => rfl, st.at ts)
     | .word "ensure" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
-      .ok (st.withChecks (PB.of (ensure c) (.ensure c)))
+      .ok (st.withChecks (PB.of (ensure c) (.ensure c) fun _ => rfl))
     | .word "assert" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
       .ok (st.withChecks (PB.no (assert c) "'assert'"))
@@ -996,12 +1079,13 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
       | some (_, M, r), some k => do
         let (e, st) ← parseExp f (st.at ts)
         .ok (st.withChecks (if st.net then PB.of (netSend r e) (.send k e)
+            (fun h => by simp [Stmt.commFree] at h)
           else PB.no (output M e) "a channel outside a network"))
       | _, _ => .error s!"'{c}' is not a channel"
     | .word c :: .sym "?" :: ts =>
       match st.chans.find? (·.1 == c), st.chans.findIdx? (·.1 == c) with
       | some (_, M, r), some k =>
-        .ok (if st.net then PB.of (netRecv M) (.recv k M)
+        .ok (if st.net then PB.of (netRecv M) (.recv k M) (fun h => by simp [Stmt.commFree] at h)
           else PB.no (input M r) "a channel outside a network", st.at ts)
       | _, _ => .error s!"'{c}' is not a channel"
     | .word "exit" :: _ =>
@@ -1051,16 +1135,22 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           let (hn, st) := newHidden st
           let (hi, st) := newHidden st
           let (k, st) := newProc "rand" st
-          let st := st.define k ⟨randBody k x hn hi, .ok [randStmt k x hn hi]⟩
+          let st := st.define k (PB.of (randBody k x hn hi) (randStmt k x hn hi) fun _ => rfl)
           .ok (st.withChecks (PB.declare hn e (PB.declare hi (.lit (.int 0)) (PB.call k))))
         | _ => do
           let (idx, st) ← parseTarget f st
           let (e, st) ← parseExp f st
           match idx with
           | [] => .ok (st.withChecks (PB.assign x e))
-          | [i] => .ok (st.withChecks (PB.of (assignIdx x [i] e) (.store x i e)))
+          | [i] =>
+            -- as an index, `i` is no list literal (`parseAtom` reads `[` as a list)
+            match hi : i.items? with
+            | none => .ok (st.withChecks (PB.of (assignIdx x [i] e) (.store x i e) fun _ => by
+                simp [Stmt.toProg, hi]))
+            | some _ => .ok (st.withChecks (PB.no (assignIdx x [i] e) "a list as an index"))
           -- the b4 compiler lays a two-dimensional array out by rows (`B4Program.prepare`)
-          | [i, j] => .ok (st.withChecks (PB.of (assignIdx x idx e) (.store x (Exp.ofList [i, j]) e)))
+          | [i, j] => .ok (st.withChecks (PB.of (assignIdx x [i, j] e) (.store x (Exp.ofList [i, j]) e)
+              fun _ => by simp [Stmt.toProg]))
           | _ => .ok (st.withChecks (PB.no (assignIdx x idx e) "an assignment at more than two indices"))
     | t :: _ => .error s!"expected a statement, found '{t.render}'"
     | [] => .error "expected a statement, found the end of the program"
@@ -1236,6 +1326,160 @@ def parseToksShadow (names : List String) (ts : Toks) : Except String Shadow := 
     | .ok s => .ok (k, s)
     | .error e => throw s!"in {st.procs.getD k "?"}: {e}"
   .ok ⟨procs, defs, st.names, st.chans⟩
+
+/-! ### The shadow statements are the program -/
+
+/-- Settling the `||`s leaves a program without any alone. -/
+theorem resolvePar_toProg (w : ℕ → List ℕ) (names : List String) :
+    ∀ s : Stmt, resolvePar w names s.toProg = .ok s.toProg := by
+  intro s
+  induction s with
+  | seq p q ihp ihq => simp [Stmt.toProg, resolvePar, ihp, ihq, bind, Except.bind, pure, Except.pure]
+  | cond c p q ihp ihq =>
+    simp [Stmt.toProg, ifThen, resolvePar, ihp, ihq, bind, Except.bind, pure, Except.pure]
+  | loop c p ih => simp [Stmt.toProg, Lang.loop, resolvePar, ih, bind, Except.bind, pure, Except.pure]
+  | scope x e p ih => simp [Stmt.toProg, declare, resolvePar, ih, bind, Except.bind, pure, Except.pure]
+  | choice p q ihp ihq => simp [Stmt.toProg, resolvePar, ihp, ihq, bind, Except.bind, pure, Except.pure]
+  | _ => rfl
+
+theorem mapM_forall₂ {α β : Type} {f : α → Except String β} :
+    ∀ {l : List α} {l' : List β}, l.mapM f = .ok l' → List.Forall₂ (fun a b => f a = .ok b) l l'
+  | [], l', h => by simp [List.mapM_nil, pure, Except.pure] at h; subst h; exact .nil
+  | a :: l, l', h => by
+    simp only [List.mapM_cons, bind, Except.bind, pure, Except.pure] at h
+    cases ha : f a with
+    | error => simp [ha] at h
+    | ok b =>
+      cases hl : l.mapM f with
+      | error => simp [ha, hl] at h
+      | ok bs => simp [ha, hl] at h; subst h; exact .cons ha (mapM_forall₂ hl)
+
+theorem one_mapM {bodies : List (ℕ × PB)} {defs : List (ℕ × Stmt)} {msg : ℕ × PB → String → String}
+    (h : bodies.mapM (fun x : ℕ × PB => match x.2.one with
+      | .ok s => (.ok (x.1, s) : Except String (ℕ × Stmt))
+      | .error e => throw (msg x e)) = .ok defs) :
+    ∀ k b, (k, b) ∈ defs → ∃ pb, (k, pb) ∈ bodies ∧ pb.one = .ok b := by
+  intro k b hb
+  induction bodies generalizing defs with
+  | nil => simp [List.mapM_nil, pure, Except.pure] at h; subst h; simp at hb
+  | cons x bodies ih =>
+    simp only [List.mapM_cons, bind, Except.bind, pure, Except.pure] at h
+    split at h
+    · cases h
+    · rename_i y hy
+      split at h
+      · cases h
+      · rename_i ys hys
+        simp only [Except.ok.injEq] at h; subst h
+        split at hy
+        · rename_i s hs
+          simp only [Except.ok.injEq] at hy; subst hy
+          rcases List.mem_cons.mp hb with e | hb
+          · simp only [Prod.mk.injEq] at e; obtain ⟨rfl, rfl⟩ := e
+            exact ⟨x.2, by simp, hs⟩
+          · obtain ⟨pb, hpb, hone⟩ := ih hys hb
+            exact ⟨pb, List.mem_cons_of_mem _ hpb, hone⟩
+        · cases hy
+
+theorem resolve_mapM {look : ℕ → List ℕ} {names : List String} {l : List (ℕ × P)} {l' : List (ℕ × P)}
+    (h : l.mapM (fun x : ℕ × P => (do .ok (x.1, ← resolvePar look names x.2) : Except String (ℕ × P)))
+      = .ok l') :
+    ∀ k p, (k, p) ∈ l → ∃ q, (k, q) ∈ l' ∧ resolvePar look names p = .ok q := by
+  intro k p hp
+  induction l generalizing l' with
+  | nil => simp at hp
+  | cons x l ih =>
+    simp only [List.mapM_cons, bind, Except.bind, pure, Except.pure] at h
+    split at h
+    · cases h
+    · rename_i y hy
+      split at h
+      · cases h
+      · rename_i ys hys
+        simp only [Except.ok.injEq] at h; subst h
+        split at hy
+        · cases hy
+        · rename_i q hq
+          simp only [Except.ok.injEq] at hy; subst hy
+          rcases List.mem_cons.mp hp with e | hp
+          · subst e; exact ⟨q, by simp, hq⟩
+          · obtain ⟨q', hq', hr⟩ := ih hys hp
+            exact ⟨q', List.mem_cons_of_mem _ hq', hr⟩
+
+theorem resolveProgram_ok {prog prog' : Program} (h : resolveProgram prog = .ok prog') :
+    ∃ look, resolvePar look prog.names prog.main = .ok prog'.main ∧
+      ∀ k p, (k, p) ∈ prog.defs → ∃ q, (k, q) ∈ prog'.defs ∧ resolvePar look prog.names p = .ok q := by
+  unfold resolveProgram at h
+  simp only [bind, Except.bind, pure, Except.pure] at h
+  split at h
+  · cases h
+  · rename_i m hm
+    split at h
+    · cases h
+    · rename_i ds hds
+      simp only [Except.ok.injEq] at h; subst h
+      exact ⟨_, hm, resolve_mapM hds⟩
+
+theorem defs_sound {bodies : List (ℕ × PB)} {defs : List (ℕ × Stmt)} {msg : ℕ × PB → String → String}
+    {m : P} {names : List String} {procs : List String} {prog : Program}
+    (hd : bodies.mapM (fun x : ℕ × PB => match x.2.one with
+      | .ok s => (.ok (x.1, s) : Except String (ℕ × Stmt))
+      | .error e => throw (msg x e)) = .ok defs)
+    (hr : resolveProgram ⟨m, bodies.map (fun x => (x.1, x.2.p)), names, procs⟩ = .ok prog) :
+    ∀ k b, (k, b) ∈ defs → b.commFree = true → (k, b.toProg) ∈ prog.defs := by
+  intro k b hb hc
+  obtain ⟨pb, hpb, hone⟩ := one_mapM hd k b hb
+  obtain ⟨_, -, hld⟩ := resolveProgram_ok hr
+  obtain ⟨q, hq, hres⟩ := hld k pb.p (List.mem_map.mpr ⟨(k, pb), hpb, rfl⟩)
+  rw [← PB.one_sound hone hc, resolvePar_toProg] at hres
+  cases hres; exact hq
+
+/-- **The parser's two readings agree.** When a token list reads both as a
+program (`parseToksMode`) and, for the b4 compiler, as statements
+(`parseToksShadow`), a lone statement without communication means the program's
+main part, and each named statement without communication means its
+definition. -/
+theorem shadow_sound {names : List String} {ts : Toks} {sh : Shadow} {prog : Program}
+    (hs : parseToksShadow names ts = .ok sh) (hm : parseToksMode true names ts = .ok prog) :
+    (∀ st, sh.procs = [st] → st.commFree = true → prog.main = st.toProg) ∧
+      ∀ k b, (k, b) ∈ sh.defs → b.commFree = true → (k, b.toProg) ∈ prog.defs := by
+  unfold parseToksShadow at hs
+  unfold parseToksMode at hm
+  cases hraw : parseToksRaw true names ts with
+  | error e => simp [hraw, bind, Except.bind] at hs
+  | ok r =>
+    obtain ⟨main, st⟩ := r
+    rw [hraw] at hs hm
+    simp only [bind, Except.bind] at hs
+    cases main with
+    | some p =>
+      simp only at hs hm
+      split at hs
+      · cases hs
+      · rename_i procs hprocs
+        split at hs
+        · cases hs
+        · rename_i defs hdefs
+          simp only [Except.ok.injEq] at hs; subst hs
+          refine ⟨fun s hs₁ hc => ?_, defs_sound hdefs hm⟩
+          obtain ⟨_, hlm, -⟩ := resolveProgram_ok hm
+          simp only at hs₁; subst hs₁
+          rw [(p.sound _ hprocs).2 s rfl hc |>.symm, resolvePar_toProg] at hlm
+          simp only [Except.ok.injEq] at hlm; exact hlm.symm
+    | none =>
+      simp only at hs hm
+      split at hs
+      · simp [throw, throwThe, MonadExceptOf.throw] at hs
+      · split at hs
+        · cases hs
+        · rename_i defs hdefs
+          simp only [Except.ok.injEq] at hs; subst hs
+          split at hm
+          · cases hm
+          · refine ⟨fun s hs₁ hc => ?_, defs_sound hdefs hm⟩
+            obtain ⟨_, hlm, -⟩ := resolveProgram_ok hm
+            simp only [List.cons.injEq, and_true] at hs₁; subst hs₁
+            simp only [resolvePar, Except.ok.injEq] at hlm; exact hlm.symm
 
 /-- Parse a whole token list, starting from a table of variable names already in
 use; it is a network when it has channels and a `||`. -/

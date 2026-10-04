@@ -110,6 +110,11 @@ def Real32.div (x y : UInt32) : UInt32 := (Float32.ofBits x / Float32.ofBits y).
 def Real32.lt (x y : UInt32) : Bool := decide (Float32.ofBits x < Float32.ofBits y)
 /-- `–x`: the sign bit flipped, IEEE 754's negation. -/
 def Real32.neg (x : UInt32) : UInt32 := x ^^^ 0x80000000
+/-- `x ^ n`, as `1 × x × ⋯ × x`. -/
+def Real32.pow (x : UInt32) : ℕ → UInt32
+  | 0 => (Float32.ofInt 1).toBits
+  | n + 1 => Real32.mul (Real32.pow x n) x
+
 /-- An integer as a real. -/
 def Real32.ofInt (k : ℤ) : UInt32 := (Float32.ofInt k).toBits
 
@@ -225,7 +230,8 @@ def BinOp.apply : BinOp → Value → Value → Value
       else .int (a.toInt * b.toInt)
   | .div, a, b => .int (a.toInt.fdiv b.toInt)
   | .mod, a, b => .int (a.toInt.fmod b.toInt)
-  | .pow, a, b => .int (if 0 ≤ b.toInt then a.toInt ^ b.toInt.toNat else 0)
+  | .pow, a, b => if a.isReal && 0 < b.toInt then .real (Real32.pow a.toReal b.toInt.toNat)
+      else .int (if 0 ≤ b.toInt then a.toInt ^ b.toInt.toNat else 0)
   | .eq, a, b => .bool (decide (a = b))
   | .ne, a, b => .bool (!decide (a = b))
   | .lt, a, b => if a.isReal || b.isReal then .bool (Real32.lt a.toReal b.toReal)
@@ -286,6 +292,16 @@ def Exp.test (c : Exp) (s : St) : Bool := (c.eval s).toBool
 def Exp.ofList : List Exp → Exp
   | [] => .nil
   | a :: as => .cons a (ofList as)
+
+/-- The items of a list literal `[a; b; …]`. -/
+def Exp.items? : Exp → Option (List Exp)
+  | .nil => some []
+  | .cons a r => r.items?.map (a :: ·)
+  | _ => none
+
+@[simp] theorem Exp.items?_ofList : ∀ es : List Exp, (Exp.ofList es).items? = some es
+  | [] => rfl
+  | e :: es => by simp [Exp.ofList, Exp.items?, Exp.items?_ofList es]
 
 /-! ### Programs -/
 

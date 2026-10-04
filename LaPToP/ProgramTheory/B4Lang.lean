@@ -27,10 +27,9 @@ namespace LaPToP.ProgramTheory.Interpreter.Lang
 open LaPToP.ProgramTheory.Interpreter.Demo (Tok Toks)
 open LaPToP.ProgramTheory.CompileB4 LaPToP.ProgramTheory.CompileNet B4
 
-/-- `a × a × ⋯ × a`, `n` times (`1` when `n = 0`). -/
+/-- `1 × a × ⋯ × a`, with `n` factors `a`. -/
 def Exp.powB4 (a : Exp) : ℕ → Exp
   | 0 => .lit (.int 1)
-  | 1 => a
   | n + 1 => .bin .mul (a.powB4 n) a
 
 /-- `a div b` and `a mod b` by the machine's `dv` and `md`, which agree with the
@@ -79,12 +78,6 @@ def Exp.toB4 : Exp → Except String Exp
   | .un .len (.index (.var x) i) => do .ok (.un .len (.index (.var x) (← i.toB4)))
   | _ => .error "the b4 compiler takes only integers, binaries, variables and items of arrays"
 
-/-- The items of a list literal `[a; b; …]`. -/
-def Exp.items? : Exp → Option (List Exp)
-  | .nil => some []
-  | .cons a r => r.items?.map (a :: ·)
-  | _ => none
-
 /-- An item of a list literal: an expression, or a row of a two-dimensional one. -/
 def Exp.toB4Item (e : Exp) : Except String Exp :=
   match e.items? with
@@ -119,6 +112,392 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toB4 : Stmt → Except String Stm
   | .fill x es => do .ok (.fill x (← es.mapM Exp.toB4Item))
   | .prob a b p q => do .ok (.prob (← a.toB4) (← b.toB4) (← p.toB4) (← q.toB4))
   | s => .ok s
+
+/-! ### The rewrites keep the meaning -/
+
+theorem powB4_eval (a : Exp) (st : St) : ∀ n : ℕ,
+    (a.powB4 n).eval st = BinOp.apply .pow (a.eval st) (.int n)
+  | 0 => by simp [Exp.powB4, Exp.eval, BinOp.apply]
+  | n + 1 => by
+    simp only [Exp.powB4, Exp.eval, powB4_eval a st n]
+    cases hv : a.eval st with
+    | real x =>
+      cases n with
+      | zero => simp [BinOp.apply, Real32.pow, Value.toReal, Real32.ofInt]
+      | succ n =>
+        have h1 : ((n : ℤ) + 1 + 1).toNat = n + 1 + 1 := by omega
+        simp [BinOp.apply, Real32.pow, Value.toReal, h1, show (0 : ℤ) < (n : ℤ) + 1 + 1 by omega]
+    | int k => simp [BinOp.apply, pow_succ]; omega
+    | bool b => simp [BinOp.apply, Value.toInt]
+    | list l => simp [BinOp.apply, Value.toInt]
+
+theorem divB4_eval (op : BinOp) (hop : op = .div ∨ op = .mod) (a b : Exp) (st : St) :
+    (Exp.divB4 op a b).eval st = BinOp.apply op (a.eval st) (b.eval st) := by
+  have hneg : ∀ v : Value, (UnOp.apply .neg v).toInt = - v.toInt := by
+    intro v; cases v <;> simp [UnOp.apply, Value.toInt, Value.isReal]
+  have hdiv : (Exp.bin .div (.un .neg a) (.un .neg b)).eval st = BinOp.apply .div (a.eval st) (b.eval st) := by
+    simp [Exp.eval, BinOp.apply, hneg]
+  have hmod : (Exp.un .neg (.bin .mod (.un .neg a) (.un .neg b))).eval st =
+      BinOp.apply .mod (a.eval st) (b.eval st) := by
+    have hm : ∀ x y, BinOp.apply .mod x y = .int (x.toInt.fmod y.toInt) := fun _ _ => rfl
+    simp only [Exp.eval, hm, hneg, Int.neg_fmod_neg]
+    simp [UnOp.apply]
+  have hc : ∀ (c x : Exp) (v : Value), x.eval st = v → (Exp.cond c x x).eval st = v := by
+    intro c x v h; simp [Exp.eval, h]
+  have hc' : ∀ (c x y : Exp) (v : Value), x.eval st = v → y.eval st = v → (Exp.cond c x y).eval st = v := by
+    intro c x y v h₁ h₂; simp only [Exp.eval]; split <;> assumption
+  rcases hop with rfl | rfl
+  · cases b with
+    | lit v =>
+      cases v with
+      | int k => simp only [Exp.divB4, ite_true]; split_ifs <;> simp_all [Exp.eval]
+      | _ => exact hc' _ _ _ _ hdiv rfl
+    | _ => exact hc' _ _ _ _ hdiv rfl
+  · cases b with
+    | lit v =>
+      cases v with
+      | int k => simp only [Exp.divB4]; split_ifs <;> simp_all [Exp.eval]
+      | _ => exact hc' _ _ _ _ hmod rfl
+    | _ => exact hc' _ _ _ _ hmod rfl
+
+
+/-- **The rewrites keep the value**: what `toB4` makes of an expression has the
+same value as it, in every state. -/
+theorem Exp.toB4_eval : ∀ (e e' : Exp), e.toB4 = .ok e' → ∀ st, e'.eval st = e.eval st := by
+  intro e
+  induction e using Exp.toB4.induct with
+  | case1 k => intro e' h st; simp [Exp.toB4] at h; subst h; rfl
+  | case2 b => intro e' h st; simp [Exp.toB4] at h; subst h; rfl
+  | case3 x => intro e' h st; simp [Exp.toB4] at h; subst h; rfl
+  | case4 x => intro e' h st; simp [Exp.toB4] at h; subst h; rfl
+  | case5 k => intro e' h st; simp [Exp.toB4] at h; subst h; simp [Exp.eval, UnOp.apply]
+  | case6 a hne ih =>
+    intro e' h st
+    rw [Exp.toB4] at h
+    · cases ha : a.toB4 with
+      | error => simp [ha, bind, Except.bind] at h
+      | ok a' => simp [ha, bind, Except.bind, pure, Except.pure] at h; subst h; simp [Exp.eval, ih a' ha st]
+    · exact hne
+  | case7 a ih =>
+    intro e' h st
+    cases ha : a.toB4 with
+    | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, ha] at h
+    | ok a' => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, ha] at h; subst h; simp [Exp.eval, ih a' ha st]
+  | case8 op a b iha ihb =>
+    intro e' h st
+    cases ha : a.toB4 with
+    | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, ha] at h
+    | ok a' =>
+      cases hb : b.toB4 with
+      | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, ha, hb] at h
+      | ok b' =>
+        have ea := iha a' ha st; have eb := ihb b' hb st
+        simp only [Exp.toB4, ha, hb, bind, Except.bind] at h
+        cases op <;> simp only [Except.ok.injEq, reduceCtorEq] at h
+        case div => subst h; rw [divB4_eval _ (.inl rfl)]; simp [Exp.eval, ea, eb]
+        case mod => subst h; rw [divB4_eval _ (.inr rfl)]; simp [Exp.eval, ea, eb]
+        case ne => subst h; simp [Exp.eval, ea, eb, UnOp.apply, BinOp.apply]
+        case le =>
+          subst h; simp only [Exp.eval, ea, eb, UnOp.apply, BinOp.apply, Bool.or_comm (b.eval st).isReal]
+          split <;> (try simp) <;> (try rw [← decide_not]) <;> (try simp only [Int.not_le])
+        case gt =>
+          subst h; simp only [Exp.eval, ea, eb, BinOp.apply, Bool.or_comm (b.eval st).isReal]
+        case ge =>
+          subst h; simp only [Exp.eval, ea, eb, UnOp.apply, BinOp.apply]
+          split <;> (try simp) <;> (try rw [← decide_not]) <;> (try simp only [Int.not_le])
+        case imp => subst h; simp [Exp.eval, ea, eb, UnOp.apply, BinOp.apply]
+        case pow =>
+          split at h
+          · rename_i n
+            have hbn : b.eval st = .int n := by rw [← eb]; rfl
+            split_ifs at h with h1 h2
+            · simp only [Except.ok.injEq] at h; subst h
+              simp [Exp.eval, hbn, BinOp.apply, h1, show ¬ (0 ≤ n) by omega, show ¬ (0 < n) by omega]
+            · simp only [Except.ok.injEq] at h; subst h
+              rw [powB4_eval, ea, show ((n.toNat : ℕ) : ℤ) = n by omega]
+              simp only [Exp.eval, hbn]
+          · cases h
+        all_goals (subst h; simp only [Exp.eval, ea, eb])
+  | case9 x i ih =>
+    intro e' h st
+    cases hi : i.toB4 with
+    | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hi] at h
+    | ok i' => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hi] at h; subst h; simp [Exp.eval, ih i' hi st]
+  | case10 c a b ihc iha ihb =>
+    intro e' h st
+    cases hc : c.toB4 with
+    | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hc] at h
+    | ok c' =>
+      cases ha : a.toB4 with
+      | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hc, ha] at h
+      | ok a' =>
+        cases hb : b.toB4 with
+        | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hc, ha, hb] at h
+        | ok b' =>
+          simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hc, ha, hb] at h; subst h
+          simp [Exp.eval, ihc c' hc st, iha a' ha st, ihb b' hb st]
+  | case11 x => intro e' h st; simp [Exp.toB4] at h; subst h; rfl
+  | case12 x i j ihi ihj =>
+    intro e' h st
+    cases hi : i.toB4 with
+    | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hi] at h
+    | ok i' =>
+      cases hj : j.toB4 with
+      | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hi, hj] at h
+      | ok j' => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hi, hj] at h; subst h; simp [Exp.eval, ihi i' hi st, ihj j' hj st]
+  | case13 x i ih =>
+    intro e' h st
+    cases hi : i.toB4 with
+    | error => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hi] at h
+    | ok i' => simp [Exp.toB4, bind, Except.bind, pure, Except.pure, hi] at h; subst h; simp [Exp.eval, ih i' hi st]
+  | case14 t h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 =>
+    intro e' h st
+    unfold Exp.toB4 at h
+    split at h <;> first | (exfalso; simp_all) | cases h
+
+
+theorem mapM_toB4_eval : ∀ (es es' : List Exp), es.mapM Exp.toB4 = .ok es' →
+    ∀ st, es'.map (·.eval st) = es.map (·.eval st)
+  | [], es', h, st => by simp [List.mapM_nil, pure, Except.pure] at h; subst h; rfl
+  | e :: es, es', h, st => by
+    simp only [List.mapM_cons, bind, Except.bind, pure, Except.pure] at h
+    cases he : e.toB4 with
+    | error => simp [he] at h
+    | ok e' =>
+      cases hes : es.mapM Exp.toB4 with
+      | error => simp [he, hes] at h
+      | ok es'' =>
+        simp [he, hes] at h; subst h
+        simp [Exp.toB4_eval e e' he st, mapM_toB4_eval es es'' hes st]
+
+theorem eval_ofList' (st : St) : ∀ es : List Exp,
+    (Exp.ofList es).eval st = .list (es.map (·.eval st))
+  | [] => rfl
+  | e :: es => by simp [Exp.ofList, Exp.eval, eval_ofList' st es]
+
+theorem Exp.eq_ofList_of_items : ∀ {e : Exp} {rs : List Exp}, e.items? = some rs → e = Exp.ofList rs
+  | .nil, rs, h => by simp [Exp.items?] at h; subst h; rfl
+  | .cons a r, rs, h => by
+    simp only [Exp.items?, Option.map_eq_some_iff] at h
+    obtain ⟨rs', hr, rfl⟩ := h
+    rw [Exp.eq_ofList_of_items hr]; rfl
+  | .lit _, _, h | .var _, _, h | .un _ _, _, h | .bin _ _ _, _, h | .index _ _, _, h
+  | .cond _ _ _, _, h => by simp [Exp.items?] at h
+
+theorem Exp.toB4Item_eval (e e' : Exp) (h : e.toB4Item = .ok e') (st : St) :
+    e'.eval st = e.eval st := by
+  unfold Exp.toB4Item at h
+  split at h
+  · rename_i rs hrs
+    cases hm : rs.mapM Exp.toB4 with
+    | error => simp [hm, bind, Except.bind] at h
+    | ok rs' =>
+      simp [hm, bind, Except.bind, pure, Except.pure] at h; subst h
+      rw [Exp.eq_ofList_of_items hrs, eval_ofList', eval_ofList', mapM_toB4_eval rs rs' hm st]
+  · exact Exp.toB4_eval e e' h st
+
+
+theorem mapM_toB4Item_eval : ∀ (es es' : List Exp), es.mapM Exp.toB4Item = .ok es' →
+    ∀ st, es'.map (·.eval st) = es.map (·.eval st)
+  | [], es', h, st => by simp [List.mapM_nil, pure, Except.pure] at h; subst h; rfl
+  | e :: es, es', h, st => by
+    simp only [List.mapM_cons, bind, Except.bind, pure, Except.pure] at h
+    cases he : e.toB4Item with
+    | error => simp [he] at h
+    | ok e' =>
+      cases hes : es.mapM Exp.toB4Item with
+      | error => simp [he, hes] at h
+      | ok es'' =>
+        simp [he, hes] at h; subst h
+        simp [Exp.toB4Item_eval e e' he st, mapM_toB4Item_eval es es'' hes st]
+
+theorem toB4_fun {e e' : Exp} (h : e.toB4 = .ok e') : e'.eval = e.eval :=
+  funext (Exp.toB4_eval e e' h)
+
+theorem toB4_test {e e' : Exp} (h : e.toB4 = .ok e') : e'.test = e.test := by
+  funext st; simp [Exp.test, Exp.toB4_eval e e' h st]
+
+theorem divB4_items (op : BinOp) (a b : Exp) : (Exp.divB4 op a b).items? = none := by
+  unfold Exp.divB4; split <;> (try split) <;> (try split) <;> rfl
+
+theorem powB4_items (a : Exp) (n : ℕ) : (a.powB4 n).items? = none := by
+  cases n <;> rfl
+
+/-- What `toB4` makes is never a list literal. -/
+theorem toB4_items : ∀ (e e' : Exp), e.toB4 = .ok e' → e'.items? = none := by
+  intro e
+  induction e using Exp.toB4.induct with
+  | case8 op a b _ _ =>
+    intro e' h
+    simp only [Exp.toB4, bind, Except.bind] at h
+    cases ha : a.toB4 <;> cases hb : b.toB4 <;> simp only [ha, hb, reduceCtorEq] at h
+    cases op <;> simp only [Except.ok.injEq, reduceCtorEq] at h <;>
+      first
+      | (subst h; first | rfl | exact divB4_items _ _ _)
+      | (split at h <;> (try split_ifs at h) <;>
+          simp only [Except.ok.injEq, reduceCtorEq] at h <;> subst h <;>
+          first | rfl | exact powB4_items _ _)
+  | case14 t h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13 =>
+    intro e' h
+    unfold Exp.toB4 at h
+    split at h <;> first | (exfalso; simp_all) | cases h
+  | _ =>
+    intro e' h
+    simp only [Exp.toB4, bind, Except.bind, pure, Except.pure] at h
+    repeat' (split at h)
+    all_goals first
+      | (simp only [Except.ok.injEq, reduceCtorEq] at h; subst h; rfl)
+      | (cases h; rfl)
+      | (simp at h)
+      | skip
+
+open LaPToP.ProgramTheory.CompileB4 in
+/-- **The rewrites keep the program**: what `Stmt.toB4` makes of a statement means
+the same program (`Stmt.toProg`). -/
+theorem Stmt.toB4_toProg : ∀ (s s' : Stmt), s.toB4 = .ok s' → s'.toProg = s.toProg := by
+  intro s
+  induction s with
+  | assign x e =>
+    intro s' h
+    simp only [Stmt.toB4] at h
+    split at h
+    · rename_i es hes
+      cases hm : es.mapM Exp.toB4Item with
+      | error => simp [hm, bind, Except.bind] at h
+      | ok es' =>
+        simp [hm, bind, Except.bind, pure, Except.pure] at h; subst h
+        simp only [Stmt.toProg, Lang.assign]
+        congr 1; funext st
+        rw [Exp.eq_ofList_of_items hes, eval_ofList', eval_ofList', mapM_toB4Item_eval es es' hm st]
+    · cases he : e.toB4 with
+      | error => simp [he, bind, Except.bind] at h
+      | ok e' =>
+        simp [he, bind, Except.bind, pure, Except.pure] at h; subst h
+        simp [Stmt.toProg, Lang.assign, toB4_fun he]
+  | seq p q ihp ihq =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases hp : p.toB4 with
+    | error => simp [hp] at h
+    | ok p' =>
+      cases hq : q.toB4 with
+      | error => simp [hp, hq] at h
+      | ok q' => simp [hp, hq, pure, Except.pure] at h; subst h; simp [Stmt.toProg, ihp p' hp, ihq q' hq]
+  | cond c p q ihp ihq =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases hc : c.toB4 with
+    | error => simp [hc] at h
+    | ok c' =>
+      cases hp : p.toB4 with
+      | error => simp [hc, hp] at h
+      | ok p' =>
+        cases hq : q.toB4 with
+        | error => simp [hc, hp, hq] at h
+        | ok q' =>
+          simp [hc, hp, hq, pure, Except.pure] at h; subst h
+          simp [Stmt.toProg, ifThen, ihp p' hp, ihq q' hq, toB4_test hc]
+  | loop c p ih =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases hc : c.toB4 with
+    | error => simp [hc] at h
+    | ok c' =>
+      cases hp : p.toB4 with
+      | error => simp [hc, hp] at h
+      | ok p' =>
+        simp [hc, hp, pure, Except.pure] at h; subst h
+        simp [Stmt.toProg, Lang.loop, ih p' hp, toB4_test hc]
+  | send ch e =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases he : e.toB4 with
+    | error => simp [he] at h
+    | ok e' => simp [he, pure, Except.pure] at h; subst h; rfl
+  | scope x e p ih =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases he : e.toB4 with
+    | error => simp [he] at h
+    | ok e' =>
+      cases hp : p.toB4 with
+      | error => simp [he, hp] at h
+      | ok p' =>
+        simp [he, hp, pure, Except.pure] at h; subst h
+        simp [Stmt.toProg, declare, ih p' hp, toB4_fun he]
+  | store x i e =>
+    intro s' h
+    simp only [Stmt.toB4] at h
+    split at h
+    · rename_i is his
+      cases hm : is.mapM Exp.toB4 with
+      | error => simp [hm, bind, Except.bind] at h
+      | ok is' =>
+        cases he : e.toB4 with
+        | error => simp [hm, he, bind, Except.bind] at h
+        | ok e' =>
+          simp [hm, he, bind, Except.bind, pure, Except.pure] at h; subst h
+          simp only [Stmt.toProg, his, Exp.items?_ofList, Option.getD_some, assignIdx, toB4_fun he]
+          congr 1; funext st
+          have h2 : is'.map (fun i => (i.eval st).toInt) = is.map (fun i => (i.eval st).toInt) := by
+            have := congrArg (List.map Value.toInt) (mapM_toB4_eval is is' hm st)
+            simpa [List.map_map, Function.comp_def] using this
+          rw [h2]
+    · cases hi : i.toB4 with
+      | error => simp [hi, bind, Except.bind] at h
+      | ok i' =>
+        cases he : e.toB4 with
+        | error => simp [hi, he, bind, Except.bind] at h
+        | ok e' =>
+          simp [hi, he, bind, Except.bind, pure, Except.pure] at h; subst h
+          rename_i hnone
+          have hi' : i'.items? = none := toB4_items i i' hi
+          simp [Stmt.toProg, hnone, hi', assignIdx, toB4_fun hi, toB4_fun he]
+  | choice p q ihp ihq =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases hp : p.toB4 with
+    | error => simp [hp] at h
+    | ok p' =>
+      cases hq : q.toB4 with
+      | error => simp [hp, hq] at h
+      | ok q' => simp [hp, hq, pure, Except.pure] at h; subst h; simp [Stmt.toProg, ihp p' hp, ihq q' hq]
+  | ensure c =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases hc : c.toB4 with
+    | error => simp [hc] at h
+    | ok c' => simp [hc, pure, Except.pure] at h; subst h; simp [Stmt.toProg, Lang.ensure, toB4_test hc]
+  | fill x es =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases hm : es.mapM Exp.toB4Item with
+    | error => simp [hm] at h
+    | ok es' =>
+      simp [hm, pure, Except.pure] at h; subst h
+      simp only [Stmt.toProg, Lang.assign]
+      congr 1; funext st
+      rw [eval_ofList', eval_ofList', mapM_toB4Item_eval es es' hm st]
+  | prob a b p q ihp ihq =>
+    intro s' h
+    simp only [Stmt.toB4, bind, Except.bind] at h
+    cases ha : a.toB4 with
+    | error => simp [ha] at h
+    | ok a' =>
+      cases hb : b.toB4 with
+      | error => simp [ha, hb] at h
+      | ok b' =>
+        cases hp : p.toB4 with
+        | error => simp [ha, hb, hp] at h
+        | ok p' =>
+          cases hq : q.toB4 with
+          | error => simp [ha, hb, hp, hq] at h
+          | ok q' =>
+            simp [ha, hb, hp, hq, pure, Except.pure] at h; subst h
+            simp only [Stmt.toProg, probIf, ihp p' hp, ihq q' hq]
+            congr 1; funext st; simp [ratio, Exp.toB4_eval a a' ha st, Exp.toB4_eval b b' hb st]
+  | _ => intro s' h; simp [Stmt.toB4, pure, Except.pure] at h; subst h; rfl
+
 
 /-- A program for b4: its processes (one, if there is no `||`), the named
 statements they call, its variables, and its channels. -/

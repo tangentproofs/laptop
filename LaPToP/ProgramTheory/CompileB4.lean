@@ -1117,6 +1117,16 @@ inductive SEval (L : Layout) : ℕ → Stmt → St → St → Prop
 /-- The definitions a layout carries, as the interpreter's. -/
 @[instance_reducible] def Layout.env (L : Layout) : Defs ℕ Value := ⟨fun k => (L.defs k).toProg⟩
 
+/-- An index that fits is no list literal, so a store's path is the index alone. -/
+theorem items_none_of_fits {L : Layout} {st : St} {x : ℕ} {i : Exp}
+    (h : Fits L st (.index (.var x) i)) : i.items? = none := by
+  simp only [Fits] at h
+  cases i <;> simp_all [Exp.items?, Fits]
+
+theorem toProg_store {L : Layout} {st : St} {x : ℕ} {i e : Exp} (h : Fits L st (.index (.var x) i)) :
+    (Stmt.store x i e).toProg = assignIdx x [i] e := by
+  simp [Stmt.toProg, items_none_of_fits h]
+
 /-- Execution in 32 bits is execution: the language's semantics allows it. -/
 theorem eval_of_sEval {L : Layout} {d : ℕ} {p : Stmt} {s t : St} (h : SEval L d p s t) :
     @Eval ℕ Value L.env _ p.toProg s t := by
@@ -1131,7 +1141,7 @@ theorem eval_of_sEval {L : Layout} {d : ℕ} {p : Stmt} {s t : St} (h : SEval L 
   | loopF _ hc => exact .whileFalse (by simp [Exp.test, hc])
   | call _ _ _ ih => exact .call ih
   | scope _ _ _ _ _ ih => exact .newLocal ih
-  | store => exact .assign
+  | store hfi => rw [toProg_store hfi]; exact .assign
   | fill => exact .assign
 
 /-! ### Running statements -/
