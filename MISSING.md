@@ -128,7 +128,7 @@ so “missing” is not confused with “unfinished demo”:
 |---|---|---|---|---|---|---|
 | 10.0 | Introduction | `LaPToP.Exercises.Ch0` | 4 | 4 | 0 | 0 |
 | 10.1 | Basic Theories | `LaPToP.Exercises.Ch1` | 37 | 27 | 10 | 0 |
-| 10.2 | Basic Data Structures | `LaPToP.Exercises.Ch2` | 28 | | | 28 |
+| 10.2 | Basic Data Structures | `LaPToP.Exercises.Ch2` | 28 | 16 | 12 | 0 |
 | 10.3 | Function Theory | `LaPToP.Exercises.Ch3` | 51 | | | 51 |
 | 10.4 | Program Theory | `LaPToP.Exercises.Ch4` | 185 | | | 185 |
 | 10.5 | Programming Language | `LaPToP.Exercises.Ch5` | 60 | | | 60 |
@@ -136,7 +136,7 @@ so “missing” is not confused with “unfinished demo”:
 | 10.7 | Theory Design and Implementation | `LaPToP.Exercises.Ch7` | 55 | | | 55 |
 | 10.8 | Concurrency | `LaPToP.Exercises.Ch8` | 18 | | | 18 |
 | 10.9 | Interaction | `LaPToP.Exercises.Ch9` | 39 | | | 39 |
-| | **Total** | | **532** | **31** | **10** | **491** |
+| | **Total** | | **532** | **47** | **22** | **463** |
 
 *Informal* exercises ask to design notation, to explain in words, or to
 translate English, and have no single formal statement: in §10.1 these are 13,
