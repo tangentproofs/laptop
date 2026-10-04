@@ -199,6 +199,12 @@ def pop (w : ℕ) : Stmt :=
 /-- No choice is left: say so. -/
 def halt (w : ℕ) : Stmt := .store 0 (lit (w + 4)) (lit (-1))
 
+/-- No room for another choice point: say so. -/
+def full (w : ℕ) : Stmt := .store 0 (lit (w + 4)) (lit (-2))
+
+/-- How much room is left for choice points: `choices – count`. -/
+def room (w c : ℕ) : Exp := sub (lit c) (mem (lit w))
+
 end RT
 
 /-- The cells lie in high memory. -/
@@ -904,7 +910,7 @@ def slen (L : Layout) : Stmt → ℕ
     match L.arrayAt x with
     | some _ => (ecode L e).length + (ecode L i).length + 13
     | none => 0
-  | .choice p q => 415 + slen L p + 5 + slen L q
+  | .choice p q => 55 + 415 + slen L p + 5 + slen L q
   | .ensure c => (ecode L c).length + 474
   | .fill x es =>
     match L.arrayAt x with
@@ -954,6 +960,21 @@ theorem length_ecode_cnt (L : Layout) (w : ℕ) : (ecode L.rt (RT.mem (RT.lit w)
 theorem length_ecode_alt (L : Layout) (w : ℕ) : (ecode L.rt (RT.mem (RT.recAt w))).length = 43 := by
   simp [ecode, addrCode, RT.recAt, binByte]
 
+/-- What a choice runs first, at `a`: with no room for another choice point, set
+the flag to `-2` and halt; otherwise go on to keep one, at `a + 55`. -/
+def guardCode (L : Layout) (a : ℕ) : List UInt8 :=
+  ecode L.rt (RT.room L.W L.choices) ++ [0x9C, 7] ++ jmTo (a + 55) ++
+    (scodeR L.rt (a + 31) (RT.full L.W) ++ [0xFF])
+
+theorem length_ecode_room (L : Layout) (w c : ℕ) : (ecode L.rt (RT.room w c)).length = 24 := by
+  simp [RT.room, ecode, addrCode, binByte]
+
+theorem length_scodeR_full (L : Layout) (w a : ℕ) : (scodeR L.rt a (RT.full w)).length = 23 := by
+  simp [RT.full, scodeR, ecode, addrCode]
+
+theorem length_guardCode (L : Layout) (a : ℕ) : (guardCode L a).length = 55 := by
+  simp [guardCode, length_ecode_room, length_scodeR_full, jmTo]
+
 /-- What a failed `ensure` runs, at `f`: with no choice point kept, set the
 flag and halt; otherwise take the last one back and go to its other choice. -/
 def failCode (L : Layout) (f : ℕ) : List UInt8 :=
@@ -995,9 +1016,10 @@ def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
     | some (a₀, _) => ecode L e ++ ecode L i ++ addrCode a₀ ++ [0x95]
     | none => []
   | .choice p q =>
-    let b := a + 415
+    let b := a + 55 + 415
     let alt := b + slen L p + 5
-    scodeR L.rt a (RT.save L.W alt) ++ scode L b p ++ jmTo (alt + slen L q) ++ scode L alt q
+    guardCode L a ++ scodeR L.rt (a + 55) (RT.save L.W alt) ++ scode L b p ++
+      jmTo (alt + slen L q) ++ scode L alt q
   | .ensure c =>
     let f := a + (ecode L c).length + 13
     ecode L c ++ test ++ jmTo f ++ jmTo (f + 461) ++ failCode L f
@@ -1026,7 +1048,8 @@ theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).leng
   | .store x _ _, _ => by
     cases hx : L.arrayAt x <;> simp [scode, slen, hx]; omega
   | .choice p q, a => by
-    simp [scode, slen, length_scode L p, length_scode L q, length_scodeR_save, jmTo]; omega
+    simp [scode, slen, length_scode L p, length_scode L q, length_scodeR_save, length_guardCode, jmTo]
+    omega
   | .ensure _, _ => by simp [scode, slen, length_failCode, test, jmTo]
   | .fill x _, _ => by cases hx : L.arrayAt x <;> simp [scode, slen, hx]
   | .prob _ _ _ _, _ => rfl
