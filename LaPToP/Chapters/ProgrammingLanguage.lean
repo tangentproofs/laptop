@@ -31,6 +31,7 @@ import LaPToP.ProgramTheory.CompileNet
 import LaPToP.ProgramTheory.CompileNetDeadlock
 import LaPToP.ProgramTheory.CompileNetCheck
 import LaPToP.ProgramTheory.CompileFault
+import LaPToP.ProgramTheory.SourceTexts
 import LaPToP.ProgramTheory.B4Lang
 import LaPToP.ProgramTheory.Alloc
 import LaPToP.ProgramTheory.CompileConverse
@@ -1183,7 +1184,7 @@ $`(P \lor Q).\ \mathbf{ensure}\ b = (P.\ \mathbf{ensure}\ b) \lor (Q.\ \mathbf{e
 of {uses "backtracking"}[]; the computed results are reductions in the kernel.
 :::
 
-:::theorem "interpreter_cli" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, cli") (effort := "medium") (lean := "LaPToP.ProgramTheory.Interpreter.Demo.Tok, LaPToP.ProgramTheory.Interpreter.Demo.Tok.render, LaPToP.ProgramTheory.Interpreter.Demo.Toks, LaPToP.ProgramTheory.Interpreter.Demo.tokenize, LaPToP.ProgramTheory.Interpreter.Demo.parseExp, LaPToP.ProgramTheory.Interpreter.Demo.parseExpTail, LaPToP.ProgramTheory.Interpreter.Demo.parseTerm, LaPToP.ProgramTheory.Interpreter.Demo.parseTermTail, LaPToP.ProgramTheory.Interpreter.Demo.parseFactor, LaPToP.ProgramTheory.Interpreter.Demo.parseCond, LaPToP.ProgramTheory.Interpreter.Demo.parseCondTail, LaPToP.ProgramTheory.Interpreter.Demo.parseRel, LaPToP.ProgramTheory.Interpreter.Demo.parseProg, LaPToP.ProgramTheory.Interpreter.Demo.parseChoice, LaPToP.ProgramTheory.Interpreter.Demo.parseStmt, LaPToP.ProgramTheory.Interpreter.Demo.parseToks, LaPToP.ProgramTheory.Interpreter.Demo.parseProgram, LaPToP.ProgramTheory.Interpreter.Demo.sumToSrc, LaPToP.ProgramTheory.Interpreter.Demo.sumToToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_sumTo, LaPToP.ProgramTheory.Interpreter.Demo.countSrc, LaPToP.ProgramTheory.Interpreter.Demo.countToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_count, LaPToP.ProgramTheory.Interpreter.Demo.backtrackSrc, LaPToP.ProgramTheory.Interpreter.Demo.backtrackToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_backtrack, LaPToP.ProgramTheory.Interpreter.Demo.withLocalSrc, LaPToP.ProgramTheory.Interpreter.Demo.withLocalToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_withLocal, LaPToP.ProgramTheory.Interpreter.Demo.selfTests, LaPToP.ProgramTheory.Interpreter.Demo.state, LaPToP.ProgramTheory.Interpreter.Demo.state_zero_zero, LaPToP.ProgramTheory.Interpreter.Demo.renderState")
+:::theorem "interpreter_cli" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, cli") (effort := "medium") (lean := "LaPToP.ProgramTheory.Interpreter.Demo.Tok, LaPToP.ProgramTheory.Interpreter.Demo.Tok.render, LaPToP.ProgramTheory.Interpreter.Demo.Toks, LaPToP.ProgramTheory.Interpreter.Demo.tokenize, LaPToP.ProgramTheory.Interpreter.Demo.parseExp, LaPToP.ProgramTheory.Interpreter.Demo.parseExpTail, LaPToP.ProgramTheory.Interpreter.Demo.parseTerm, LaPToP.ProgramTheory.Interpreter.Demo.parseTermTail, LaPToP.ProgramTheory.Interpreter.Demo.parseFactor, LaPToP.ProgramTheory.Interpreter.Demo.parseCond, LaPToP.ProgramTheory.Interpreter.Demo.parseCondTail, LaPToP.ProgramTheory.Interpreter.Demo.parseRel, LaPToP.ProgramTheory.Interpreter.Demo.parseProg, LaPToP.ProgramTheory.Interpreter.Demo.parseChoice, LaPToP.ProgramTheory.Interpreter.Demo.parseStmt, LaPToP.ProgramTheory.Interpreter.Demo.parseToks, LaPToP.ProgramTheory.Interpreter.Demo.parseProgram, LaPToP.ProgramTheory.Interpreter.Demo.sumToSrc, LaPToP.ProgramTheory.Interpreter.Demo.sumToToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_sumTo, LaPToP.ProgramTheory.Interpreter.Demo.countSrc, LaPToP.ProgramTheory.Interpreter.Demo.countToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_count, LaPToP.ProgramTheory.Interpreter.Demo.backtrackSrc, LaPToP.ProgramTheory.Interpreter.Demo.backtrackToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_backtrack, LaPToP.ProgramTheory.Interpreter.Demo.withLocalSrc, LaPToP.ProgramTheory.Interpreter.Demo.withLocalToks, LaPToP.ProgramTheory.Interpreter.Demo.parseToks_withLocal, LaPToP.ProgramTheory.Interpreter.Demo.selfTests, LaPToP.ProgramTheory.Interpreter.Demo.selfTests_tokenize, LaPToP.ProgramTheory.Interpreter.Demo.state, LaPToP.ProgramTheory.Interpreter.Demo.state_zero_zero, LaPToP.ProgramTheory.Interpreter.Demo.renderState")
 A concrete syntax, and programs run from a shell. Everything the interpreter of
 {uses "interpreter"}[] executes has so far been written in Lean. This node adds
 the layer that was missing for it to be used as an interpreter: a tokenizer and a
@@ -1207,10 +1208,10 @@ local declaration that does not leak. So what runs from the command line is what
 the theorems of {uses "interpreter_soundness"}[] and
 {uses "interpreter_scope"}[] are about, not a lookalike.
 
-Honest scope. The theorems are stated of the token lists, not of the source text:
-reducing a string literal to its characters in the kernel costs minutes per
-example while reducing the parser is instant, so that the tokenizer takes each
-source to those tokens is *checked when the binary runs* and not proved. This is
+The theorems are stated of the token lists, and the kernel checks that the
+tokenizer takes each demonstration's source text to its list
+(`Demo.selfTests_tokenize`). So they are theorems about the text the binary
+reads. This is
 the surface syntax of the demonstrations, not of the book: three integer
 variables of fixed names, no array syntax (the array demonstration has its own
 variable type), no declarations of new names, and no output. Nothing here reaches
@@ -1292,7 +1293,7 @@ $`t = \infty`, which the finiteness condition excludes — and that is exactly t
 untimed reading, where it has no behaviour at all.
 :::
 
-:::theorem "interpreter_language" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, arrays, cli, hehner-5.1.0") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Lang.Value, LaPToP.ProgramTheory.Interpreter.Lang.Value.decEq, LaPToP.ProgramTheory.Interpreter.Lang.Value.index, LaPToP.ProgramTheory.Interpreter.Lang.Value.update, LaPToP.ProgramTheory.Interpreter.Lang.Value.update_single, LaPToP.ProgramTheory.Interpreter.Lang.UnOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.BinOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.Exp, LaPToP.ProgramTheory.Interpreter.Lang.Exp.eval, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx_nil, LaPToP.ProgramTheory.Interpreter.Lang.getElem?_set_ite, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_iff, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_seq, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_test, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₂_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.twoDim_run, LaPToP.ProgramTheory.Interpreter.Lang.tokenize, LaPToP.ProgramTheory.Interpreter.Lang.parseProg, LaPToP.ProgramTheory.Interpreter.Lang.parseExp, LaPToP.ProgramTheory.Interpreter.Lang.parseToksWith, LaPToP.ProgramTheory.Interpreter.Lang.parseProgramWith, LaPToP.ProgramTheory.Interpreter.Lang.renderState, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_sumTo, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sumTo_ten, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_backtrack, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_runAll, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrays_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.big_ops, LaPToP.ProgramTheory.Interpreter.Lang.Demo.lt_neg_tokens")
+:::theorem "interpreter_language" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, arrays, cli, hehner-5.1.0") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Lang.Value, LaPToP.ProgramTheory.Interpreter.Lang.Value.decEq, LaPToP.ProgramTheory.Interpreter.Lang.Value.index, LaPToP.ProgramTheory.Interpreter.Lang.Value.update, LaPToP.ProgramTheory.Interpreter.Lang.Value.update_single, LaPToP.ProgramTheory.Interpreter.Lang.UnOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.BinOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.Exp, LaPToP.ProgramTheory.Interpreter.Lang.Exp.eval, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx_nil, LaPToP.ProgramTheory.Interpreter.Lang.getElem?_set_ite, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_iff, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_seq, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_test, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₂_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.twoDim_run, LaPToP.ProgramTheory.Interpreter.Lang.tokenize, LaPToP.ProgramTheory.Interpreter.Lang.parseProg, LaPToP.ProgramTheory.Interpreter.Lang.parseExp, LaPToP.ProgramTheory.Interpreter.Lang.parseToksWith, LaPToP.ProgramTheory.Interpreter.Lang.parseProgramWith, LaPToP.ProgramTheory.Interpreter.Lang.renderState, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_sumTo, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sumTo_ten, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_backtrack, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_runAll, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrays_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.big_ops, LaPToP.ProgramTheory.Interpreter.Lang.Demo.lt_neg_tokens, LaPToP.ProgramTheory.Interpreter.Lang.Demo.selfTests_tokenize")
 The interpreter's own language. The syntax of {uses "interpreter_cli"}[] ran the
 demonstrations over three integer variables with fixed names; this is the
 language the command line now runs. Programs are still the core syntax of
@@ -1355,8 +1356,10 @@ Honest scope. The language is untyped: each operator reads its operands at the
 kind it expects, so an ill-typed expression has a value rather than an error, and
 where the book leaves a value undefined — division by zero, an index outside the
 list — a fixed one is chosen. The book's types, bunches, sets, strings and
-records are not here, and its reals are approximated by single-precision floats. As before, the parser theorems are stated of token lists,
-and the tokenizer's agreement with the source text is checked when the binary runs.
+records are not here, and its reals are approximated by single-precision floats. As before, the parser theorems are stated of token lists;
+the kernel checks that the tokenizer takes each demonstration's source text,
+programs and networks, to its list (`Lang.Demo.selfTests_tokenize`). The
+tokenizer is checked on these texts, not proved for every text.
 :::
 
 :::proof "interpreter_language"
@@ -1885,7 +1888,7 @@ search keeps the first with the least clock, which is the process the network
 settles, since the earliest is unique. The answer, false, is stored as before.
 :::
 
-:::theorem "interpreter_alloc" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, arrays, memory allocation") (effort := "large") (lean := "LaPToP.ProgramTheory.Alloc.Blk, LaPToP.ProgramTheory.Alloc.absorb, LaPToP.ProgramTheory.Alloc.claim, LaPToP.ProgramTheory.Alloc.alloc, LaPToP.ProgramTheory.Alloc.free, LaPToP.ProgramTheory.Alloc.Chain, LaPToP.ProgramTheory.Alloc.allocStmt, LaPToP.ProgramTheory.Alloc.allocSrc, LaPToP.ProgramTheory.Alloc.freeStmt, LaPToP.ProgramTheory.Alloc.merge_runs, LaPToP.ProgramTheory.Alloc.take_runs, LaPToP.ProgramTheory.Alloc.search_runs, LaPToP.ProgramTheory.Alloc.alloc_sEval, LaPToP.ProgramTheory.Alloc.free_sEval, LaPToP.ProgramTheory.Alloc.alloc_eval, LaPToP.ProgramTheory.Alloc.alloc_on_b4, LaPToP.ProgramTheory.Alloc.alloc_on_b4'")
+:::theorem "interpreter_alloc" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, arrays, memory allocation") (effort := "large") (lean := "LaPToP.ProgramTheory.Alloc.Blk, LaPToP.ProgramTheory.Alloc.absorb, LaPToP.ProgramTheory.Alloc.claim, LaPToP.ProgramTheory.Alloc.alloc, LaPToP.ProgramTheory.Alloc.free, LaPToP.ProgramTheory.Alloc.Chain, LaPToP.ProgramTheory.Alloc.allocStmt, LaPToP.ProgramTheory.Alloc.allocSrc, LaPToP.ProgramTheory.Alloc.freeStmt, LaPToP.ProgramTheory.Alloc.merge_runs, LaPToP.ProgramTheory.Alloc.take_runs, LaPToP.ProgramTheory.Alloc.search_runs, LaPToP.ProgramTheory.Alloc.alloc_sEval, LaPToP.ProgramTheory.Alloc.free_sEval, LaPToP.ProgramTheory.Alloc.alloc_eval, LaPToP.ProgramTheory.Alloc.alloc_on_b4, LaPToP.ProgramTheory.Alloc.alloc_on_b4', LaPToP.ProgramTheory.Interpreter.Lang.allocSrc_reads")
 A memory allocator, written in the language and proved. It is the allocator of
 b4's `mm.b4a` (first fit, merging free neighbours as it searches, splitting off
 what a request leaves), rewritten over an array $`M` of cells: the heap is a
@@ -1903,8 +1906,10 @@ language and, by {uses "interpreter_b4"}[], what the compiled program does on
 b4: loaded with a heap of up to 16000 cells, the machine halts with the
 heap's cells holding the model's blocks.
 
-Honest scope. The program's source text, read by the parser, is checked to be
-the statement proved by `interp --selftest`, not by a theorem; the model counts
+The program's source text, tokenized and read by `interp --b4`'s parser, is
+the statement proved: the kernel checks it (`Lang.allocSrc_reads`).
+
+Honest scope. The model counts
 in cells, where `mm.b4a` counts in bytes (a header of 12, a split at 16).
 :::
 

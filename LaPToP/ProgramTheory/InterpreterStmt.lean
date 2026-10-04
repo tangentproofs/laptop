@@ -58,7 +58,7 @@ inductive Stmt where
   /-- A run-time check the compiler puts in: go on if `c`; if not, the machine
   stops with a fault. As a program it is `ok`. -/
   | guard (c : Exp)
-  deriving Repr
+  deriving Repr, DecidableEq
 
 /-- A statement as a program of the language. -/
 def Stmt.toProg : Stmt → P

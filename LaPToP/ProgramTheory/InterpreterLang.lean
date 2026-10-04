@@ -272,7 +272,7 @@ inductive Exp where
   | index (a i : Exp)
   /-- `if c then a else b`. -/
   | cond (c a b : Exp)
-  deriving Repr
+  deriving Repr, DecidableEq
 
 /-- The value of an expression in a state. -/
 def Exp.eval : Exp → St → Value
