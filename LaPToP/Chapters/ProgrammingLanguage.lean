@@ -1334,6 +1334,14 @@ search and missed by the deterministic run. The book's two array examples end as
 the book says they should, the first read from source text: after
 $`A\,2 := 3.\ i := 2.\ A\,i := 4`, the test $`A\,i = A\,2` is $`\top`.
 
+`MISSING.md` sets the book's precedence table (Section 11.6) beside this
+parser's levels and Netty's. They differ in a few places. The book's $`=`,
+$`\Rightarrow` and large operators are continuing ($`a = b = c` means
+$`a = b \land b = c`), where this parser takes one comparison and groups the
+arrows. The glyph $`\lnot` binds tightest here, and the word $`\mathbf{not}` takes
+the book's level. And $`\|` binds tighter than $`.`, where the book puts both on
+one level.
+
 Honest scope. The language is untyped: each operator reads its operands at the
 kind it expects, so an ill-typed expression has a value rather than an error, and
 where the book leaves a value undefined — division by zero, an index outside the

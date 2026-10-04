@@ -59,6 +59,48 @@ chapter intro; there is no Lean statement.
   (Reference): documentation of the book’s syntax, not laws to prove. Precedence
   and distribution are reflected in Lean’s notation and in the bunch-distribution
   lemmas where applicable; there is no separate “symbols table” formalization.
+  The precedence table is compared with the parsers below.
+- **Precedence**: the book's table (Section 11.6) next to the two parsers that
+  read the book's notation, the interpreter's language
+  (`InterpreterLangSyntax.lean`, `interp --grammar`) and Netty's
+  (`Netty/Parser.lean`). The first level binds tightest; a dash means the parser
+  does not have the operator.
+
+  | level | the book (§11.6) | `interp` | Netty |
+  | ----- | ---------------- | -------- | ----- |
+  | 0 | `⊤ ⊥ ( ) { } [ ] 〈 〉 if fi do od`, numbers, names, superscripts | `⊤ ⊥ ( ) [ ]`, `if … fi` in expressions, numbers, names; `a ^ n` (the superscript) just below juxtaposition, so `-a^2` is `-(a^2)` | `⊤ ⊥ ( )`, `if … fi`, numbers, names |
+  | 1 | `@`, adjacency (left to right) | adjacency is indexing: `A i j` is `(A i) j` | — |
+  | 2 | prefix `– ¢ $ ↔ # * ~ ☐ → √`, quantifiers on functions | prefix `-`, `#`, `√`, and **`¬`** (see level 8) | — |
+  | 3 | `× / ∩ ↑ ↓` | `× * div mod` | `×` |
+  | 4 | `+`, infix `–`, `∪` | `+ -` | `+ -` |
+  | 5 | `; ;.. ;; '` | `;` only between the items of `[ ]`, `;..` only in `for` | — |
+  | 6 | `, ,.. –, \| ⊲⊳` | `,` only in simultaneous assignment and parameters | — |
+  | 7 | `= ⧧ < > ≤ ≥ : :: ∈ ⊆`, **continuing** | `= ≠ < ≤ > ≥`, **one** comparison: `a = b = c` does not parse | `= ⧧ < > ≤ ≥ :`, grouped **to the left** |
+  | 8 | `¬` | the word `not`: `not x = y` is `¬(x = y)` | `¬`: `¬a = b` is `¬(a = b)` |
+  | 9 | `∧` | `∧ /\ and` | `∧` |
+  | 10 | `∨` | `∨ \/` | `∨` |
+  | 11 | `⇒ ⇐`, **continuing** | `⇒ => ->` and `<== <-`, grouped **to the right** | `⇒ ⇐`, grouped **to the left** |
+  | 12 | `:= ! ?` | `:=`, `c! e`, `c?` (statements) | — |
+  | 13 | `exit when`, `go to`, `wait until`, `assert`, `ensure`, `or` | `exit … when`, `assert`, `ensure` (statements); `or` binds tighter than `\|\|` and looser than `:=` | — |
+  | 14 | `.` `\|\|` `value` | `.`, and `\|\|` binding **tighter** than `.` | — |
+  | 15 | `∀· ∃· Σ· Π·` (abbreviated quantifiers), `new·`, `frame·` | `new x:= e in P end`, bracketed by its keywords | `∀ ∃`, whose body runs to the end of the expression, **past** level 16 |
+  | 16 | large `= ⇒ ⇐`, **continuing** | `== --> <--` (or `≡ ⟹ ⟸`), grouped **to the left** | `≡ ⟹ ⟸`, grouped **to the left** |
+
+  Where they differ from the book (in bold):
+  - **Continuing operators.** On levels 7, 11 and 16 the book's operators are
+    continuing: `a = b = c` means `a = b ∧ b = c`, and `a ≤ b < c` means
+    `a ≤ b ∧ b < c`. Neither parser reads them so. The interpreter takes at most
+    one comparison and groups `⇒ ⇐` to the right; Netty groups everything to the
+    left.
+  - **`¬`.** In the interpreter the glyph `¬` binds tightest (`¬x = y` is
+    `(¬x) = y`), and the word `not` takes the book's level 8.
+  - **`.` and `||`.** The book puts them on one level. The interpreter binds
+    `||` tighter, so `P. Q || R` is `P. (Q || R)`.
+  - **Netty's quantifiers.** Their body runs past the large operators, as in the
+    Netty document's grammar, where the book's level 15 stops at level 16.
+  - **`or`.** Program-level choice is on level 13, with `ensure` and `assert`:
+    between the assignments of level 12 and the `.` and `||` of level 14. That is
+    where the interpreter has it.
 - **Exercise solutions** (hehner.ca/aPToP/solutions): out of scope. Chapter 10
   statements are stubbed in `LaPToP/Exercises/`; solutions are not imported.
 
