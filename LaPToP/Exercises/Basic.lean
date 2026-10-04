@@ -3,9 +3,9 @@
 
 Chapter 10 of Hehner's *A Practical Theory of Programming* lists the exercises
 for Chapters 0–9. This module provides an opaque `Prop`-valued placeholder so
-each exercise can be recorded as a theorem *signature* with `sorry`, without
-claiming `True` or `False`. Proofs are intentionally deferred (Memnar #1032
-standing exception: exercise statement stubs only).
+an exercise not yet formalized can be recorded as a theorem *signature* with
+`sorry`, without claiming `True` or `False`. As exercises are formalized, their
+stubs are replaced by real statements and proofs (`MISSING.md` §5).
 -/
 
 namespace LaPToP.Exercises
