@@ -172,6 +172,11 @@ inductive SAct (L : Layout) (pr : SProc) :
       vs.length = es.length → (∀ e ∈ es, Fits L st.mem e) →
       SAct L pr Λ (.fill x es :: ks, st)
         (ks, { st with mem := Function.update st.mem x ((Exp.ofList es).eval st.mem) }) Λ
+  /-- `x:= √c`, with the message there: whether it was sent before now. -/
+  | check {Λ ks st ch x m} : ch ∈ pr.ins → (Λ ch)[st.r ch]? = some m → x < L.n →
+      L.arrayAt x = none → TFits m.2 →
+      SAct L pr Λ (.check ch x :: ks, st)
+        (ks, st.checked x (.bool (ready (Λ ch) (st.r ch) st.t))) Λ
 
 /-- **A step of the network, in 32 bits**: one process acts. -/
 inductive SStep (L : Layout) (net : SNet) : SCfg → SCfg → Prop
@@ -204,6 +209,7 @@ theorem SAct.act {L : Layout} {net : SNet} {i : ℕ} {pr : SProc} (hpr : net.pro
   | restore => exact .loc .restore
   | store => exact .loc (.act (p := assignIdx _ [_] _) trivial .assign)
   | fill => exact .loc (.act (p := Lang.assign _ _) trivial .assign)
+  | check hch hm => exact .check hpr' hch (.inl (by simp [hm]))
 
 /-- A step in 32 bits is one or two steps of the network machine: a call is the
 call and then the start of the named statement and its return. -/
@@ -240,6 +246,7 @@ theorem SStep.msteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c'
   | restore => exact one (by simp)
   | store => exact one (by simp)
   | fill => exact one (by simp)
+  | check => exact one (by simp)
 
 /-- A run in 32 bits is a run of the network machine. -/
 theorem reach_of_sSteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c' : SCfg}
@@ -570,6 +577,48 @@ theorem swarm_recv {w : Swarm} {i : ℕ} {s : State} {ch : ℕ} {v τ : UInt32}
   simp only [e₂, htn, hm]
   rfl
 
+/-- The machine after it answers a check. -/
+def answerState (s : State) (b : Bool) : State :=
+  setIP (dpush (dpop (dpop s).2).2 (if b then 0xFFFFFFFF else 0))
+    (getIP (dpush (dpop (dpop s).2).2 (if b then 0xFFFFFFFF else 0)) + 1)
+
+theorem answerState_view {s : State} {ch : UInt32} {b : Bool} (hw : WF s)
+    (hhi : getIP s + 1 < MAXBYTE) (hd : dstack s = [ch, CHECK]) :
+    WF (answerState s b) ∧ getIP (answerState s b) = getIP s + 1 ∧
+      dstack (answerState s b) = [enc (.bool b)] ∧ Same s (answerState s b) := by
+  obtain ⟨-, w₁, i₁, d₁, sm₁⟩ := dpop_same s [ch] CHECK hw (by simpa using hd)
+  obtain ⟨-, w₂, i₂, d₂, sm₂⟩ := dpop_same _ [] ch w₁ (by simpa using d₁)
+  generalize hs₂ : (dpop (dpop s).2).2 = s₂ at w₂ i₂ d₂ sm₂
+  have hl : getDSH s₂ < STACKSZ := by
+    have := dstack_length _ w₂; rw [d₂] at this; simp at this; rw [← this]; decide
+  obtain ⟨w₃, i₃, d₃, sm₃⟩ := dpush_same s₂ (if b then 0xFFFFFFFF else 0) w₂ hl
+  obtain ⟨w₄, i₄, d₄, sm₄⟩ := setIP_same (dpush s₂ (if b then 0xFFFFFFFF else 0))
+    (getIP (dpush s₂ (if b then 0xFFFFFFFF else 0)) + 1) w₃
+    (by rw [i₃, i₂, i₁]; unfold MAXBYTE at hhi; omega)
+  have hr : answerState s b = setIP (dpush s₂ (if b then 0xFFFFFFFF else 0))
+      (getIP (dpush s₂ (if b then 0xFFFFFFFF else 0)) + 1) := by rw [← hs₂]; rfl
+  rw [hr]
+  refine ⟨w₄, by rw [i₄, i₃, i₂, i₁], ?_, sm₁.trans (sm₂.trans (sm₃.trans sm₄))⟩
+  rw [d₄, d₃, d₂]; rfl
+
+/-- **Check** in the swarm: with the channel and `'k'` on the stack at an `io`,
+and the message at the read cursor there, the machine answers whether it was
+sent before its clock. -/
+theorem swarm_check {w : Swarm} {i : ℕ} {s : State} {ch : ℕ} {v τ : UInt32}
+    (hi : w.ms[i]? = some s) (hw : WF s) (hr : Running s) (hlo : 256 ≤ getIP s)
+    (hop : high s (getIP s) = 0xFD) (hd : dstack s = [UInt32.ofNat ch, CHECK]) (hch : ch < 2 ^ 32)
+    (hm : (w.chans ch)[(w.rd.getD i fun _ => 0) ch]? = some (v, τ)) :
+    w.stepAt i = some { w with
+      ms := w.ms.set i (answerState s (decide (τ.toNat < (getClk s).toNat))) } := by
+  have hio : ioCmd s = some CHECK := ioCmd_eq (xs := [UInt32.ofNat ch]) hlo hop (by simpa using hd)
+  rw [Swarm.stepAt_check hi ((running_iff _).mpr hr) hio]
+  have htn : (UInt32.ofNat ch).toNat = ch := by rw [UInt32.toNat_ofNat']; omega
+  obtain ⟨e₁, w₁, -, d₁, -⟩ := dpop_same s [UInt32.ofNat ch] CHECK hw (by simpa using hd)
+  obtain ⟨e₂, -, -, -, -⟩ := dpop_same _ [] (UInt32.ofNat ch) w₁ (by simpa using d₁)
+  unfold Swarm.check
+  simp only [e₂, htn, hm]
+  rfl
+
 /-! ### One process, one machine -/
 
 /-- **A process and its machine agree**: the machine is running with an empty
@@ -642,7 +691,7 @@ unless the step is idle. -/
 theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Value}
     {a b : List Stmt × PSt ℕ Value} (h : SAct L pr Λ a b Λ')
     (hsend : ∀ ch e ks, a.1 ≠ .send ch e :: ks) (hrecv : ∀ ch x ks, a.1 ≠ .recv ch x :: ks)
-    {s : State} {r : ℕ → ℕ} (hp : PRel L a.1 a.2 s r)
+    (hcheck : ∀ ch x ks, a.1 ≠ .check ch x :: ks) {s : State} {r : ℕ → ℕ} (hp : PRel L a.1 a.2 s r)
     (hd : Direct L (high s) (cstack s) a.1 (getIP s)) :
     ∃ s', Steps s s' ∧ PRel L b.1 b.2 s' r ∧ (∀ i < L.base, high s' i = high s i) ∧
       (∀ i, L.top ≤ i → high s' i = high s i) ∧ (s' ≠ s ∨ Idle a.1) := by
@@ -765,6 +814,7 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
     convert hk using 1; omega
   | send => exact (hsend _ _ _ rfl).elim
   | recv => exact (hrecv _ _ _ rfl).elim
+  | check => exact (hcheck _ _ _ rfl).elim
   | @call ks st k hk hcl hfr =>
     obtain ⟨h₁, h₂, -, h₄, hk', -⟩ := hd.cons_inv (by simp) (by simp)
     simp only [slen] at h₂ hk'
@@ -1039,6 +1089,100 @@ theorem recv_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch 
     · subst hc; simp [hp.rd]
     · simp [hc, hp.rd]
 
+/-- The machine's answer is `ready`. -/
+theorem ready_enc {l : List (Msg Value)} {r : ℕ} {t : ℕ∞} {m : Msg Value} (hm : l[r]? = some m)
+    (hτ : TFits m.2) (ht : TFits t) :
+    decide ((encT m.2).toNat < (encT t).toNat) = ready l r t := by
+  rw [toNat_encT hτ, toNat_encT ht]
+  simp only [ready, hm]
+  obtain ⟨v, τ⟩ := m
+  have hτ' := hτ.ne_top
+  simp only at hτ' ⊢
+  lift τ to ℕ using hτ'
+  lift t to ℕ using ht.ne_top
+  by_cases h : τ < t <;> simp [h]
+
+/-- **Check**, with the message there, in the swarm and then on the machine. -/
+theorem check_sim (L : Layout) (hL : L.Ok) {w : Swarm} {i : ℕ} {s : State} {ch x : ℕ}
+    {ks : List Stmt} {st : PSt ℕ Value} {m : Msg Value} {Λ : Scripts Value} (hi : w.ms[i]? = some s)
+    (hp : PRel L (.check ch x :: ks) st s (w.rd.getD i fun _ => 0))
+    (hd : Direct L (high s) (cstack s) (.check ch x :: ks) (getIP s)) (hch : ch < 2 ^ 32)
+    (hchan : w.chans ch = encS (Λ ch)) (hm : (Λ ch)[st.r ch]? = some m) (hx : x < L.n)
+    (ha : L.arrayAt x = none) (hτ : TFits m.2) :
+    ∃ s', Swarm.Steps w { w with ms := w.ms.set i s' } ∧
+      PRel L ks (st.checked x (.bool (ready (Λ ch) (st.r ch) st.t))) s' (w.rd.getD i fun _ => 0) := by
+  have hb := hL.2
+  have hlt : i < w.ms.length := (List.getElem?_eq_some_iff.mp hi).1
+  obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
+  simp only [slen, sdepth] at h₂ h₃
+  simp only [scode, List.append_assoc] at h₄
+  have hA : At L st.mem s ((0x97 :: le4 (UInt32.ofNat ch)) ++ ((0x97 :: le4 CHECK) ++ ([0xFD] ++
+      ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95])))) 2 :=
+    ⟨hp.wf, hp.run, h₁, by simp; omega, h₄, hp.vars, by rw [hp.stack]; decide⟩
+  obtain ⟨w₁, i₁, d₁, sm₁⟩ := run_li hA (by omega)
+  have hA₁ := hA.after (bs₁ := 0x97 :: le4 (UInt32.ofNat ch)) (d₂ := 1) (by omega) w₁
+    (by rw [i₁]; rfl) d₁ sm₁
+  obtain ⟨w₂, i₂, d₂, sm₂⟩ := run_li hA₁ (by omega)
+  have hA₂ := hA₁.after (bs₁ := 0x97 :: le4 CHECK) (d₂ := 0) (by omega) w₂
+    (by rw [i₂]; rfl) d₂ sm₂
+  set s₂ := step (step s) with hs₂
+  have hrun : Steps s s₂ := (Steps.one hp.run (notIo_li hA)).tail ⟨hA₁.run, notIo_li hA₁, rfl⟩
+  have hop : high s₂ (getIP s₂) = 0xFD := by simpa using hA₂.code 0 (by simp)
+  have hlift := swarm_lift hi hrun
+  have hst₂ : dstack s₂ = [UInt32.ofNat ch, CHECK] := by rw [d₂, d₁, hp.stack]; rfl
+  have hm' : (w.chans ch)[(w.rd.getD i fun _ => 0) ch]? = some (enc m.1, encT m.2) := by
+    rw [hchan, hp.rd ch, encS, List.getElem?_map, hm]; rfl
+  have hstep := swarm_check (w := { w with ms := w.ms.set i s₂ }) (i := i) (ch := ch)
+    (by simp [List.getElem?_set_self hlt]) hA₂.wf hA₂.run hA₂.lo hop hst₂ hch hm'
+  have hclk₂ : getClk s₂ = encT st.t := by rw [(sm₁.trans sm₂).clk, hp.clk]
+  rw [hclk₂, ready_enc hm hτ hp.tfit] at hstep
+  set bb := ready (Λ ch) (st.r ch) st.t with hbb
+  obtain ⟨w₃, i₃, d₃, sm₃⟩ :=
+    answerState_view (b := bb) hA₂.wf (by have := hA₂.hi; simp at this; omega) hst₂
+  set s₃ := answerState s₂ bb with hs₃
+  -- `li addr; wi`
+  have hc₃ : CodeAt (high s₃) (getIP s₃) ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95]) := by
+    rw [sm₃.high, i₃]; have := (CodeAt.append.mp hA₂.code).2; simpa using this
+  have hA₃ : At L st.mem s₃ ((0x97 :: le4 (UInt32.ofNat (L.addr x))) ++ [0x95]) 1 :=
+    ⟨w₃, ⟨sm₃.st.trans hA₂.run.1, sm₃.db.trans hA₂.run.2⟩, by rw [i₃]; have := hA₂.lo; omega,
+      by rw [i₃]; have := hA₂.hi; simp at this ⊢; omega, hc₃,
+      by rw [sm₃.high, sm₂.high, sm₁.high]; exact hp.vars, by rw [d₃]; simp [STACKSZ]⟩
+  obtain ⟨w₄, i₄, d₄, sm₄⟩ := run_li hA₃ le_rfl
+  have haddr : L.addr x + 3 < MAXBYTE := by unfold Layout.addr; omega
+  have hop₄ : high (step s₃) (getIP (step s₃)) = 0x95 := by
+    rw [sm₄.high, i₄]; have := (CodeAt.append.mp hc₃).2 0 (by simp); simpa using this
+  have hip₄ : 256 ≤ getIP (step s₃) := by rw [i₄]; have := hA₃.lo; omega
+  have hd₄ : dstack (step s₃) = [] ++ [enc (.bool bb), UInt32.ofNat (L.addr x)] := by
+    rw [d₄, d₃]; rfl
+  have ha₄ : 256 ≤ (UInt32.ofNat (L.addr x)).toNat := by
+    rw [toNat_ofNat_addr (by omega)]; unfold Layout.addr; have := hL.1; omega
+  obtain ⟨w₅, i₅, d₅, c₅, st₅, db₅, hi₅, o₅⟩ := step_wi (step s₃) [] (enc (.bool bb))
+    (UInt32.ofNat (L.addr x)) w₄ hip₄ (by rw [i₄]; have := hA₃.hi; unfold MAXBYTE at this; simp at this; omega)
+    hop₄ hd₄ ha₄ (by rw [toNat_ofNat_addr (by omega)]; exact haddr)
+  have hclk₅ := step_wi_clk (step s₃) [] (enc (.bool bb)) (UInt32.ofNat (L.addr x)) w₄ hip₄ hop₄ hd₄ ha₄
+  rw [toNat_ofNat_addr (by omega)] at hi₅
+  have run₃ : Running s₃ := hA₃.run
+  have run₄ : Running (step s₃) := sm₄.running run₃
+  have hrun₂ : Steps s₃ (step (step s₃)) :=
+    (Steps.one run₃ (notIo_li hA₃)).tail ⟨run₄, notIo_of_hop hip₄ hop₄, rfl⟩
+  have hlow : ∀ j < L.base, high (step (step s₃)) j = high s j := by
+    intro j hj
+    rw [hi₅, sm₄.high, sm₃.high, sm₂.high, sm₁.high]
+    unfold writeWord Layout.addr
+    simp [show j ≠ L.base + 4 * x by omega, show j ≠ L.base + 4 * x + 1 by omega,
+      show j ≠ L.base + 4 * x + 2 by omega, show j ≠ L.base + 4 * x + 3 by omega]
+  refine ⟨step (step s₃), ?_, ⟨w₅, ⟨st₅.trans run₄.1, db₅.trans run₄.2⟩, d₅, ?_, ?_, ?_, hp.tfit,
+    hp.rd, hp.image.mono hlow⟩⟩
+  · refine (hlift.tail ⟨i, hstep⟩).trans ?_
+    have := swarm_lift (w := { w with ms := w.ms.set i s₃ }) (i := i) (s := s₃)
+      (by simp [List.getElem?_set_self hlt]) hrun₂
+    simpa using this
+  · rw [i₅, i₄, i₃, i₂, i₁, c₅, sm₄.cs, sm₃.cs, sm₂.cs, sm₁.cs]
+    exact Cont.mono hlow (by convert hk using 1; simp [slen])
+  · rw [hi₅, sm₄.high, sm₃.high, sm₂.high, sm₁.high]
+    exact varsOk_write hp.vars hx ha
+  · rw [hclk₅, sm₄.clk, sm₃.clk, hclk₂]; rfl
+
 /-- Replace one machine, its cursors and one process. -/
 theorem Rel.setRd {L : Layout} {c : SCfg} {w : Swarm} (hr : Rel L c w) {i : ℕ}
     (hi : i < c.ps.length) {ks : List Stmt} {st : PSt ℕ Value} {s : State} {Λ : Scripts Value}
@@ -1096,28 +1240,28 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
   -- the actions that do not communicate
   have local_case : ∀ {b' : List Stmt × PSt ℕ Value}, SAct L pr c.L (ks, st) b' c.L →
       (∀ ch e ks', ks ≠ .send ch e :: ks') → (∀ ch x ks', ks ≠ .recv ch x :: ks') →
-      ∃ w', Swarm.Steps w w' ∧ w'.owner = w.owner ∧ Rel L ⟨c.ps.set i b', c.L⟩ w' := by
-    intro b' hb' hs' hr'
-    obtain ⟨s₂, r₂, hp₂, -, -, -⟩ := machine_sim L hL hb' hs' hr' hp₁ hd₁
+      (∀ ch x ks', ks ≠ .check ch x :: ks') → ∃ w', Swarm.Steps w w' ∧ w'.owner = w.owner ∧ Rel L ⟨c.ps.set i b', c.L⟩ w' := by
+    intro b' hb' hs' hr' hk'
+    obtain ⟨s₂, r₂, hp₂, -, -, -⟩ := machine_sim L hL hb' hs' hr' hk' hp₁ hd₁
     refine ⟨{ w with ms := w.ms.set i s₂ }, ?_, rfl, ?_⟩
     · have := swarm_lift hs₁ r₂; simp at this; exact hw₁.trans (by simpa using this)
     · have := hr.set hlt (ks := b'.1) (st := b'.2) (s := s₂) (Λ := c.L) hp₂ hr.chans
       simpa using this
   cases hact with
-  | ok => exact local_case .ok (by simp) (by simp)
-  | assign hx hax hf => exact local_case (.assign hx hax hf) (by simp) (by simp)
-  | tick hfit => exact local_case (.tick hfit) (by simp) (by simp)
-  | seq => exact local_case .seq (by simp) (by simp)
-  | condT hf hc => exact local_case (.condT hf hc) (by simp) (by simp)
-  | condF hf hc => exact local_case (.condF hf hc) (by simp) (by simp)
-  | loopT hf hc => exact local_case (.loopT hf hc) (by simp) (by simp)
-  | loopF hf hc => exact local_case (.loopF hf hc) (by simp) (by simp)
-  | call hk hcl hfr => exact local_case (.call hk hcl hfr) (by simp) (by simp)
-  | ret => exact local_case .ret (by simp) (by simp)
-  | scope hx hax hf hfr => exact local_case (.scope hx hax hf hfr) (by simp) (by simp)
-  | store hfi hf => exact local_case (.store hfi hf) (by simp) (by simp)
-  | fill hx hvs hl hf => exact local_case (.fill hx hvs hl hf) (by simp) (by simp)
-  | restore => exact local_case .restore (by simp) (by simp)
+  | ok => exact local_case .ok (by simp) (by simp) (by simp)
+  | assign hx hax hf => exact local_case (.assign hx hax hf) (by simp) (by simp) (by simp)
+  | tick hfit => exact local_case (.tick hfit) (by simp) (by simp) (by simp)
+  | seq => exact local_case .seq (by simp) (by simp) (by simp)
+  | condT hf hc => exact local_case (.condT hf hc) (by simp) (by simp) (by simp)
+  | condF hf hc => exact local_case (.condF hf hc) (by simp) (by simp) (by simp)
+  | loopT hf hc => exact local_case (.loopT hf hc) (by simp) (by simp) (by simp)
+  | loopF hf hc => exact local_case (.loopF hf hc) (by simp) (by simp) (by simp)
+  | call hk hcl hfr => exact local_case (.call hk hcl hfr) (by simp) (by simp) (by simp)
+  | ret => exact local_case .ret (by simp) (by simp) (by simp)
+  | scope hx hax hf hfr => exact local_case (.scope hx hax hf hfr) (by simp) (by simp) (by simp)
+  | store hfi hf => exact local_case (.store hfi hf) (by simp) (by simp) (by simp)
+  | fill hx hvs hl hf => exact local_case (.fill hx hvs hl hf) (by simp) (by simp) (by simp)
+  | restore => exact local_case .restore (by simp) (by simp) (by simp)
   | @send ks' _ ch e hch hf =>
     obtain ⟨s₂, hw₂, hp₂⟩ := send_sim L hL hs₁ hp₁ hd₁ hf (hchb pr hprm ch (.inl hch))
       (hown hpr hch)
@@ -1144,6 +1288,12 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
     refine ⟨_, hw₁.trans hw₂, rfl, ?_⟩
     have := hr.setRd hlt (ks := ks') (st := st.received ch x m) (s := s₂) (Λ := c.L)
       (chans := w.chans) hp₂ hr.chans
+    simpa using this
+  | @check ks' _ ch x m hch hm hx hax hτ =>
+    obtain ⟨s₂, hw₂, hp₂⟩ := check_sim L hL (Λ := c.L) hs₁ (by simpa using hp₁) hd₁
+      (hchb pr hprm ch (.inr hch)) (by simpa using hr.chans ch) hm hx hax hτ
+    refine ⟨{ w with ms := w.ms.set i s₂ }, hw₁.trans (by simpa using hw₂), rfl, ?_⟩
+    have := hr.set hlt (ks := ks') (s := s₂) (Λ := c.L) (by simpa using hp₂) hr.chans
     simpa using this
 
 /-- **Runs**: every run of the network in 32 bits is matched by a run of the

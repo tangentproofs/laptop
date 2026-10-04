@@ -145,7 +145,8 @@ theorem bt_step_progress {L : Layout} (hB : BTOk L) {c c' : BCfg} (h : BStep L c
   | @act a b cps Λ ha ht =>
     obtain ⟨s₁, r₁, hr₁, hd₁, -⟩ := hr.follow hB.ok
     obtain ⟨s₂, r₂, hp₂, lo₂, top₂, prog⟩ :=
-      machine_sim L hB.ok ha (sact_not_send ha) (sact_not_recv ha) hr₁.p hd₁
+      machine_sim L hB.ok ha (sact_not_send ha) (sact_not_recv ha)
+        (sact_not_check ha) hr₁.p hd₁
     obtain ⟨et, er⟩ := sact_tr ha ht
     have hw : ∀ j, L.W ≤ j → Wd L (high s₂) j = Wd L (high s₁) j := fun j hj => wd_of_top top₂ hj
     refine ⟨s₂, r₁.trans r₂, ⟨by rw [er]; exact hp₂, by rw [hw _ le_rfl]; exact hr₁.cnt,

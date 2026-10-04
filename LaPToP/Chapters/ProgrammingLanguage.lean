@@ -1745,7 +1745,7 @@ exactly the state the theorem asks for, and the layout to put each named
 statement where its calls go.
 :::
 
-:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.SStep.msteps, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.Cont.frames, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.PB, LaPToP.ProgramTheory.Interpreter.Lang.parseToksShadow, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees, LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.LStep, LaPToP.ProgramTheory.Interpreter.Lang.PB.Sound, LaPToP.ProgramTheory.Interpreter.Lang.PB.one_sound, LaPToP.ProgramTheory.Interpreter.Lang.resolvePar_toProg, LaPToP.ProgramTheory.Interpreter.Lang.shadow_sound, LaPToP.ProgramTheory.Interpreter.Lang.Exp.toB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.Stmt.toB4_toProg, LaPToP.ProgramTheory.Interpreter.Lang.divB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.powB4_eval")
+:::theorem "interpreter_swarm" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, channels, concurrency") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileNet.SNet, LaPToP.ProgramTheory.CompileNet.SAct, LaPToP.ProgramTheory.CompileNet.SStep, LaPToP.ProgramTheory.CompileNet.SAct.act, LaPToP.ProgramTheory.CompileNet.SStep.msteps, LaPToP.ProgramTheory.CompileNet.reach_of_sSteps, LaPToP.ProgramTheory.CompileNet.Cont, LaPToP.ProgramTheory.CompileNet.Cont.frames, LaPToP.ProgramTheory.CompileNet.PRel, LaPToP.ProgramTheory.CompileNet.Rel, LaPToP.ProgramTheory.CompileNet.swarm_lift, LaPToP.ProgramTheory.CompileNet.follow, LaPToP.ProgramTheory.CompileNet.tick_runs, LaPToP.ProgramTheory.CompileNet.swarm_send, LaPToP.ProgramTheory.CompileNet.swarm_recv, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileNet.send_sim, LaPToP.ProgramTheory.CompileNet.recv_sim, LaPToP.ProgramTheory.CompileNet.swarm_check, LaPToP.ProgramTheory.CompileNet.check_sim, LaPToP.ProgramTheory.CompileNet.sim_step, LaPToP.ProgramTheory.CompileNet.swarm_simulates, LaPToP.ProgramTheory.CompileNet.rel_init, LaPToP.ProgramTheory.CompileNet.halt_one, LaPToP.ProgramTheory.CompileNet.swarm_correct, LaPToP.ProgramTheory.CompileNet.swarm_book, B4.Swarm, B4.Swarm.stepAt, B4.Swarm.run, B4.getClk, B4.step_rdT, B4.step_wrT, LaPToP.ProgramTheory.Interpreter.Lang.PB, LaPToP.ProgramTheory.Interpreter.Lang.parseToksShadow, LaPToP.ProgramTheory.Interpreter.Lang.parseB4, LaPToP.ProgramTheory.Interpreter.Lang.B4Program.run, LaPToP.ProgramTheory.Interpreter.Lang.B4Outcome.agrees, LaPToP.ProgramTheory.Interpreter.Network.NProc, LaPToP.ProgramTheory.Interpreter.Network.LStep, LaPToP.ProgramTheory.Interpreter.Lang.PB.Sound, LaPToP.ProgramTheory.Interpreter.Lang.PB.one_sound, LaPToP.ProgramTheory.Interpreter.Lang.resolvePar_toProg, LaPToP.ProgramTheory.Interpreter.Lang.shadow_sound, LaPToP.ProgramTheory.Interpreter.Lang.Exp.toB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.Stmt.toB4_toProg, LaPToP.ProgramTheory.Interpreter.Lang.divB4_eval, LaPToP.ProgramTheory.Interpreter.Lang.powB4_eval")
 Communicating processes, compiled to b4, run as a swarm of machines, proved to
 compute the network. Each process of a network becomes its own b4 machine; the
 machines run side by side and reach their channels through b4's `io`
@@ -1777,11 +1777,17 @@ the interpreter and the network machine do, and a run warns when a value left
 
 Honest scope. Forward simulation, and the correspondence of deadlocks
 ({uses "interpreter_swarm_deadlock"}[]); that the swarm does nothing else
-in general is not proved. $`\surd c` runs on the swarm too — a check `io`
-answered when the message is there, and settled to false by the runner, when no
-machine can move, for the earliest machine waiting at one — and the self-test
-checks it against the network machine, but the simulation theorems do not yet
-cover it. That the statements the parser builds beside a program are that
+in general is not proved. $`\surd c` runs on the swarm too. A check `io` whose
+message is there is answered whether the message was sent before the machine's
+clock, which is the network machine's answer (`swarm_check`, `check_sim`), so
+the simulation covers it. A check whose message is not there is settled to false
+by the runner, when no machine can move, for the earliest machine waiting at
+one; the network machine settles one when no process can send before now
+(`Quiet`). That these agree is checked by the self-test against the network
+machine but not proved: the runner settles only once the swarm is stuck, so
+matching a network run that settles early takes the swarm's runs being
+interchangeable, which is the confluence argument of
+{uses "interpreter_swarm_deadlock"}[] carried through clocks. That the statements the parser builds beside a program are that
 program is proved: every pair the parser builds carries the proof
 (`PB.sound`), and `shadow_sound` lifts it to the parser's two results. That the
 compiler's rewrites (`≠ ≤ > ≥ ⇒`, $`a ^ n`, $`\mathbf{div}` and $`\mathbf{mod}` by
