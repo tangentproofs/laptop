@@ -1289,7 +1289,7 @@ $`t = \infty`, which the finiteness condition excludes — and that is exactly t
 untimed reading, where it has no behaviour at all.
 :::
 
-:::theorem "interpreter_language" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, arrays, cli, hehner-5.1.0") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Lang.Value, LaPToP.ProgramTheory.Interpreter.Lang.Value.decEq, LaPToP.ProgramTheory.Interpreter.Lang.Value.index, LaPToP.ProgramTheory.Interpreter.Lang.Value.update, LaPToP.ProgramTheory.Interpreter.Lang.Value.update_single, LaPToP.ProgramTheory.Interpreter.Lang.UnOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.BinOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.Exp, LaPToP.ProgramTheory.Interpreter.Lang.Exp.eval, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx_nil, LaPToP.ProgramTheory.Interpreter.Lang.getElem?_set_ite, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_iff, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_seq, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_test, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₂_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.twoDim_run, LaPToP.ProgramTheory.Interpreter.Lang.tokenize, LaPToP.ProgramTheory.Interpreter.Lang.parseProg, LaPToP.ProgramTheory.Interpreter.Lang.parseExp, LaPToP.ProgramTheory.Interpreter.Lang.parseToksWith, LaPToP.ProgramTheory.Interpreter.Lang.parseProgramWith, LaPToP.ProgramTheory.Interpreter.Lang.renderState, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_sumTo, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sumTo_ten, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_backtrack, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_runAll, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrays_run")
+:::theorem "interpreter_language" (parent := "programming_language_core") (tags := "programs, interpreter, syntax, arrays, cli, hehner-5.1.0") (effort := "large") (lean := "LaPToP.ProgramTheory.Interpreter.Lang.Value, LaPToP.ProgramTheory.Interpreter.Lang.Value.decEq, LaPToP.ProgramTheory.Interpreter.Lang.Value.index, LaPToP.ProgramTheory.Interpreter.Lang.Value.update, LaPToP.ProgramTheory.Interpreter.Lang.Value.update_single, LaPToP.ProgramTheory.Interpreter.Lang.UnOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.BinOp.apply, LaPToP.ProgramTheory.Interpreter.Lang.Exp, LaPToP.ProgramTheory.Interpreter.Lang.Exp.eval, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx, LaPToP.ProgramTheory.Interpreter.Lang.assignIdx_nil, LaPToP.ProgramTheory.Interpreter.Lang.getElem?_set_ite, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_iff, LaPToP.ProgramTheory.Interpreter.Lang.denote_assignIdx_seq, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₁_test, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrayExample₂_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.twoDim_run, LaPToP.ProgramTheory.Interpreter.Lang.tokenize, LaPToP.ProgramTheory.Interpreter.Lang.parseProg, LaPToP.ProgramTheory.Interpreter.Lang.parseExp, LaPToP.ProgramTheory.Interpreter.Lang.parseToksWith, LaPToP.ProgramTheory.Interpreter.Lang.parseProgramWith, LaPToP.ProgramTheory.Interpreter.Lang.renderState, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_sumTo, LaPToP.ProgramTheory.Interpreter.Lang.Demo.sumTo_ten, LaPToP.ProgramTheory.Interpreter.Lang.Demo.parse_backtrack, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_runAll, LaPToP.ProgramTheory.Interpreter.Lang.Demo.backtrack_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.arrays_run, LaPToP.ProgramTheory.Interpreter.Lang.Demo.big_ops, LaPToP.ProgramTheory.Interpreter.Lang.Demo.lt_neg_tokens")
 The interpreter's own language. The syntax of {uses "interpreter_cli"}[] ran the
 demonstrations over three integer variables with fixed names; this is the
 language the command line now runs. Programs are still the core syntax of
@@ -1304,6 +1304,18 @@ Expressions have the book's operators: arithmetic with floor $`\mathrm{div}` and
 $`\mathrm{mod}`, comparisons, $`\lnot`, $`\land`, $`\lor`, $`\Rightarrow`,
 list literals $`[a; b; c]`, catenation $`+`, length $`\#`, indexing by
 juxtaposition, and $`\mathbf{if}` in expressions.
+
+The book writes $`=`, $`\Rightarrow` and $`\Leftarrow` at two precedences: small,
+binding tighter than $`\land` and $`\lor`, and large, below every other operator,
+so that $`a \land b = b \land a` can be read as an equation between two
+conjunctions. Both are here. The small ones are `=`, `->` (or `⇒`, `=>`) and `<-`
+(or `<==`); the large ones are `==`, `-->` and `<--` (or `≡`, `⟹`, `⟸`). So
+$`b := \top \land \bot == \bot \land \top` assigns $`\top`, where with the small
+`=` it would compare $`\bot` with $`\bot`, and $`\bot <-- \top` is
+$`\top \Rightarrow \bot`. Both kinds of arrow are right-associative, and the large
+operators group to the left. The glyph `⇐` stays the refinement arrow of a named
+specification. Since `<-` is one token, a `<-` written right before a digit is
+read as `<` and then `-`: `x<-1` is $`x < -1`, and `x <- 1` is $`x \Leftarrow 1`.
 
 Arrays are what {uses "data_structures"}[] says they are: "in program theory, an
 array is a list variable, and array element assignment assigns the list variable
