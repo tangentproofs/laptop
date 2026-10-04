@@ -13,7 +13,9 @@ which builds the compiler's statements (`CompileB4.Stmt`) beside each program it
 reads (`parseToksShadow`), compiled, and run: a single program on one b4
 machine, a network on a swarm (`B4.Swarm`). Named statements are laid out from
 `0x100` and called with `cl`; local variables keep their old values on the
-control stack. `≠ ≤ > ≥` are rewritten into `= <` and `¬`, which the compiler
+control stack. `≠ ≤ > ≥` are rewritten into `= <` and `¬`, `⇒` into `¬` and
+`∨`, `a ^ n` (for a literal `n`) into products, and `div`/`mod` by a divisor
+that may be negative into a conditional expression, all of which the compiler
 handles. What the machine computes is, by `CompileB4.load_correct` and
 `CompileNet.swarm_correct`, what the language computes, as long as no value
 leaves 32 bits; `interp --selftest` also compares the two on the demonstrations.
@@ -23,6 +25,22 @@ namespace LaPToP.ProgramTheory.Interpreter.Lang
 
 open LaPToP.ProgramTheory.Interpreter.Demo (Tok Toks)
 open LaPToP.ProgramTheory.CompileB4 LaPToP.ProgramTheory.CompileNet B4
+
+/-- `a × a × ⋯ × a`, `n` times (`1` when `n = 0`). -/
+def Exp.powB4 (a : Exp) : ℕ → Exp
+  | 0 => .lit (.int 1)
+  | 1 => a
+  | n + 1 => .bin .mul (a.powB4 n) a
+
+/-- `a div b` and `a mod b` by the machine's `dv` and `md`, which agree with the
+book's floor division only for a positive divisor: for a negative one,
+`a div b = (-a) div (-b)` and `a mod b = -((-a) mod (-b))`. -/
+def Exp.divB4 (op : BinOp) (a b : Exp) : Exp :=
+  let neg := fun e : Exp => Exp.un .neg e
+  let byNeg := fun a b => if op = .div then .bin .div (neg a) (neg b) else neg (.bin .mod (neg a) (neg b))
+  match b with
+  | .lit (.int k) => if 0 < k then .bin op a b else byNeg a b
+  | _ => .cond (.bin .lt b (.lit (.int 0))) (byNeg a b) (.bin op a b)
 
 /-- An expression in the operators the compiler takes, or why not. -/
 def Exp.toB4 : Exp → Except String Exp
@@ -36,13 +54,22 @@ def Exp.toB4 : Exp → Except String Exp
     let a ← a.toB4
     let b ← b.toB4
     match op with
-    | .add | .sub | .mul | .div | .mod | .eq | .lt => .ok (.bin op a b)
+    | .add | .sub | .mul | .eq | .lt | .and | .or => .ok (.bin op a b)
+    | .div | .mod => .ok (Exp.divB4 op a b)
     | .ne => .ok (.un .not (.bin .eq a b))
     | .le => .ok (.un .not (.bin .lt b a))
     | .gt => .ok (.bin .lt b a)
     | .ge => .ok (.un .not (.bin .lt a b))
-    | _ => .error "the b4 compiler takes only + - × div mod = ≠ < ≤ > ≥ ¬ on integers and binaries"
+    | .imp => .ok (.bin .or (.un .not a) b)
+    | .pow =>
+      match b with
+      | .lit (.int n) =>
+        if n < 0 then .ok (.lit (.int 0))
+        else if n ≤ 31 then .ok (a.powB4 n.toNat)
+        else .error "the b4 compiler takes a ^ n only for a literal n up to 31"
+      | _ => .error "the b4 compiler takes a ^ n only for a literal n up to 31"
   | .index (.var x) i => do .ok (.index (.var x) (← i.toB4))
+  | .cond c a b => do .ok (.cond (← c.toB4) (← a.toB4) (← b.toB4))
   | _ => .error "the b4 compiler takes only integers, binaries, variables and items of arrays"
 
 /-- A statement's expressions in the operators the compiler takes, or why not. -/
@@ -126,7 +153,8 @@ def B4Program.commsLook (bp : B4Program) : ℕ → List (Bool × ℕ) :=
 /-- Whether an expression is a binary, by its form. -/
 def Exp.isBin : Exp → Bool
   | .lit (.bool _) | .un .not _ => true
-  | .bin op _ _ => op == .eq || op == .lt
+  | .bin op _ _ => op == .eq || op == .lt || op == .and || op == .or
+  | .cond _ a b => a.isBin && b.isBin
   | _ => false
 
 /-- The expressions a statement assigns to `x`. -/
@@ -147,7 +175,28 @@ def Exp.arrs : Exp → List ℕ
   | .index a i => a.arrs ++ i.arrs
   | .bin _ a b => a.arrs ++ b.arrs
   | .un _ a => a.arrs
+  | .cond c a b => c.arrs ++ a.arrs ++ b.arrs
   | _ => []
+
+/-- The expressions of a statement. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.exps : Stmt → List Exp
+  | .assign _ e | .send _ e | .ensure e => [e]
+  | .store _ i e => [i, e]
+  | .seq p q | .choice p q => p.exps ++ q.exps
+  | .cond c p q => c :: p.exps ++ q.exps
+  | .loop c p => c :: p.exps
+  | .scope _ e p => e :: p.exps
+  | _ => []
+
+/-- Whether the branches of each conditional expression are short enough for the
+relative hops (`h0`, at most 127 bytes) its code is made of. -/
+def Exp.hopsOk (L : Layout) : Exp → Bool
+  | .cond c a b => c.hopsOk L && a.hopsOk L && b.hopsOk L &&
+      (ecode L a).length + 9 < 128 && (ecode L b).length + 2 < 128
+  | .bin _ a b => a.hopsOk L && b.hopsOk L
+  | .un _ a => a.hopsOk L
+  | .index _ i => i.hopsOk L
+  | _ => true
 
 /-- The variables a statement uses as arrays. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.arrs : Stmt → List ℕ
@@ -252,6 +301,9 @@ def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Out
     | _ => throw s!"{name x} is used as an array, so it must start as a list"
     if (bp.procs ++ bp.defs.map (·.2)).any (·.wholes.contains x) then
       throw s!"the b4 compiler changes the array {name x} only item by item, not as a whole"
+  for e in (bp.procs ++ bp.defs.map (·.2)).flatMap Stmt.exps do
+    if !e.hopsOk L₀ then
+      throw "a conditional expression is too long for b4's relative hops; use an if statement"
   let used := L₀.base + 4 * (L₀.W + 5) + 16
   if used > MAXBYTE then throw "the program and its variables do not fit in b4's 64 KB"
   let k := min 64 ((MAXBYTE - used) / (4 * (L₀.W + 1)))
@@ -282,6 +334,9 @@ def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outco
     | _ => throw s!"{name x} is used as an array, so it must start as a list"
     if (bp.procs ++ bp.defs.map (·.2)).any (·.wholes.contains x) then
       throw s!"the b4 compiler changes the array {name x} only item by item, not as a whole"
+  for e in (bp.procs ++ bp.defs.map (·.2)).flatMap Stmt.exps do
+    if !e.hopsOk L then
+      throw "a conditional expression is too long for b4's relative hops; use an if statement"
   if !(L.base + 4 * L.n + 4 * cellsOf L.arrays + 16 ≤ MAXBYTE) then
     throw "the program and its variables do not fit in b4's 64 KB"
   let net := bp.toSNet s

@@ -128,7 +128,8 @@ not build it.
 
 `LaPToP/ProgramTheory/CompileB4.lean` compiles the integer fragment of the
 language (assignment, sequence, `if`, `while`, calls of named statements, local
-variables, over `+ - × div mod`, `<`, `=`, `¬`) to bytecode for
+variables, over `+ - × div mod`, `<`, `=`, `¬ ∧ ∨` and conditional expressions
+`if c then a else b fi`, whose code hops relatively with `h0`) to bytecode for
 [b4](https://github.com/tangentstorm/b4), a small stack machine with
 implementations in many languages. Named statements are laid out from `0x100`
 and called with b4's `cl`; a local variable keeps its old value on the control
@@ -161,7 +162,11 @@ printf 'Fact(k) ⇐ if k = 0 then r:= 1 else Fact(k-1). r:= r × k fi\nFact(n)' 
 The language's own parser builds the compiler's statements beside each program
 it reads, so `--b4` takes `do`/`exit` and `for` loops, `new`, simultaneous
 assignment, specifications with parameters and recursion, `c! e`, `c?` and a `||`
-of processes, over 32-bit integers and binaries; it names the first construct
+of processes, over 32-bit integers and binaries. `≠ ≤ > ≥ ⇒ ⇐` and the big
+`== --> <--` are rewritten into the compiled operators, `a ^ n` for a literal
+`n` into a product, and `div`/`mod` by a divisor that may be negative into a
+conditional expression (b4's `dv`/`md` agree with the book's floor division
+only for a positive divisor). It names the first construct
 it does not take, and warns when a value leaves 32 bits. `interp --selftest`
 checks it against the interpreters on the demonstrations.
 

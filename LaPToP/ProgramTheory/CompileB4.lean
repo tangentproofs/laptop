@@ -252,7 +252,7 @@ def Rep (v : Value) : Prop := IsInt v ∨ ∃ b, v = .bool b
 /-- The opcode of a binary operator the compiler handles. -/
 def binByte : BinOp → UInt8
   | .add => 0x80 | .sub => 0x81 | .mul => 0x82 | .div => 0x83 | .mod => 0x84 | .eq => 0x8A
-  | .lt => 0x8B | _ => 0
+  | .lt => 0x8B | .and => 0x86 | .or => 0x87 | _ => 0
 
 /-- From an index on the stack to the address of its cell in an array at `a₀`:
 `li 4 ml li a₀ ad`. -/
@@ -272,6 +272,11 @@ def ecode (L : Layout) : Exp → List UInt8
     match L.arrayAt x with
     | some (a₀, _) => ecode L i ++ addrCode a₀ ++ [0x93]
     | none => []
+  | .cond c a b =>
+    -- `c h0 → b; a; li 0 h0 → end; b`: hops are relative, so the code of an
+    -- expression stays the same wherever it is put
+    ecode L c ++ ([0x9C, UInt8.ofNat ((ecode L a).length + 9)] ++ (ecode L a ++
+      ((0x97 :: le4 0) ++ ([0x9C, UInt8.ofNat ((ecode L b).length + 2)] ++ ecode L b))))
   | _ => []
 
 /-- How deep the stack gets. -/
@@ -280,6 +285,7 @@ def depth : Exp → ℕ
   | .un .neg a => depth a + 1
   | .un _ a => depth a
   | .index _ i => max (depth i) 2
+  | .cond c a b => max (depth c) (max (depth a + 1) (depth b))
   | _ => 1
 
 theorem depth_pos : ∀ e : Exp, 0 < depth e
@@ -288,7 +294,8 @@ theorem depth_pos : ∀ e : Exp, 0 < depth e
   | .un .not a => by simp only [depth]; exact depth_pos a
   | .un .len a => by simp only [depth]; exact depth_pos a
   | .index _ _ => by simp [depth]
-  | .lit _ | .var _ | .nil | .cons _ _ | .cond _ _ _ => by simp [depth]
+  | .cond c _ _ => by simp only [depth]; have := depth_pos c; omega
+  | .lit _ | .var _ | .nil | .cons _ _ => by simp [depth]
 
 /-- **The expression can be computed in 32 bits**: it uses only the operators the
 compiler handles, on integers and binaries as they expect, every variable has a
@@ -306,12 +313,19 @@ def Fits (L : Layout) (st : St) : Exp → Prop
       0 < (b.eval st).toInt ∧ InRange ((a.eval st).toInt.fdiv (b.eval st).toInt)
   | .bin .mod a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st) ∧
       0 < (b.eval st).toInt ∧ InRange ((a.eval st).toInt.fmod (b.eval st).toInt)
-  | .bin .eq a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st)
+  | .bin .eq a b => Fits L st a ∧ Fits L st b ∧ (IsInt (a.eval st) ∧ IsInt (b.eval st) ∨
+      (∃ x, a.eval st = .bool x) ∧ ∃ y, b.eval st = .bool y)
   | .bin .lt a b => Fits L st a ∧ Fits L st b ∧ IsInt (a.eval st) ∧ IsInt (b.eval st)
+  | .bin .and a b => Fits L st a ∧ Fits L st b ∧ (∃ x, a.eval st = .bool x) ∧
+      ∃ y, b.eval st = .bool y
+  | .bin .or a b => Fits L st a ∧ Fits L st b ∧ (∃ x, a.eval st = .bool x) ∧
+      ∃ y, b.eval st = .bool y
   | .un .neg a => Fits L st a ∧ IsInt (a.eval st) ∧ InRange (-(a.eval st).toInt)
   | .un .not a => Fits L st a ∧ ∃ b, a.eval st = .bool b
   | .index (.var x) i => Fits L st i ∧ ∃ a₀ cap vs j, L.arrayAt x = some (a₀, cap) ∧
       st x = .list vs ∧ i.eval st = .int j ∧ 0 ≤ j ∧ j.toNat < cap ∧ j.toNat < vs.length
+  | .cond c a b => Fits L st c ∧ (∃ x, c.eval st = .bool x) ∧ (ecode L a).length + 9 < 128 ∧
+      (ecode L b).length + 2 < 128 ∧ (if (c.eval st).toBool then Fits L st a else Fits L st b)
   | _ => False
 
 theorem enc_int (k : ℤ) : enc (.int k) = fromInt32 k := rfl
@@ -520,8 +534,14 @@ theorem run_addr {L : Layout} {st : St} {s : State} {a₀ : ℕ} {rest : List UI
     have e : 4 * j + (a₀ : ℤ) = ((a₀ + 4 * j.toNat : ℕ) : ℤ) := by push_cast; omega
     rw [e, fromInt32_natCast (by omega)]
 
+theorem sbyte_small {k : ℕ} (h : k < 128) : sbyte (UInt8.ofNat k) = k := by
+  have : (UInt8.ofNat k).toNat = k := by simp; omega
+  have hn : ¬ (UInt8.ofNat k ≥ 128) := by rw [GE.ge, UInt8.le_iff_toNat_le, this]; simp; omega
+  simp only [sbyte, hn, if_false, this]
+
 /-- **Expressions**: the code of an expression that fits pushes its value, and
 changes nothing else. -/
+
 theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e := by
   intro e
   induction e with
@@ -573,12 +593,20 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
         (fun s e => runOp_md s (by rw [e, eb, enc_int]; exact fromInt32_ne_zero rb (by omega)))
         rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_mod ra rb hpos) iha ihb fa fb s h
-    · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩⟩ := hf
-      exact run_bin L st _ a b 0x8A (fun x y => if x == y then 0xFFFFFFFF else 0) (fun s _ => runOp_eq s) rfl (by decide)
-        (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_eq ra rb) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩⟩ | ⟨⟨x, ea⟩, ⟨y, eb⟩⟩⟩ := hf
+      · exact run_bin L st _ a b 0x8A (fun x y => if x == y then 0xFFFFFFFF else 0) (fun s _ => runOp_eq s) rfl (by decide)
+          (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_eq ra rb) iha ihb fa fb s h
+      · exact run_bin L st _ a b 0x8A (fun x y => if x == y then 0xFFFFFFFF else 0) (fun s _ => runOp_eq s) rfl (by decide)
+          (by simp only [Exp.eval]; rw [ea, eb]; cases x <;> cases y <;> rfl) iha ihb fa fb s h
     · obtain ⟨fa, fb, ⟨ka, ea, ra⟩, ⟨kb, eb, rb⟩⟩ := hf
       exact run_bin L st _ a b 0x8B (fun x y => if toInt32 x < toInt32 y then 0xFFFFFFFF else 0) (fun s _ => runOp_lt s) rfl (by decide)
         (by simp only [Exp.eval]; rw [ea, eb, enc_int, enc_int]; exact enc_lt ra rb) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨x, ea⟩, ⟨y, eb⟩⟩ := hf
+      exact run_bin L st _ a b 0x86 (· &&& ·) (fun s _ => runOp_an s) rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb]; cases x <;> cases y <;> rfl) iha ihb fa fb s h
+    · obtain ⟨fa, fb, ⟨x, ea⟩, ⟨y, eb⟩⟩ := hf
+      exact run_bin L st _ a b 0x87 (· ||| ·) (fun s _ => runOp_or s) rfl (by decide)
+        (by simp only [Exp.eval]; rw [ea, eb]; cases x <;> cases y <;> rfl) iha ihb fa fb s h
   | un op a iha =>
     intro s hf h
     cases op <;> simp only [Fits] at hf
@@ -644,7 +672,77 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
           h.vars.2 x a₀ cap hx vs hvs j.toNat hjc hjl]
         simp only [Exp.eval, hvs, hj, Value.index, Value.toInt_int, Value.toList_list, hj0, ite_true]
     | _ => exact hf.elim
-  | cond => intro s hf; exact hf.elim
+  | cond c a b ihc iha ihb =>
+    intro s hf h
+    obtain ⟨fc, ⟨x, ex⟩, hla, hlb, fab⟩ := hf
+    simp only [ecode, depth] at h ⊢
+    obtain ⟨s₁, r₁, w₁, i₁, d₁, sm₁⟩ := ihc s fc (h.left (le_max_left _ _))
+    have hA : At L st s₁ ([0x9C, UInt8.ofNat ((ecode L a).length + 9)] ++ (ecode L a ++
+        ((0x97 :: le4 0) ++ ([0x9C, UInt8.ofNat ((ecode L b).length + 2)] ++ ecode L b)))) 0 :=
+      h.after (by omega) w₁ i₁ d₁ sm₁
+    have hop : high s₁ (getIP s₁) = 0x9C := by simpa using hA.code 0 (by simp)
+    have hd : high s₁ (getIP s₁ + 1) = UInt8.ofNat ((ecode L a).length + 9) := by
+      simpa using hA.code 1 (by simp)
+    have hsb : sbyte (UInt8.ofNat ((ecode L a).length + 9)) = (ecode L a).length + 9 := sbyte_small hla
+    have hhi := hA.hi
+    simp only [List.length_append, List.length_cons, length_le4] at hhi
+    have hdep := h.stack
+    have hpa := depth_pos a
+    have hpb := depth_pos b
+    obtain ⟨w₂, i₂, d₂, sm₂⟩ := step_h0 s₁ (dstack s) (enc (c.eval st)) w₁ hA.lo
+      (by unfold MAXBYTE at *; omega) hop d₁
+      (by rw [hd, hsb]; have := hA.lo; simp only [Int.ofNat_eq_natCast]; omega)
+      (by rw [hd, hsb]; simp only [Int.ofNat_eq_natCast]; unfold MAXBYTE at *; omega)
+    have r₂ : Steps s (step s₁) := r₁.tail ⟨sm₁.running h.run, notIo_of_hop hA.lo hop (by decide), rfl⟩
+    rw [ex] at d₁ i₂ fab
+    cases x with
+    | true =>
+      simp only [Value.toBool, ite_true] at fab
+      simp only [enc, ite_true, show (0xFFFFFFFF : UInt32) ≠ 0 by decide, ite_false] at i₂
+      have hB : At L st (step s₁) (ecode L a ++ ((0x97 :: le4 0) ++
+          ([0x9C, UInt8.ofNat ((ecode L b).length + 2)] ++ ecode L b))) (depth a + 1) :=
+        ⟨w₂, sm₂.running (sm₁.running h.run), by rw [i₂]; have := hA.lo; omega,
+          by simp only [List.length_append, List.length_cons, length_le4]; rw [i₂]; omega,
+          by rw [i₂, sm₂.high]; exact (CodeAt.append.mp hA.code).2,
+          by rw [sm₂.high, sm₁.high]; exact h.vars, by rw [d₂]; omega⟩
+      obtain ⟨s₃, r₃, w₃, i₃, d₃, sm₃⟩ := iha (step s₁) fab (hB.left (by omega))
+      have hC := hB.after (d₂ := 1) (by omega) w₃ i₃ d₃ sm₃
+      obtain ⟨w₄, i₄, d₄, sm₄⟩ := run_li hC le_rfl
+      have hC' := hC.after (bs₁ := 0x97 :: le4 0) (d₂ := 0) le_rfl w₄ (by rw [i₄]; rfl) d₄ sm₄
+      have hop' : high (step s₃) (getIP (step s₃)) = 0x9C := by simpa using hC'.code 0 (by simp)
+      have hd' : high (step s₃) (getIP (step s₃) + 1) = UInt8.ofNat ((ecode L b).length + 2) := by
+        simpa using hC'.code 1 (by simp)
+      have hsb' := sbyte_small (k := (ecode L b).length + 2) (by omega)
+      have hhi' := hC'.hi
+      simp only [List.length_append, List.length_cons] at hhi'
+      obtain ⟨w₅, i₅, d₅, sm₅⟩ := step_h0 (step s₃) (dstack s ++ [enc (a.eval st)]) 0 w₄ hC'.lo
+        (by unfold MAXBYTE at *; omega) hop' (by rw [d₄, d₃, d₂])
+        (by rw [hd', hsb']; have := hC'.lo; simp only [Int.ofNat_eq_natCast]; omega)
+        (by rw [hd', hsb']; simp only [Int.ofNat_eq_natCast]; unfold MAXBYTE at *; omega)
+      refine ⟨step (step s₃), (r₂.trans r₃).tail ⟨hC.run, notIo_li hC, rfl⟩ |>.tail
+        ⟨hC'.run, notIo_of_hop hC'.lo hop' (by decide), rfl⟩, w₅, ?_, ?_,
+        sm₁.trans (sm₂.trans (sm₃.trans (sm₄.trans sm₅)))⟩
+      · rw [i₅, hd', hsb', i₄, i₃, i₂, i₁]; simp; omega
+      · rw [d₅]; simp [Exp.eval, ex, Value.toBool]
+    | false =>
+      simp only [Value.toBool, Bool.false_eq_true, ite_false] at fab
+      simp only [enc, Bool.false_eq_true, ite_false, ite_true] at i₂
+      rw [hd, hsb] at i₂
+      replace i₂ : getIP (step s₁) = getIP s₁ + ((ecode L a).length + 9) := by
+        rw [i₂]; simp only [Int.ofNat_eq_natCast]; omega
+      have hB : At L st (step s₁) (ecode L b) (depth b) :=
+        ⟨w₂, sm₂.running (sm₁.running h.run), by rw [i₂]; have := hA.lo; omega,
+          by rw [i₂]; omega,
+          by
+            rw [i₂, sm₂.high]
+            have := (CodeAt.append.mp (CodeAt.append.mp (CodeAt.append.mp
+              (CodeAt.append.mp hA.code).2).2).2).2
+            convert this using 1; simp; omega,
+          by rw [sm₂.high, sm₁.high]; exact h.vars, by rw [d₂]; omega⟩
+      obtain ⟨s₃, r₃, w₃, i₃, d₃, sm₃⟩ := ihb (step s₁) fab hB
+      refine ⟨s₃, r₂.trans r₃, w₃, ?_, ?_, sm₁.trans (sm₂.trans sm₃)⟩
+      · rw [i₃, i₂, i₁]; simp; omega
+      · rw [d₃, d₂]; simp [Exp.eval, ex, Value.toBool]
 
 /-! ### Statements -/
 
@@ -1672,7 +1770,7 @@ theorem length_ecode_congr (L L' : Layout) (h : ∀ x, (L.arrayAt x).isSome = (L
       have := h x
       cases h₁ : L.arrayAt x <;> cases h₂ : L'.arrayAt x <;> simp_all [ecode]
     | _ => rfl
-  | cond => rfl
+  | cond c a b ihc iha ihb => simp [ecode, ihc, iha, ihb]
 
 theorem slen_congr (L L' : Layout) (h : ∀ x, (L.arrayAt x).isSome = (L'.arrayAt x).isSome) :
     ∀ p : Stmt, slen L p = slen L' p := by

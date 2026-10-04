@@ -289,6 +289,13 @@ def runSelfTest : IO UInt32 := do
       IO.println "ok    alloc: the source reads as the allocator proved in Alloc"
     else IO.eprintln "FAIL  alloc: the source does not read as the proved allocator"; bad := bad + 1
   | .error e => IO.eprintln s!"FAIL  alloc: {e}"; bad := bad + 1
+  -- The operators the compiler takes by rewriting or with relative hops.
+  let opsSrc := "a:= 0-7. b:= 2. q:= a div b. r:= a mod b. q2:= a div (0-b). r2:= a mod (0-b). \
+    q3:= 7 div (0-2). y:= a^3. z:= a^0. w:= if a > 2 then a*10 else A (b-1) fi. \
+    p:= a < b. f:= ¬p. c:= p ∧ f. d:= p ∨ f. e:= p ⇒ f. g:= f <- p. h:= p == f. k:= (p = f) = c"
+  let opsToks := (tokenize (opsSrc.length + 1) opsSrc.toList).toOption.getD []
+  let b4Tests := b4Tests ++
+    [("operators", ["A"], opsToks, Function.update (given []) 0 (.list ([4, 5, 6].map .int)))]
   let heap : List ℤ → St := fun ms => Function.update (given [(0, 5)]) 1 (.list (ms.map .int))
   let b4Tests := b4Tests ++
     [("alloc (split)", ["n", "M"], allocToks, heap ([-1, 17] ++ List.replicate 18 0)),

@@ -379,7 +379,7 @@ theorem fits_lt (fa : Fits L st a) (fb : Fits L st b) (ea : a.eval st = .int x) 
     (rx : InRange x) (ry : InRange y) : Fits L st (.bin .lt a b) := ⟨fa, fb, ⟨x, ea, rx⟩, ⟨y, eb, ry⟩⟩
 
 theorem fits_eq (fa : Fits L st a) (fb : Fits L st b) (ea : a.eval st = .int x) (eb : b.eval st = .int y)
-    (rx : InRange x) (ry : InRange y) : Fits L st (.bin .eq a b) := ⟨fa, fb, ⟨x, ea, rx⟩, ⟨y, eb, ry⟩⟩
+    (rx : InRange x) (ry : InRange y) : Fits L st (.bin .eq a b) := ⟨fa, fb, .inl ⟨⟨x, ea, rx⟩, ⟨y, eb, ry⟩⟩⟩
 
 theorem fits_add (fa : Fits L st a) (fb : Fits L st b) (ea : a.eval st = .int x) (eb : b.eval st = .int y)
     (rx : InRange x) (ry : InRange y) (r : InRange (x + y)) : Fits L st (add a b) :=
