@@ -50,6 +50,8 @@ inductive Stmt where
   | choice (p q : Stmt)
   /-- `ensure c`: go on if `c`, and otherwise back up to the last choice. -/
   | ensure (c : Exp)
+  /-- `A:= [e₀; …; eₖ₋₁]`, on an array variable `A` of `k` cells. -/
+  | fill (x : ℕ) (es : List Exp)
   deriving Repr
 
 /-- A statement as a program of the language. -/
@@ -66,6 +68,7 @@ def Stmt.toProg : Stmt → P
   | .store x i e => assignIdx x [i] e
   | .choice p q => .or p.toProg q.toProg
   | .ensure c => Lang.ensure c
+  | .fill x es => Lang.assign x (Exp.ofList es)
   | .call k => .call k
   | .scope x e p => declare x e p.toProg
   | .ret => .ok

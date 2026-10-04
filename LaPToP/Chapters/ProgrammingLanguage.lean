@@ -1645,7 +1645,7 @@ are finite. That is an infinite descent in a well-founded order. Each step short
 written exactly the book's scripts.
 :::
 
-:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, LaPToP.ProgramTheory.CompileB4.Layout.Image, LaPToP.ProgramTheory.CompileB4.Layout.Laid, LaPToP.ProgramTheory.CompileB4.Layout.image_of_laid, LaPToP.ProgramTheory.CompileB4.Layout.Fit, LaPToP.ProgramTheory.CompileB4.Layout.build, LaPToP.ProgramTheory.CompileB4.Layout.build_laid, LaPToP.ProgramTheory.CompileB4.enter_runs, LaPToP.ProgramTheory.CompileB4.restore_runs, LaPToP.ProgramTheory.CompileB4.enc_div, LaPToP.ProgramTheory.CompileB4.enc_mod, LaPToP.ProgramTheory.CompileB4.ArrOk, LaPToP.ProgramTheory.CompileB4.VarsOk, LaPToP.ProgramTheory.CompileB4.addrCode, LaPToP.ProgramTheory.CompileB4.run_addr, LaPToP.ProgramTheory.CompileB4.store_runs, LaPToP.ProgramTheory.CompileB4.varsOk_store, LaPToP.ProgramTheory.CompileB4.writeArrs, B4.step_cl, B4.step_rt, B4.step_dc, B4.step_cd, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
+:::theorem "interpreter_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileB4.enc, LaPToP.ProgramTheory.CompileB4.toInt32_fromInt32, LaPToP.ProgramTheory.CompileB4.ecode, LaPToP.ProgramTheory.CompileB4.Fits, LaPToP.ProgramTheory.CompileB4.exp_runs, LaPToP.ProgramTheory.CompileB4.Stmt, LaPToP.ProgramTheory.CompileB4.Stmt.toProg, LaPToP.ProgramTheory.CompileB4.scode, LaPToP.ProgramTheory.CompileB4.SEval, LaPToP.ProgramTheory.CompileB4.eval_of_sEval, LaPToP.ProgramTheory.CompileB4.stmt_runs, LaPToP.ProgramTheory.CompileB4.compile, LaPToP.ProgramTheory.CompileB4.compile_correct, LaPToP.ProgramTheory.CompileB4.load, LaPToP.ProgramTheory.CompileB4.load_ready, LaPToP.ProgramTheory.CompileB4.load_correct, LaPToP.ProgramTheory.CompileB4.Layout.Image, LaPToP.ProgramTheory.CompileB4.Layout.Laid, LaPToP.ProgramTheory.CompileB4.Layout.image_of_laid, LaPToP.ProgramTheory.CompileB4.Layout.Fit, LaPToP.ProgramTheory.CompileB4.Layout.build, LaPToP.ProgramTheory.CompileB4.Layout.build_laid, LaPToP.ProgramTheory.CompileB4.enter_runs, LaPToP.ProgramTheory.CompileB4.restore_runs, LaPToP.ProgramTheory.CompileB4.enc_div, LaPToP.ProgramTheory.CompileB4.enc_mod, LaPToP.ProgramTheory.CompileB4.ArrOk, LaPToP.ProgramTheory.CompileB4.VarsOk, LaPToP.ProgramTheory.CompileB4.addrCode, LaPToP.ProgramTheory.CompileB4.run_addr, LaPToP.ProgramTheory.CompileB4.store_runs, LaPToP.ProgramTheory.CompileB4.varsOk_store, LaPToP.ProgramTheory.CompileB4.writeArrs, LaPToP.ProgramTheory.CompileB4.sbyte_small, LaPToP.ProgramTheory.CompileB4.push_runs, LaPToP.ProgramTheory.CompileB4.store_loop, LaPToP.ProgramTheory.CompileB4.fill_runs, B4.step_cl, B4.step_rt, B4.step_dc, B4.step_cd, B4.runN, B4.WF, B4.dstack, B4.view, B4.getVal_setVal_self, B4.getVal_setVal_of_disjoint, B4.dpush_view, B4.dpop_view, B4.step_binop, B4.step_li, B4.step_ri, B4.step_wi, B4.step_jm, B4.step_h0, B4.step_hl")
 A compiler from the integer fragment of the language to the b4 virtual machine,
 proved correct. b4 is a small stack machine with byte-addressed memory, its
 registers mapped into the first bytes, and data and control stacks; it has
@@ -1656,7 +1656,9 @@ pointer, the stacks and memory.
 
 Variables live in 32-bit cells above the code; an integer is kept as its two's
 complement word and a binary as $`-1` or $`0`. An expression is computed on the
-data stack; an assignment stores the top of the stack in the variable's cell;
+data stack, a conditional expression with relative hops (so the code of an
+expression is the same wherever it is placed), $`∧` and $`∨` with b4's bitwise
+`an` and `or` on $`-1` and $`0`; an assignment stores the top of the stack in the variable's cell;
 $`\mathbf{if}` and $`\mathbf{while}` complement the condition, test it with a
 conditional hop, and jump with absolute jumps. Named statements — the
 specifications a program refines, and the ones the parser makes of
@@ -1668,7 +1670,10 @@ on the control stack while its scope runs, and puts it back at the end. An
 array — a variable holding a list, indexed $`A i` and assigned item by item,
 $`A i:= e` — has a cell for each item, after the variables' cells, as many as
 the list it starts with; the address of item $`i` is computed on the stack
-(`li 4 ml li a ad`) and read with `ri` or written with `wi`. The theorem: whenever the
+(`li 4 ml li a ad`) and read with `ri` or written with `wi`. An array keeps its
+length, so $`\#A` is a literal, and a list literal assigned whole,
+$`A:= [e_0; …; e_{k-1}]`, pushes every item before storing any, from the last,
+so that each item is computed from the old list. The theorem: whenever the
 language's execution takes a state $`σ` to $`σ'` with every value evaluated
 fitting in 32 bits, the loaded machine, run long enough, halts with the cells
 holding $`σ'`. Execution in 32 bits is an execution of the language, by the

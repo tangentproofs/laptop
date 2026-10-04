@@ -268,6 +268,11 @@ def ecode (L : Layout) : Exp → List UInt8
   | .bin op a b => ecode L a ++ ecode L b ++ [binByte op]
   | .un .neg a => (0x97 :: le4 0) ++ ecode L a ++ [0x81]
   | .un .not a => ecode L a ++ [0x89]
+  | .un .len (.var x) =>
+    -- an array keeps its length: as many items as it has cells
+    match L.arrayAt x with
+    | some (_, cap) => 0x97 :: le4 (UInt32.ofNat cap)
+    | none => []
   | .index (.var x) i =>
     match L.arrayAt x with
     | some (a₀, _) => ecode L i ++ addrCode a₀ ++ [0x93]
@@ -322,6 +327,8 @@ def Fits (L : Layout) (st : St) : Exp → Prop
       ∃ y, b.eval st = .bool y
   | .un .neg a => Fits L st a ∧ IsInt (a.eval st) ∧ InRange (-(a.eval st).toInt)
   | .un .not a => Fits L st a ∧ ∃ b, a.eval st = .bool b
+  | .un .len (.var x) => ∃ a₀ cap vs, L.arrayAt x = some (a₀, cap) ∧ st x = .list vs ∧
+      vs.length = cap ∧ cap < 2 ^ 31
   | .index (.var x) i => Fits L st i ∧ ∃ a₀ cap vs j, L.arrayAt x = some (a₀, cap) ∧
       st x = .list vs ∧ i.eval st = .int j ∧ 0 ≤ j ∧ j.toNat < cap ∧ j.toNat < vs.length
   | .cond c a b => Fits L st c ∧ (∃ x, c.eval st = .bool x) ∧ (ecode L a).length + 9 < 128 ∧
@@ -609,7 +616,7 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
         (by simp only [Exp.eval]; rw [ea, eb]; cases x <;> cases y <;> rfl) iha ihb fa fb s h
   | un op a iha =>
     intro s hf h
-    cases op <;> simp only [Fits] at hf
+    cases op <;> try simp only [Fits] at hf
     · -- -a is 0 - a
       obtain ⟨fa, ⟨ka, ea, ra⟩, rn⟩ := hf
       simp only [ecode, depth] at h ⊢
@@ -640,6 +647,19 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
       refine ⟨step s₁, r₁.tail ⟨h₁.run, notIo_of_hop h₁.lo hop, rfl⟩, w₂, by rw [i₂, i₁]; simp; omega, ?_,
         sm₁.trans sm₂⟩
       rw [d₂]; simp only [Exp.eval]; rw [eb, enc_not b]
+    · cases a with
+      | var x =>
+        simp only [Fits] at hf
+        obtain ⟨a₀, cap, vs, hx, hvs, hl, hc⟩ := hf
+        simp only [ecode, hx] at h ⊢
+        obtain ⟨w, i, d, sm⟩ := run_li (rest := []) (by rw [List.append_nil]; exact h)
+          (by simp [depth])
+        refine ⟨step s, Steps.one h.run (notIo_li (rest := []) (by rw [List.append_nil]; exact h)),
+          w, by rw [i]; simp, ?_, sm⟩
+        rw [d]
+        simp only [Exp.eval, hvs, UnOp.apply, Value.toList_list, hl, enc_int]
+        rw [fromInt32_natCast (by omega)]
+      | _ => exact hf.elim
   | nil => intro s hf; exact hf.elim
   | cons => intro s hf; exact hf.elim
   | index a i _ ihi =>
@@ -753,6 +773,22 @@ def jmTo (a : ℕ) : List UInt8 := 0x9A :: le4 (UInt32.ofNat a)
 `jm` that follows when it was true. -/
 def test : List UInt8 := [0x89, 0x9C, 7]
 
+/-- The code of several expressions, one after the other: it pushes their values. -/
+def ecodes (L : Layout) : List Exp → List UInt8
+  | [] => []
+  | e :: es => ecode L e ++ ecodes L es
+
+/-- Store the top `k` words of the stack in cells `k-1`, …, `0` of the array at
+`a₀`, the top one in cell `k-1`. -/
+def storeCode (a₀ : ℕ) : ℕ → List UInt8
+  | 0 => []
+  | k + 1 => ((0x97 :: le4 (UInt32.ofNat (a₀ + 4 * k))) ++ [0x95]) ++ storeCode a₀ k
+
+@[simp] theorem length_storeCode (a₀ k : ℕ) : (storeCode a₀ k).length = 6 * k := by
+  induction k with
+  | zero => rfl
+  | succ k ih => simp [storeCode, ih]; omega
+
 /-- The length of a statement's code. -/
 def slen (L : Layout) : Stmt → ℕ
   | .ok => 0
@@ -774,6 +810,10 @@ def slen (L : Layout) : Stmt → ℕ
     | none => 0
   | .choice p q => 415 + slen L p + 5 + slen L q
   | .ensure c => (ecode L c).length + 474
+  | .fill x es =>
+    match L.arrayAt x with
+    | some _ => (ecodes L es).length + 6 * es.length
+    | none => 0
 
 /-- The code of the statements backtracking's runtime is written in — `ok`,
 assignment, sequence, `if`, `while` and stores — as `scode` makes it
@@ -863,6 +903,11 @@ def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
   | .ensure c =>
     let f := a + (ecode L c).length + 13
     ecode L c ++ test ++ jmTo f ++ jmTo (f + 461) ++ failCode L f
+  | .fill x es =>
+    -- every item first, so that each is computed from the old list
+    match L.arrayAt x with
+    | some (a₀, _) => ecodes L es ++ storeCode a₀ es.length
+    | none => []
 
 theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).length = slen L p
   | .ok, _ => rfl
@@ -884,6 +929,12 @@ theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).leng
   | .choice p q, a => by
     simp [scode, slen, length_scode L p, length_scode L q, length_scodeR_save, jmTo]; omega
   | .ensure _, _ => by simp [scode, slen, length_failCode, test, jmTo]
+  | .fill x _, _ => by cases hx : L.arrayAt x <;> simp [scode, slen, hx]
+
+/-- How deep the stack gets in any of several expressions. -/
+def maxDepth : List Exp → ℕ
+  | [] => 0
+  | e :: es => max (depth e) (maxDepth es)
 
 /-- How deep the stack gets in a statement. -/
 def sdepth : Stmt → ℕ
@@ -903,6 +954,7 @@ def sdepth : Stmt → ℕ
   | .store _ i e => max (depth e) (max (depth i + 1) 3)
   | .choice p q => max 4 (max (sdepth p) (sdepth q))
   | .ensure c => max (depth c) 4
+  | .fill _ es => es.length + maxDepth es + 1
 
 /-- The named statements' code, each at its entry and followed by `rt`, below
 the variables. -/
@@ -954,6 +1006,12 @@ inductive SEval (L : Layout) : ℕ → Stmt → St → St → Prop
   | store {d : ℕ} {x : ℕ} {i e : Exp} {s : St} : Fits L s (.index (.var x) i) → Fits L s e →
       SEval L d (.store x i e) s
         (Function.update s x ((s x).update [(i.eval s).toInt] (e.eval s)))
+  /-- `A:= [e₀; …; eₖ₋₁]`, on an array of `k` cells that holds a list of `k` items,
+  with items that fit. -/
+  | fill {d : ℕ} {x a₀ : ℕ} {es : List Exp} {s : St} {vs : List Value} :
+      L.arrayAt x = some (a₀, es.length) → s x = .list vs → vs.length = es.length →
+      (∀ e ∈ es, Fits L s e) →
+      SEval L d (.fill x es) s (Function.update s x ((Exp.ofList es).eval s))
 
 /-- The definitions a layout carries, as the interpreter's. -/
 @[instance_reducible] def Layout.env (L : Layout) : Defs ℕ Value := ⟨fun k => (L.defs k).toProg⟩
@@ -973,6 +1031,7 @@ theorem eval_of_sEval {L : Layout} {d : ℕ} {p : Stmt} {s t : St} (h : SEval L 
   | call _ _ _ ih => exact .call ih
   | scope _ _ _ _ _ ih => exact .newLocal ih
   | store => exact .assign
+  | fill => exact .assign
 
 /-! ### Running statements -/
 
@@ -1214,6 +1273,135 @@ theorem store_runs (L : Layout) (hL : L.Ok) {d x : ℕ} {i e : Exp} {st : St}
     simp [show k ≠ a₀ + 4 * j.toNat by omega, show k ≠ a₀ + 4 * j.toNat + 1 by omega,
       show k ≠ a₀ + 4 * j.toNat + 2 by omega, show k ≠ a₀ + 4 * j.toNat + 3 by omega]
 
+theorem eval_ofList (st : St) : ∀ es : List Exp,
+    (Exp.ofList es).eval st = .list (es.map (·.eval st))
+  | [] => rfl
+  | e :: es => by simp [Exp.ofList, Exp.eval, eval_ofList st es]
+
+theorem depth_le_maxDepth : ∀ {es : List Exp} {e : Exp}, e ∈ es → depth e ≤ maxDepth es
+  | _ :: _, _, .head _ => le_max_left _ _
+  | _ :: _, _, .tail _ h => le_trans (depth_le_maxDepth h) (le_max_right _ _)
+
+/-- **Several expressions**, one after the other: their values are pushed in order. -/
+theorem push_runs (L : Layout) (hL : L.Ok) (st : St) (rest : List UInt8) :
+    ∀ (es : List Exp) (s : State), (∀ e ∈ es, Fits L st e) →
+      At L st s (ecodes L es ++ rest) (es.length + maxDepth es) →
+      ∃ s', Steps s s' ∧ WF s' ∧ getIP s' = getIP s + (ecodes L es).length ∧
+        dstack s' = dstack s ++ es.map (fun e => enc (e.eval st)) ∧ Same s s'
+  | [], s, _, h => ⟨s, .refl, h.wf, by simp [ecodes], by simp, Same.refl s⟩
+  | e :: es, s, hf, h => by
+    have h' : At L st s (ecode L e ++ (ecodes L es ++ rest))
+        (es.length + 1 + max (depth e) (maxDepth es)) := by
+      simpa [ecodes, maxDepth, List.append_assoc, Nat.add_comm, Nat.add_left_comm, Nat.add_assoc] using h
+    obtain ⟨s₁, r₁, w₁, i₁, d₁, sm₁⟩ := exp_runs L hL st e s (hf e (.head _))
+      (h'.left (by omega))
+    have h₁ := h'.after (d₂ := es.length + maxDepth es) (by omega) w₁ i₁ d₁ sm₁
+    obtain ⟨s₂, r₂, w₂, i₂, d₂, sm₂⟩ := push_runs L hL st rest es s₁
+      (fun e he => hf e (.tail _ he)) h₁
+    refine ⟨s₂, r₁.trans r₂, w₂, by rw [i₂, i₁]; simp [ecodes]; omega, by rw [d₂, d₁]; simp,
+      sm₁.trans sm₂⟩
+
+theorem set_take_drop {vs vals : List Value} {k : ℕ} (hk : k < vs.length) (hk' : k < vals.length) :
+    (vs.take (k + 1) ++ vals.drop (k + 1)).set k vals[k] = vs.take k ++ vals.drop k := by
+  rw [List.take_succ_eq_append_getElem hk, List.drop_eq_getElem_cons hk', List.append_assoc,
+    List.set_append_right _ _ (by simp; try omega), List.length_take,
+    show k - min k vs.length = 0 by omega]
+  rfl
+
+/-- **Storing a list**: the top `k` words of the stack, the first `k` items of
+`vals`, go to the array's first `k` cells, which then hold `vals` throughout. -/
+theorem store_loop (L : Layout) (hL : L.Ok) {x a₀ cap : ℕ} (hx : L.arrayAt x = some (a₀, cap))
+    {st₀ : St} {vs vals : List Value} (hl : vs.length = cap) (hl' : vals.length = cap)
+    (hcap : cap < STACKSZ) :
+    ∀ k, k ≤ cap → ∀ s, WF s → Running s → 256 ≤ getIP s → getIP s + 6 * k ≤ L.base →
+      CodeAt (high s) (getIP s) (storeCode a₀ k) → dstack s = (vals.take k).map enc →
+      VarsOk L (high s) (Function.update st₀ x (.list (vs.take k ++ vals.drop k))) →
+      ∃ s', Steps s s' ∧ WF s' ∧ Running s' ∧ getIP s' = getIP s + 6 * k ∧ dstack s' = [] ∧
+        VarsOk L (high s') (Function.update st₀ x (.list vals)) ∧ Keeps L s s'
+  | 0, _, s, w, r, _, _, _, d, v => ⟨s, .refl, w, r, rfl, by simpa using d, by simpa using v,
+      (Same.refl s).keeps⟩
+  | k + 1, hk, s, w, r, lo, hi, c, d, v => by
+    have hb := L.arrayAt_bounds hx
+    have hL1 := hL.1; have hL2 := hL.2
+    have hi' : getIP s + 6 * (k + 1) + 8 < MAXBYTE := by omega
+    have hkv : k < vals.length := by omega
+    have hd : dstack s = (vals.take k).map enc ++ [enc vals[k]] := by
+      rw [d, List.take_succ_eq_append_getElem hkv, List.map_append]; rfl
+    have hA : At L (Function.update st₀ x (.list (vs.take (k + 1) ++ vals.drop (k + 1)))) s
+        ((0x97 :: le4 (UInt32.ofNat (a₀ + 4 * k))) ++ ([0x95] ++ storeCode a₀ k)) 1 :=
+      ⟨w, r, lo, by simp; omega, by simpa [storeCode] using c, v,
+        by rw [d]; simp; omega⟩
+    obtain ⟨w₁, i₁, d₁, sm₁⟩ := run_li hA le_rfl
+    have hop : high (step s) (getIP (step s)) = 0x95 := by
+      rw [sm₁.high, i₁]; simpa using (CodeAt.append.mp hA.code).2 0 (by simp)
+    have hlo₁ : 256 ≤ getIP (step s) := by rw [i₁]; omega
+    have hA₀ : (UInt32.ofNat (a₀ + 4 * k)).toNat = a₀ + 4 * k :=
+      toNat_ofNat_addr (by unfold MAXBYTE at *; omega)
+    have hd₁ : dstack (step s) = (vals.take k).map enc ++ [enc vals[k], UInt32.ofNat (a₀ + 4 * k)] := by
+      rw [d₁, hd]; simp
+    obtain ⟨w₂, i₂, d₂, c₂, st₂, db₂, hi₂, o₂⟩ := step_wi (step s) _ (enc vals[k])
+      (UInt32.ofNat (a₀ + 4 * k)) w₁ hlo₁ (by rw [i₁]; unfold MAXBYTE at *; omega) hop hd₁
+      (by rw [hA₀]; omega) (by rw [hA₀]; unfold MAXBYTE at *; omega)
+    have hclk := step_wi_clk (step s) _ (enc vals[k]) (UInt32.ofNat (a₀ + 4 * k)) w₁ hlo₁ hop hd₁
+      (by rw [hA₀]; omega)
+    rw [hA₀] at hi₂
+    have hr₁ : Running (step s) := sm₁.running r
+    have hr₂ : Running (step (step s)) := ⟨st₂.trans hr₁.1, db₂.trans hr₁.2⟩
+    have hv₂ : VarsOk L (high (step (step s)))
+        (Function.update st₀ x (.list (vs.take k ++ vals.drop k))) := by
+      have := varsOk_store (v := vals[k]) (j := k) v hx (by rw [Function.update_self]) (by omega)
+      rw [Function.update_idem, set_take_drop (by omega) hkv] at this
+      rw [hi₂, sm₁.high]; exact this
+    obtain ⟨s', r', w', run', i', d', v', k'⟩ := store_loop L hL hx hl hl' hcap k (by omega)
+      (step (step s)) w₂ hr₂ (by rw [i₂, i₁]; omega) (by rw [i₂, i₁]; omega)
+      (by
+        rw [hi₂, sm₁.high, i₂, i₁]
+        have hc := (CodeAt.append.mp (CodeAt.append.mp hA.code).2).2
+        refine fun j hj => ?_
+        have hj' := hc j hj
+        have hjl := length_storeCode a₀ k
+        unfold writeWord
+        simp at hj' ⊢
+        split_ifs <;> omega)
+      (by rw [d₂]) hv₂
+    refine ⟨s', ((Steps.one r (notIo_li hA)).tail ⟨hr₁, notIo_of_hop hlo₁ hop (by decide), rfl⟩).trans r',
+      w', run', by rw [i', i₂, i₁]; omega, d', v', ?_⟩
+    refine (sm₁.keeps.trans ⟨fun i hi => ?_, by rw [c₂], by rw [o₂], by rw [hclk], fun i hi => ?_⟩).trans k'
+    · rw [hi₂]
+      unfold writeWord
+      simp [show i ≠ a₀ + 4 * k by omega, show i ≠ a₀ + 4 * k + 1 by omega,
+        show i ≠ a₀ + 4 * k + 2 by omega, show i ≠ a₀ + 4 * k + 3 by omega]
+    · rw [hi₂, writeWord_top (by unfold Layout.top; omega) hi]
+
+/-- **`A:= [e₀; …; eₖ₋₁]`**: push every item, then store them from the last. -/
+theorem fill_runs (L : Layout) (hL : L.Ok) {d x a₀ : ℕ} {es : List Exp} {st : St} {vs : List Value}
+    (hx : L.arrayAt x = some (a₀, es.length)) (hvs : st x = .list vs) (hl : vs.length = es.length)
+    (hf : ∀ e ∈ es, Fits L st e) :
+    SRuns L d (.fill x es) st (Function.update st x ((Exp.ofList es).eval st)) := by
+  intro s a h
+  have hcode := h.code
+  simp only [scode, hx] at hcode
+  have hhi := h.hi; simp only [slen, hx] at hhi
+  have hdep := h.depth; simp only [sdepth] at hdep
+  have hL2 := hL.2
+  have hA : At L st s (ecodes L es ++ storeCode a₀ es.length) (es.length + maxDepth es) :=
+    ⟨h.wf, h.run, h.ip ▸ h.lo, by rw [h.ip]; simp; omega, by rw [h.ip]; exact hcode, h.vars,
+      by rw [h.stack]; simp; omega⟩
+  obtain ⟨s₁, r₁, w₁, i₁, d₁, sm₁⟩ := push_runs L hL st _ es s hf hA
+  rw [h.stack, List.nil_append] at d₁
+  obtain ⟨s', r', w', run', i', d', v', k'⟩ := store_loop L hL hx (st₀ := st) hl
+    (vals := es.map (·.eval st)) (by simp) (by omega) es.length le_rfl s₁ w₁ (sm₁.running h.run)
+    (by rw [i₁, h.ip]; have := h.lo; omega) (by rw [i₁, h.ip]; omega)
+    (by rw [sm₁.high, i₁]; exact (CodeAt.append.mp hA.code).2)
+    (by rw [d₁, List.take_of_length_le (by simp)]; simp)
+    (by
+      rw [List.take_of_length_le (by omega), List.drop_of_length_le (by simp), List.append_nil,
+        ← hvs, Function.update_eq_self, sm₁.high]
+      exact h.vars)
+  refine ⟨s', r₁.trans r', w', run', by rw [i', i₁, h.ip]; simp [slen, hx]; omega, d', ?_,
+    sm₁.keeps.trans k'⟩
+  rw [eval_ofList]; exact v'
+
 @[simp] theorem length_jmTo (t : ℕ) : (jmTo t).length = 5 := rfl
 @[simp] theorem length_test : test.length = 3 := rfl
 
@@ -1283,6 +1471,7 @@ theorem stmt_runs (L : Layout) (hL : L.Ok) {d : ℕ} {p : Stmt} {st st' : St}
     exact ⟨s, .refl, h.wf, h.run, by rw [h.ip]; rfl, h.stack, h.vars, ⟨fun _ _ => rfl, rfl, rfl, rfl, fun _ _ => rfl⟩⟩
   | assign hx ha hf => exact assign_runs L hL hx ha hf
   | store hfi hf => exact store_runs L hL hfi hf
+  | fill hx hvs hl hf => exact fill_runs L hL hx hvs hl hf
   | @seq _ p q s t u _ _ ih₁ ih₂ =>
     intro σ a h
     have hc := CodeAt.append.mp h.code
@@ -1758,7 +1947,15 @@ theorem length_ecode_congr (L L' : Layout) (h : ∀ x, (L.arrayAt x).isSome = (L
     (e : Exp) :
     (ecode L e).length = (ecode L' e).length := by
   induction e with
-  | un op a ih => cases op <;> simp [ecode, ih]
+  | un op a ih =>
+    cases op
+    case len =>
+      cases a with
+      | var x =>
+        have := h x
+        cases h₁ : L.arrayAt x <;> cases h₂ : L'.arrayAt x <;> simp_all [ecode]
+      | _ => rfl
+    all_goals simp [ecode, ih]
   | bin op a b iha ihb => simp [ecode, iha, ihb]
   | lit => rfl
   | var => rfl
@@ -1780,6 +1977,13 @@ theorem slen_congr (L L' : Layout) (h : ∀ x, (L.arrayAt x).isSome = (L'.arrayA
     have := h x
     cases h₁ : L.arrayAt x <;> cases h₂ : L'.arrayAt x <;>
       simp_all [slen, length_ecode_congr L L' h]
+  | fill x es =>
+    have := h x
+    have hes : (ecodes L es).length = (ecodes L' es).length := by
+      induction es with
+      | nil => rfl
+      | cons e es ih => simp [ecodes, length_ecode_congr L L' h e, ih]
+    cases h₁ : L.arrayAt x <;> cases h₂ : L'.arrayAt x <;> simp_all [slen]
   | _ => simp_all [slen, length_ecode_congr L L' h]
 
 /-- Entries for the names `ks`, laid end to end from `a`. -/

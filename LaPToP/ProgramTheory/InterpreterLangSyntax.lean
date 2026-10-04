@@ -1045,7 +1045,9 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           match idx with
           | [] => .ok (st.withChecks (PB.assign x e))
           | [i] => .ok (st.withChecks (PB.of (assignIdx x [i] e) (.store x i e)))
-          | _ => .ok (st.withChecks (PB.no (assignIdx x idx e) "an assignment at more than one index"))
+          -- the b4 compiler lays a two-dimensional array out by rows (`B4Program.prepare`)
+          | [i, j] => .ok (st.withChecks (PB.of (assignIdx x idx e) (.store x (Exp.ofList [i, j]) e)))
+          | _ => .ok (st.withChecks (PB.no (assignIdx x idx e) "an assignment at more than two indices"))
     | t :: _ => .error s!"expected a statement, found '{t.render}'"
     | [] => .error "expected a statement, found the end of the program"
 termination_by structural fuel

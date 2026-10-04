@@ -70,19 +70,43 @@ def Exp.toB4 : Exp → Except String Exp
       | _ => .error "the b4 compiler takes a ^ n only for a literal n up to 31"
   | .index (.var x) i => do .ok (.index (.var x) (← i.toB4))
   | .cond c a b => do .ok (.cond (← c.toB4) (← a.toB4) (← b.toB4))
+  | .un .len (.var x) => .ok (.un .len (.var x))
+  -- a two-dimensional array, laid out by rows in `B4Program.prepare`
+  | .index (.index (.var x) i) j => do .ok (.index (.index (.var x) (← i.toB4)) (← j.toB4))
+  | .un .len (.index (.var x) i) => do .ok (.un .len (.index (.var x) (← i.toB4)))
   | _ => .error "the b4 compiler takes only integers, binaries, variables and items of arrays"
 
-/-- A statement's expressions in the operators the compiler takes, or why not. -/
+/-- The items of a list literal `[a; b; …]`. -/
+def Exp.items? : Exp → Option (List Exp)
+  | .nil => some []
+  | .cons a r => r.items?.map (a :: ·)
+  | _ => none
+
+/-- An item of a list literal: an expression, or a row of a two-dimensional one. -/
+def Exp.toB4Item (e : Exp) : Except String Exp :=
+  match e.items? with
+  | some rs => do .ok (Exp.ofList (← rs.mapM Exp.toB4))
+  | none => e.toB4
+
+/-- A statement's expressions in the operators the compiler takes, or why not. A
+list literal assigned to a variable fills it as an array. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toB4 : Stmt → Except String Stmt
-  | .assign x e => do .ok (.assign x (← e.toB4))
+  | .assign x e => do
+    match e.items? with
+    | some es => .ok (.fill x (← es.mapM Exp.toB4Item))
+    | none => .ok (.assign x (← e.toB4))
   | .seq p q => do .ok (.seq (← p.toB4) (← q.toB4))
   | .cond c p q => do .ok (.cond (← c.toB4) (← p.toB4) (← q.toB4))
   | .loop c p => do .ok (.loop (← c.toB4) (← p.toB4))
   | .send ch e => do .ok (.send ch (← e.toB4))
   | .scope x e p => do .ok (.scope x (← e.toB4) (← p.toB4))
-  | .store x i e => do .ok (.store x (← i.toB4) (← e.toB4))
+  | .store x i e => do
+    match i.items? with
+    | some is => .ok (.store x (Exp.ofList (← is.mapM Exp.toB4)) (← e.toB4))
+    | none => .ok (.store x (← i.toB4) (← e.toB4))
   | .choice p q => do .ok (.choice (← p.toB4) (← q.toB4))
   | .ensure c => do .ok (.ensure (← c.toB4))
+  | .fill x es => do .ok (.fill x (← es.mapM Exp.toB4Item))
   | s => .ok s
 
 /-- A program for b4: its processes (one, if there is no `||`), the named
@@ -111,7 +135,7 @@ def parseB4 (names : List String) (ts : Toks) : Except String B4Program := do
 /-- The variables a statement may assign, given those each named statement may.
 A scope hides its own variable. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.writes (look : ℕ → List ℕ) : Stmt → List ℕ
-  | .assign x _ | .store x _ _ => [x]
+  | .assign x _ | .store x _ _ | .fill x _ => [x]
   | .recv _ x | .check _ x => [x]
   | .seq p q | .cond _ p q | .choice p q => p.writes look ++ q.writes look
   | .loop _ p => p.writes look
@@ -169,8 +193,9 @@ def B4Program.isBinVar (bp : B4Program) (x : ℕ) : Bool :=
   let es := (bp.procs ++ bp.defs.map (·.2)).flatMap (·.assignsTo x)
   !es.isEmpty && es.all Exp.isBin
 
-/-- The variables an expression indexes. -/
+/-- The variables an expression indexes, or takes the length of. -/
 def Exp.arrs : Exp → List ℕ
+  | .un .len (.var x) => [x]
   | .index (.var x) i => x :: i.arrs
   | .index a i => a.arrs ++ i.arrs
   | .bin _ a b => a.arrs ++ b.arrs
@@ -182,6 +207,7 @@ def Exp.arrs : Exp → List ℕ
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.exps : Stmt → List Exp
   | .assign _ e | .send _ e | .ensure e => [e]
   | .store _ i e => [i, e]
+  | .fill _ es => es
   | .seq p q | .choice p q => p.exps ++ q.exps
   | .cond c p q => c :: p.exps ++ q.exps
   | .loop c p => c :: p.exps
@@ -202,6 +228,7 @@ def Exp.hopsOk (L : Layout) : Exp → Bool
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.arrs : Stmt → List ℕ
   | .assign _ e | .send _ e => e.arrs
   | .store x i e => x :: i.arrs ++ e.arrs
+  | .fill x es => x :: es.flatMap Exp.arrs
   | .seq p q => p.arrs ++ q.arrs
   | .cond c p q => c.arrs ++ p.arrs ++ q.arrs
   | .loop c p => c.arrs ++ p.arrs
@@ -209,6 +236,40 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.arrs : Stmt → List ℕ
   | .choice p q => p.arrs ++ q.arrs
   | .ensure c => c.arrs
   | _ => []
+
+/-- The lists a statement assigns whole: each variable with how many items. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.fills : Stmt → List (ℕ × ℕ)
+  | .fill x es => [(x, es.length)]
+  | .seq p q | .cond _ p q | .choice p q => p.fills ++ q.fills
+  | .loop _ p | .scope _ _ p => p.fills
+  | _ => []
+
+/-- The list literals a statement assigns, with the variables they go to. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.fillsOf : Stmt → List (ℕ × List Exp)
+  | .fill x es => [(x, es)]
+  | .seq p q | .cond _ p q | .choice p q => p.fillsOf ++ q.fillsOf
+  | .loop _ p | .scope _ _ p => p.fillsOf
+  | _ => []
+
+/-- The assignments `x:= y` of one variable to another. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.copies : Stmt → List (ℕ × ℕ)
+  | .assign x (.var y) => [(x, y)]
+  | .seq p q | .cond _ p q | .choice p q => p.copies ++ q.copies
+  | .loop _ p | .scope _ _ p => p.copies
+  | _ => []
+
+/-- Each `A:= B` of arrays with `cap` cells as `A:= [B 0; …; B (cap-1)]`. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.expandCopies (capOf : ℕ → Option ℕ) : Stmt → Stmt
+  | .assign x (.var y) =>
+    match capOf x, capOf y with
+    | some c, some _ => .fill x ((List.range c).map fun j => .index (.var y) (.lit (.int j)))
+    | _, _ => .assign x (.var y)
+  | .seq p q => .seq (p.expandCopies capOf) (q.expandCopies capOf)
+  | .cond c p q => .cond c (p.expandCopies capOf) (q.expandCopies capOf)
+  | .choice p q => .choice (p.expandCopies capOf) (q.expandCopies capOf)
+  | .loop c p => .loop c (p.expandCopies capOf)
+  | .scope x e p => .scope x e (p.expandCopies capOf)
+  | p => p
 
 /-- The variables a statement gives a whole new value: by assignment, input, or
 a scope. -/
@@ -218,6 +279,147 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.wholes : Stmt → List ℕ
   | .loop _ p => p.wholes
   | .scope x _ p => x :: p.wholes
   | _ => []
+
+/-- A two-dimensional array of `r` rows of `c` items, by rows: item `A i j` is
+item `i × c + j`; `#A` is `r` and `#(A i)` is `c`. -/
+def Exp.flat2 (dims : ℕ → Option (ℕ × ℕ)) : Exp → Exp
+  | .index (.index (.var x) i) j =>
+    match dims x with
+    | some (_, c) => .index (.var x) (.bin .add (.bin .mul (i.flat2 dims) (.lit (.int c))) (j.flat2 dims))
+    | none => .index (.index (.var x) (i.flat2 dims)) (j.flat2 dims)
+  | .un .len (.index (.var x) i) =>
+    match dims x with
+    | some (_, c) => .lit (.int c)
+    | none => .un .len (.index (.var x) (i.flat2 dims))
+  | .un .len (.var x) =>
+    match dims x with
+    | some (r, _) => .lit (.int r)
+    | none => .un .len (.var x)
+  | .un op a => .un op (a.flat2 dims)
+  | .bin op a b => .bin op (a.flat2 dims) (b.flat2 dims)
+  | .index a i => .index (a.flat2 dims) (i.flat2 dims)
+  | .cond c a b => .cond (c.flat2 dims) (a.flat2 dims) (b.flat2 dims)
+  | .cons a r => .cons (a.flat2 dims) (r.flat2 dims)
+  | e => e
+
+/-- A statement with its two-dimensional arrays laid out by rows. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.flat2 (dims : ℕ → Option (ℕ × ℕ)) : Stmt → Stmt
+  | .assign x e => .assign x (e.flat2 dims)
+  | .seq p q => .seq (p.flat2 dims) (q.flat2 dims)
+  | .cond c p q => .cond (c.flat2 dims) (p.flat2 dims) (q.flat2 dims)
+  | .loop c p => .loop (c.flat2 dims) (p.flat2 dims)
+  | .send ch e => .send ch (e.flat2 dims)
+  | .scope x e p => .scope x (e.flat2 dims) (p.flat2 dims)
+  | .store x i e =>
+    match dims x, i.items? with
+    | some (_, c), some [i, j] =>
+      .store x (.bin .add (.bin .mul (i.flat2 dims) (.lit (.int c))) (j.flat2 dims)) (e.flat2 dims)
+    | _, _ => .store x (i.flat2 dims) (e.flat2 dims)
+  | .fill x es =>
+    match dims x with
+    | some _ => .fill x ((es.flatMap fun r => r.items?.getD [r]).map (·.flat2 dims))
+    | none => .fill x (es.map (·.flat2 dims))
+  | .choice p q => .choice (p.flat2 dims) (q.flat2 dims)
+  | .ensure c => .ensure (c.flat2 dims)
+  | p => p
+
+/-- Whether the compiler has code for an expression. -/
+def Exp.b4Ok : Exp → Bool
+  | .lit (.int _) | .lit (.bool _) | .var _ => true
+  | .bin op a b =>
+    [BinOp.add, .sub, .mul, .div, .mod, .eq, .lt, .and, .or].contains op && a.b4Ok && b.b4Ok
+  | .un .neg a | .un .not a => a.b4Ok
+  | .un .len (.var _) => true
+  | .index (.var _) i => i.b4Ok
+  | .cond c a b => c.b4Ok && a.b4Ok && b.b4Ok
+  | _ => false
+
+/-- The rows and items per row of each two-dimensional array: from the list of
+lists it starts with, or else from a literal list of lists assigned to it. -/
+def B4Program.dims (bp : B4Program) (s : St) : ℕ → Option (ℕ × ℕ) := fun x =>
+  let rowsOf := fun (rs : List Value) => match rs with
+    | .list r :: _ => some (rs.length, r.length)
+    | _ => none
+  match s x with
+  | .list rs => rowsOf rs
+  | _ =>
+    ((bp.procs ++ bp.defs.map (·.2)).flatMap Stmt.fillsOf).findSome? fun (y, es) =>
+      if y != x then none else
+      match es with
+      | r :: _ => match r.items? with
+        | some items => some (es.length, items.length)
+        | none => none
+      | [] => none
+
+/-- Get a program ready for b4's arrays, which keep their length: find the arrays
+(the variables indexed, measured with `#`, assigned a list literal, or copied to
+or from one) and their lengths (the list each starts with, or else the literal
+assigned to it, or else the array copied to it); check every literal and copy has
+that length; write each copy `A:= B` as `A:= [B 0; …]`; and start an array that
+does not start as a list as that many zeros. -/
+def B4Program.prepare (bp : B4Program) (s : St) :
+    Except String (B4Program × St × List (ℕ × ℕ)) := do
+  -- two-dimensional arrays, by rows
+  let dims := bp.dims s
+  let name := fun x => bp.names.getD x "?"
+  let ds := (List.range bp.names.length).filterMap fun x => (dims x).map (x, ·)
+  for (x, r, c) in ds do
+    let lits : List (ℕ × List Exp) := (bp.procs ++ bp.defs.map (·.2)).flatMap Stmt.fillsOf
+    let rows : List ℕ := match s x with
+      | .list rs => rs.map fun (v : Value) => v.toList.length
+      | _ => lits.flatMap fun (y, es) =>
+          if y == x then es.map fun (r : Exp) => (r.items?.map List.length).getD 0 else []
+    if rows.any (· != c) then
+      throw s!"the rows of {name x} must all have {c} items"
+    if (((bp.procs ++ bp.defs.map (·.2)).flatMap Stmt.fillsOf).filter (·.1 == x)).any
+        (·.2.length != r) then
+      throw s!"b4's arrays keep their length: {name x} has {r} rows"
+  let bp : B4Program := ⟨bp.procs.map (·.flat2 dims), bp.defs.map fun (k, p) => (k, p.flat2 dims),
+    bp.names, bp.chans⟩
+  let s : St := fun x => match dims x, s x with
+    | some _, .list rs => .list (rs.flatMap (·.toList))
+    | _, v => v
+  for p in bp.procs ++ bp.defs.map (·.2) do
+    if !(p.exps.all Exp.b4Ok) then
+      throw "the b4 compiler takes only integers, binaries, variables, items of arrays and \
+        their lengths (a two-dimensional array must start as a list of lists, or be assigned one)"
+  let ss := bp.procs ++ bp.defs.map (·.2)
+  let fills := ss.flatMap Stmt.fills
+  let copies := ss.flatMap Stmt.copies
+  let name := fun x => bp.names.getD x "?"
+  let arrs₀ := (ss.flatMap Stmt.arrs).eraseDups
+  let grow := fun (a : List ℕ) => (a ++ copies.filterMap fun (x, y) =>
+    if a.contains x then some y else if a.contains y then some x else none).eraseDups
+  let arrs := (List.range (copies.length + 1)).foldl (fun a _ => grow a) arrs₀
+  let cap₀ : ℕ → Option ℕ := fun x => match s x with
+    | .list vs => some vs.length
+    | _ => (fills.find? (·.1 == x)).map (·.2)
+  let step := fun (c : ℕ → Option ℕ) (x : ℕ) => match c x with
+    | some k => some k
+    | none => (copies.findSome? fun (a, b) => if a == x then c b else if b == x then c a else none)
+  let capOf := (List.range (copies.length + 1)).foldl (fun c _ => fun x => step c x) cap₀
+  let capOf := fun x => if arrs.contains x then capOf x else none
+  for x in arrs do
+    match capOf x with
+    | none => throw s!"{name x} is used as an array, so it must start as a list or be assigned one"
+    | some k =>
+      for (y, l) in fills do
+        if y == x && l != k then
+          throw s!"b4's arrays keep their length: {name x} has {k} items, so it cannot be assigned a list of {l}"
+  for (x, y) in copies do
+    if arrs.contains x && capOf x != capOf y then
+      throw s!"b4's arrays keep their length: {name x} and {name y} have different lengths"
+  let procs := bp.procs.map fun p => p.expandCopies capOf
+  let defs := bp.defs.map fun (k, p) => (k, p.expandCopies capOf)
+  let bp' : B4Program := ⟨procs, defs, bp.names, bp.chans⟩
+  let s' : St := fun x => match capOf x, s x with
+    | some k, .int _ => .list (List.replicate k (.int 0))
+    | some k, .bool _ => .list (List.replicate k (.int 0))
+    | _, v => v
+  for p in bp'.procs ++ bp'.defs.map (·.2) do
+    if sdepth p > STACKSZ then
+      throw "a list literal or array copy is too long for b4's stack of 256 words"
+  .ok (bp', s', ds.map fun (x, _, c) => (x, c))
 
 /-- The array variables, each with as many cells as its list starts with. -/
 def B4Program.arrays (bp : B4Program) (s : St) : List (ℕ × ℕ) :=
@@ -271,6 +473,8 @@ structure B4Outcome where
   scripts : List (String × List (ℤ × ℕ))
   /-- The arrays. -/
   arrays : List (String × List ℤ) := []
+  /-- The items per row of each two-dimensional array (its items are by rows). -/
+  cols : List (String × ℕ) := []
   deriving DecidableEq, Repr
 
 /-- Whether a statement backtracks (`or`, `ensure`). -/
@@ -289,6 +493,7 @@ def Value.b4Int : Value → ℤ
 /-- Run a program that backtracks: on one machine, with as many choice points
 as fit above the cells (`CompileBT`). -/
 def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outcome := do
+  let (bp, s, cols) ← bp.prepare s
   let p ← match bp.procs with
     | [p] => pure p
     | _ => throw "backtracking ('or', 'ensure') is compiled only for a program without ||"
@@ -320,12 +525,14 @@ def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Out
   .ok ⟨st, 0,
     (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && !isArr k).map fun (n, k) => (n, value k),
     [], (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && isArr k).map
-      fun (n, k) => (n, cells k)⟩
+      fun (n, k) => (n, cells k),
+    cols.map fun (x, c) => (bp.names.getD x "?", c)⟩
 
 /-- Run on b4: compile and load each process, run the swarm (a lone process is a
 swarm of one), and read back the result. -/
 def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outcome := do
   if (bp.procs ++ bp.defs.map (·.2)).any (·.backtracks) then return ← bp.runBT s fuel
+  let (bp, s, cols) ← bp.prepare s
   let L := bp.layout s
   let name := fun x => bp.names.getD x "?"
   for (x, _) in L.arrays do
@@ -362,7 +569,8 @@ def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outco
     bp.chans.zipIdx.map fun ((n, _, _), c) =>
       (n, (w.chans c).map fun (v, t) => (B4Program.value v, t.toNat)),
     (bp.names.zipIdx.filter fun (n, k) => !n.startsWith "#" && isArr k).map
-      fun (n, k) => (n, cells k)⟩
+      fun (n, k) => (n, cells k),
+    cols.map fun (x, c) => (bp.names.getD x "?", c)⟩
 
 /-- Parse and run on b4. -/
 def b4Outcome (names : List String) (ts : Toks) (s : St) (fuel : ℕ) : Except String B4Outcome := do
@@ -370,7 +578,9 @@ def b4Outcome (names : List String) (ts : Toks) (s : St) (fuel : ℕ) : Except S
 
 /-- Whether the arrays a run on b4 shows are the lists `look` gives. -/
 def B4Outcome.arraysAre (b : B4Outcome) (look : String → Option Value) : Bool :=
-  b.arrays.all fun (n, l) => (look n).any fun v => l == v.toList.map Value.b4Int
+  b.arrays.all fun (n, l) => (look n).any fun v => l == v.toList.flatMap fun
+    | .list r => r.map Value.b4Int
+    | w => [w.b4Int]
 
 /-- Whether a run on b4 shows what the network machine computed. -/
 def B4Outcome.agrees (b : B4Outcome) (o : NetOutcome) : Bool :=

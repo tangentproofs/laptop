@@ -296,6 +296,17 @@ def runSelfTest : IO UInt32 := do
   let opsToks := (tokenize (opsSrc.length + 1) opsSrc.toList).toOption.getD []
   let b4Tests := b4Tests ++
     [("operators", ["A"], opsToks, Function.update (given []) 0 (.list ([4, 5, 6].map .int)))]
+  -- Whole lists: literals, copies, `#`, and two-dimensional arrays by rows.
+  let srcToks := fun (src : String) => (tokenize (src.length + 1) src.toList).toOption.getD []
+  let b4Tests := b4Tests ++
+    [("arrays", [], Lang.Demo.arraysToks, given []),
+     ("listSum", ["L"], Lang.Demo.listSumToks, Function.update (given []) 0 (.list ([3, 4, 5].map .int))),
+     ("lists", [], srcToks "A:= [1;2;3]. B:= [0;0;0]. B:= A. B 0:= 9. A:= [A 2; A 1; A 0]. n:= #A",
+       given []),
+     ("2-D arrays", [], srcToks "A:= [[1;2;3];[4;5;6]]. A 1 2:= 9. i:= 0. s:= 0. \
+       while i < #A do j:= 0. while j < #(A i) do s:= s + A i j. j:= j+1 od. i:= i+1 od", given []),
+     ("2-D input", ["M"], srcToks "M 0 1:= M 1 0 + M 1 1", Function.update (given []) 0
+       (.list [.list ([1, 2].map .int), .list ([3, 4].map .int)]))]
   let heap : List ℤ → St := fun ms => Function.update (given [(0, 5)]) 1 (.list (ms.map .int))
   let b4Tests := b4Tests ++
     [("alloc (split)", ["n", "M"], allocToks, heap ([-1, 17] ++ List.replicate 18 0)),
@@ -510,7 +521,13 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     let vars := ", ".intercalate (bp.names.filterMap fun w =>
       match out.vars.lookup w, out.arrays.lookup w with
       | some v, _ => some s!"{w} = {shown w v}"
-      | none, some l => some s!"{w} = [{"; ".intercalate (l.map toString)}]"
+      | none, some l =>
+        let list := fun (l : List ℤ) => s!"[{"; ".intercalate (l.map toString)}]"
+        match out.cols.lookup w with
+        | some c =>
+          if c == 0 then some s!"{w} = []" else
+          some s!"{w} = [{"; ".intercalate ((l.toChunks c).map list)}]"
+        | none => some s!"{w} = {list l}"
       | none, none => none)
     let time := if out.status == .deadlock then "∞" else toString out.time
     IO.println (if vars.isEmpty then s!"time = {time}" else s!"{vars}, time = {time}")

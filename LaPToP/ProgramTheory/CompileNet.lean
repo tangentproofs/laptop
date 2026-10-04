@@ -43,6 +43,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toNP : Stmt → NProc ℕ Value
   | .restore x v => .restore x v
   | .check ch x => .check ch x .bool
   | .store x i e => .act (assignIdx x [i] e)
+  | .fill x es => .act (Lang.assign x (Exp.ofList es))
   -- Backtracking is compiled for a lone program (`CompileBT`), not in a network.
   | .choice p _ => p.toNP
   | .ensure c => .act (Lang.ensure c)
@@ -164,6 +165,11 @@ inductive SAct (L : Layout) (pr : SProc) :
       SAct L pr Λ (.store x i e :: ks, st)
         (ks, { st with mem := (Function.update st.mem x
           ((st.mem x).update [(i.eval st.mem).toInt] (e.eval st.mem))) }) Λ
+  /-- `A:= [e₀; …; eₖ₋₁]`. -/
+  | fill {Λ ks st x a₀ es vs} : L.arrayAt x = some (a₀, es.length) → st.mem x = .list vs →
+      vs.length = es.length → (∀ e ∈ es, Fits L st.mem e) →
+      SAct L pr Λ (.fill x es :: ks, st)
+        (ks, { st with mem := Function.update st.mem x ((Exp.ofList es).eval st.mem) }) Λ
 
 /-- **A step of the network, in 32 bits**: one process acts. -/
 inductive SStep (L : Layout) (net : SNet) : SCfg → SCfg → Prop
@@ -195,6 +201,7 @@ theorem SAct.act {L : Layout} {net : SNet} {i : ℕ} {pr : SProc} (hpr : net.pro
   | scope => exact .loc .scope
   | restore => exact .loc .restore
   | store => exact .loc (.act (p := assignIdx _ [_] _) trivial .assign)
+  | fill => exact .loc (.act (p := Lang.assign _ _) trivial .assign)
 
 /-- A step in 32 bits is one or two steps of the network machine: a call is the
 call and then the start of the named statement and its return. -/
@@ -230,6 +237,7 @@ theorem SStep.msteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c'
   | scope => exact one (by simp)
   | restore => exact one (by simp)
   | store => exact one (by simp)
+  | fill => exact one (by simp)
 
 /-- A run in 32 bits is a run of the network machine. -/
 theorem reach_of_sSteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c' : SCfg}
@@ -640,6 +648,13 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
   | @store ks st x i e hfi hf =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     obtain ⟨s', r', w', run', i', d', v', k'⟩ := store_runs L hL hfi hf s (getIP s)
+      ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
+    refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
+      hp.image.mono k'.low⟩, k'.low, k'.top⟩
+    rw [i', k'.cs]; exact hk.mono k'.low
+  | @fill ks st x a₀ es vs hx hvs hl hf =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
+    obtain ⟨s', r', w', run', i', d', v', k'⟩ := fill_runs L hL hx hvs hl hf s (getIP s)
       ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
     refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
       hp.image.mono k'.low⟩, k'.low, k'.top⟩
@@ -1073,6 +1088,7 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
   | ret => exact local_case .ret (by simp) (by simp)
   | scope hx hax hf hfr => exact local_case (.scope hx hax hf hfr) (by simp) (by simp)
   | store hfi hf => exact local_case (.store hfi hf) (by simp) (by simp)
+  | fill hx hvs hl hf => exact local_case (.fill hx hvs hl hf) (by simp) (by simp)
   | restore => exact local_case .restore (by simp) (by simp)
   | @send ks' _ ch e hch hf =>
     obtain ⟨s₂, hw₂, hp₂⟩ := send_sim L hL hs₁ hp₁ hd₁ hf (hchb pr hprm ch (.inl hch))

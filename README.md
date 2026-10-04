@@ -171,7 +171,12 @@ it does not take, and warns when a value leaves 32 bits. `interp --selftest`
 checks it against the interpreters on the demonstrations.
 
 Arrays — a variable holding a list, read as `A i` and written as `A i:= e` —
-get a cell per item after the variables (`run_addr`, `store_runs`). On them,
+get a cell per item after the variables (`run_addr`, `store_runs`), and keep
+their length: `#A` is a literal (proved in `exp_runs`), and `A:= [e₀; …]` pushes
+every item before storing any (`fill_runs`), so `A:= [A 2; A 1; A 0]` reverses
+`A`. `A:= B` is copied item by item, an array that starts as a number starts
+as zeros, and a two-dimensional array (`A i j`, `A i j:= e`, a list of lists)
+is laid out by rows. On them,
 `Alloc.lean` writes the memory allocator of b4's `mm.b4a` in the language and
 proves it against its model of blocks (`alloc_sEval`, `free_sEval`), on b4 as
 well (`alloc_on_b4`). Backtracking — `P or Q`, `ensure c` — runs too
@@ -182,8 +187,10 @@ language's backtracking does, finding a poststate the program has
 (`bt_failure`, `bt_fail_sound`):
 ```sh
 echo 's:= 0 or s:= 1. ensure s = 1' | lake exe interp --b4          # => s = 1, time = 0
-lake exe interp --b4 --demo=subset --n=6 --t=19 '--A=[3;34;4;12;5;2]' '--X=[0;0;0;0;0;0]'
+lake exe interp --b4 --demo=subset --t=19
 # => ... X = [0; 0; 0; 1; 1; 1], i = 6, s = 19, time = 0
+echo 'A:= [[1;2];[3;4]]. A 0 1:= A 1 0 + A 1 1' | lake exe interp --b4
+# => A = [[1; 7]; [3; 4]], time = 0
 ```
 
 ## Prove a theorem by calculation (`lake exe netty`)

@@ -1178,6 +1178,7 @@ theorem sact_evalK {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ
       fun ⟨v, hv, h⟩ => by cases hv with | newLocal hu => exact ⟨_, hu, _, .assign, h⟩⟩
   | restore => exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
   | store => exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
+  | fill => exact ⟨fun h => ⟨_, .assign, h⟩, fun ⟨u, hu, h⟩ => by cases hu; exact h⟩
 
 /-- **A step of backtracking keeps the solutions**: the same, before and after. -/
 theorem bstep_sol {L : Layout} {c c' : BCfg} (h : BStep L c c') (t : St) : Sol L c' t ↔ Sol L c t := by
