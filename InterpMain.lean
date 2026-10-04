@@ -355,6 +355,13 @@ def runSelfTest : IO UInt32 := do
       if ok then IO.println s!"ok    {name}: b4 backtracks to what the interpreter's search finds"
       else IO.eprintln s!"FAIL  {name}: b4 and the interpreter's search differ"; bad := bad + 1
     | .error e, _ | _, .error e => IO.eprintln s!"FAIL  {name}: {e}"; bad := bad + 1
+  -- A search that keeps more choice points than fit: the machine says so.
+  let fullSrc := "i:= 0. while i < 70 do (x:= 0 or x:= 1). i:= i+1 od. ensure false"
+  match b4Outcome [] ((tokenize (fullSrc.length + 1) fullSrc.toList).toOption.getD []) (given []) 100000 with
+  | .ok b =>
+    if b.status == .full then IO.println "ok    full: b4 says when there is no room for a choice point"
+    else IO.eprintln "FAIL  full: b4 did not report running out of choice points"; bad := bad + 1
+  | .error e => IO.eprintln s!"FAIL  full: {e}"; bad := bad + 1
   -- Probabilistic choice on b4: with any seed, an outcome the program may have.
   let probTests : List (String × Toks) :=
     [("probEx1", Lang.Demo.probEx1Toks), ("probEx2", Lang.Demo.probEx2Toks),
@@ -542,6 +549,7 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
             -- backtracking finds the first poststate of the search
             match out.status, prog.runAll o.fuel st with
             | .failed, [] => true
+            | .full, _ => true
             | .halted, r :: _ => out.agreesWith prog.names r
             | _, _ => false
           else
@@ -558,6 +566,9 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
       IO.eprintln "interp --b4: warning: some value left 32 bits or some index left its array, \
         so the machine's result is not the language's (the compiler is proved correct only \
         within 32 bits and within the arrays)"
+    if out.status == .full then
+      IO.println "no room for more choice points: the search keeps more than b4's memory holds"
+      return 2
     if out.status == .failed then
       IO.println "no poststate: every choice ends in an ensure that fails"
       return 2
@@ -593,7 +604,7 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     | .running =>
       IO.eprintln s!"interp --b4: the machines were still running after {o.fuel} rounds (--fuel)"
       return 2
-    | .failed => return 2
+    | .failed | .full => return 2
 
 def main (args : List String) : IO UInt32 := do
   match parseArgs args {} with

@@ -972,6 +972,8 @@ inductive B4Status where
   | running
   /-- Backtracking failed: every choice ends in a false `ensure`. -/
   | failed
+  /-- Backtracking ran out of room for choice points. -/
+  | full
   deriving DecidableEq, Repr
 
 /-- A word as an integer. -/
@@ -1037,7 +1039,8 @@ def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
   let L := { L₀ with choices := k }
   let m := runN (fuel * 10000) (load L p s)
   let flag := toInt32 (getVal m.mem (L.base + 4 * (L.W + 4)))
-  let st := if getRST m != 0 then B4Status.running else if flag == -1 then .failed else .halted
+  let st := if getRST m != 0 then B4Status.running else if flag == -1 then .failed
+    else if flag == -2 then .full else .halted
   let isArr := fun k => L.arrays.any (·.1 == k)
   let value := fun x => B4Program.value (getVal m.mem (L.addr x))
   let cells := fun x => match L.arrayAt x with

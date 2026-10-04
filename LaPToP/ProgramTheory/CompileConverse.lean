@@ -213,7 +213,7 @@ theorem reaches_final {L : Layout} (hB : BTOk L) {N : ℕ} {s₀ : State}
 /-- A configuration where backtracking is **stuck**: something is left to run, it
 is not a failure, and no step applies — a value would leave 32 bits, an index its
 array, or the program uses what the backtracking compiler leaves out. -/
-def Stuck (L : Layout) (c : BCfg) : Prop := c.cur.1 ≠ [] ∧ ¬ BFails L c ∧ Final L c
+def Stuck (L : Layout) (c : BCfg) : Prop := c.cur.1 ≠ [] ∧ ¬ BFails L c ∧ ¬ BFull L c ∧ Final L c
 
 theorem halted_eq {s₀ : State} {N n : ℕ} (hN : getRST (runN N s₀) = 0) (hn : getRST (runN n s₀) = 0) :
     runN N s₀ = runN n s₀ := by
@@ -223,18 +223,21 @@ theorem halted_eq {s₀ : State} {N n : ℕ} (hN : getRST (runN N s₀) = 0) (hn
   · obtain ⟨i, rfl⟩ : ∃ i, N = n + i := ⟨N - n, by omega⟩
     rw [runN_add, runN_of_stopped _ hn]
 
-/-- **The converse.** If the loaded machine halts, then one of three things
-holds. The program ends in a state `t` that the language's semantics allows,
-the machine's cells hold `t`, and its failure flag is clear. Or the program has
-no poststate at all, and the flag is set. Or the language's 32-bit execution got
-stuck: a value would have left 32 bits, an index its array, or the program used
-what the compiler leaves out. -/
+/-- **The converse.** If the loaded machine halts, then one of four things holds.
+The program ends in a state `t` that the language's semantics allows, the
+machine's cells hold `t`, and its flag is clear. Or the program has no poststate
+at all, and the flag is `-1`. Or the search ran out of room for choice points,
+and the flag is `-2`. Or the language's 32-bit execution got stuck: a value
+would have left 32 bits, an index its array, or the program used what the
+compiler leaves out. -/
 theorem converse {L : Layout} (hB : BTOk L) {p : Stmt} (hF : L.Fit p) (hcl : p.clean = true)
     {st : St} {N : ℕ} (hN : getRST (runN N (load L p st)) = 0) :
     (∃ t : St, @Eval ℕ Value L.env _ p.toProg st t ∧ VarsOk L (high (runN N (load L p st))) t ∧
         Wd L (high (runN N (load L p st))) (L.W + 4) = 0) ∨
       ((∀ t : St, ¬ @Eval ℕ Value L.env _ p.toProg st t) ∧
         Wd L (high (runN N (load L p st))) (L.W + 4) = fromInt32 (-1)) ∨
+      (∃ c, ReflTransGen (BStep L) (BCfg.init p st) c ∧ BFull L c ∧
+        Wd L (high (runN N (load L p st))) (L.W + 4) = fromInt32 (-2)) ∨
       ∃ c, ReflTransGen (BStep L) (BCfg.init p st) c ∧ Stuck L c := by
   obtain ⟨c, hc, hfin⟩ := reaches_final hB hN _ _ (BCfg.init p st) (load L p st) 0 rfl rfl
     ⟨rfl, fun _ h => absurd h (Nat.not_lt_zero _)⟩ (bt_init hB.ok hF hcl st)
@@ -250,7 +253,12 @@ theorem converse {L : Layout} (hB : BTOk L) {p : Stmt} (hF : L.Fit p) (hcl : p.c
       obtain ⟨n, hn, hfl⟩ := bt_failure hB hF hcl hc hfail
       rw [halted_eq hN hn]
       exact ⟨bt_fail_sound hc hfail, hfl⟩
-    · right; right
-      exact ⟨_, hc, hks, hfail, hfin⟩
+    · by_cases hfull : BFull L ⟨(ks, t), cps⟩
+      · right; right; left
+        obtain ⟨n, hn, hfl⟩ := bt_full hB hF hcl hc hfull
+        rw [halted_eq hN hn]
+        exact ⟨_, hc, hfull, hfl⟩
+      · right; right; right
+        exact ⟨_, hc, hks, hfail, hfull, hfin⟩
 
 end LaPToP.ProgramTheory.CompileConverse

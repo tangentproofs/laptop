@@ -1881,7 +1881,7 @@ a used block or a merged free block that is too small into the blocks before.
 Every expression is shown to fit in 32 bits from the heap's bound.
 :::
 
-:::theorem "interpreter_backtrack" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, backtracking, hehner-5.4.0") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileBT.BCfg, LaPToP.ProgramTheory.CompileBT.BStep, LaPToP.ProgramTheory.CompileBT.BFails, LaPToP.ProgramTheory.CompileBT.RecOk, LaPToP.ProgramTheory.CompileBT.BRel, LaPToP.ProgramTheory.CompileBT.copy_runs, LaPToP.ProgramTheory.CompileBT.save_runs, LaPToP.ProgramTheory.CompileBT.pop_runs, LaPToP.ProgramTheory.CompileBT.rt_runs, LaPToP.ProgramTheory.CompileBT.sim_act, LaPToP.ProgramTheory.CompileBT.sim_choice, LaPToP.ProgramTheory.CompileBT.sim_ensureT, LaPToP.ProgramTheory.CompileBT.sim_ensureF, LaPToP.ProgramTheory.CompileBT.sim_fail, LaPToP.ProgramTheory.CompileBT.sim_done, LaPToP.ProgramTheory.CompileBT.bt_step, LaPToP.ProgramTheory.CompileBT.bt_steps, LaPToP.ProgramTheory.CompileBT.bt_init, LaPToP.ProgramTheory.CompileBT.bt_success, LaPToP.ProgramTheory.CompileBT.bt_failure, LaPToP.ProgramTheory.CompileBT.EvalK, LaPToP.ProgramTheory.CompileBT.Sol, LaPToP.ProgramTheory.CompileBT.bstep_sol, LaPToP.ProgramTheory.CompileBT.bt_sound, LaPToP.ProgramTheory.CompileBT.bt_fail_sound, LaPToP.ProgramTheory.CompileB4.Layout.rt, LaPToP.ProgramTheory.CompileB4.RT.copy, LaPToP.ProgramTheory.CompileB4.RT.save, LaPToP.ProgramTheory.CompileB4.RT.pop, LaPToP.ProgramTheory.CompileB4.failCode, LaPToP.ProgramTheory.CompileB4.Keeps")
+:::theorem "interpreter_backtrack" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, backtracking, hehner-5.4.0") (effort := "large") (lean := "LaPToP.ProgramTheory.CompileBT.BCfg, LaPToP.ProgramTheory.CompileBT.BStep, LaPToP.ProgramTheory.CompileBT.BFails, LaPToP.ProgramTheory.CompileBT.RecOk, LaPToP.ProgramTheory.CompileBT.BRel, LaPToP.ProgramTheory.CompileBT.copy_runs, LaPToP.ProgramTheory.CompileBT.save_runs, LaPToP.ProgramTheory.CompileBT.pop_runs, LaPToP.ProgramTheory.CompileBT.rt_runs, LaPToP.ProgramTheory.CompileBT.sim_act, LaPToP.ProgramTheory.CompileBT.sim_choice, LaPToP.ProgramTheory.CompileBT.sim_ensureT, LaPToP.ProgramTheory.CompileBT.sim_ensureF, LaPToP.ProgramTheory.CompileBT.sim_fail, LaPToP.ProgramTheory.CompileBT.sim_done, LaPToP.ProgramTheory.CompileBT.bt_step, LaPToP.ProgramTheory.CompileBT.bt_steps, LaPToP.ProgramTheory.CompileBT.bt_init, LaPToP.ProgramTheory.CompileBT.bt_success, LaPToP.ProgramTheory.CompileBT.bt_failure, LaPToP.ProgramTheory.CompileBT.BFull, LaPToP.ProgramTheory.CompileBT.guard_room, LaPToP.ProgramTheory.CompileBT.sim_full, LaPToP.ProgramTheory.CompileBT.bt_full, LaPToP.ProgramTheory.CompileB4.guardCode, LaPToP.ProgramTheory.CompileBT.EvalK, LaPToP.ProgramTheory.CompileBT.Sol, LaPToP.ProgramTheory.CompileBT.bstep_sol, LaPToP.ProgramTheory.CompileBT.bt_sound, LaPToP.ProgramTheory.CompileBT.bt_fail_sound, LaPToP.ProgramTheory.CompileB4.Layout.rt, LaPToP.ProgramTheory.CompileB4.RT.copy, LaPToP.ProgramTheory.CompileB4.RT.save, LaPToP.ProgramTheory.CompileB4.RT.pop, LaPToP.ProgramTheory.CompileB4.failCode, LaPToP.ProgramTheory.CompileB4.Keeps")
 Backtracking — $`P\ \mathbf{or}\ Q` and $`\mathbf{ensure}\ c` of Section 5.4.0 —
 compiled to b4 and proved. A choice keeps a *choice point* above the variables'
 cells: the address of the code of the other choice, and a copy of every cell;
@@ -1902,10 +1902,13 @@ program, by the semantics of {uses "interpreter_soundness"}[], and when it
 fails the program has no poststate at all. `interp --b4` runs it, and its
 self-test checks it against the interpreter's search.
 
+A choice first checks that there is room for another choice point. When there
+is none, it sets the flag to $`-2` and halts, and this is proved too: the
+machine never writes a choice point where there is no room for it.
+
 Honest scope. Choices and failing $`\mathbf{ensure}`s are covered outside
 calls and local scopes, for a lone program (no channels, no $`\|`), without
-time, and in 32 bits; a search that never ends, or keeps more choice points
-than fit, is not.
+time, and in 32 bits. A search that never ends is not covered.
 :::
 
 :::proof "interpreter_backtrack"
@@ -1926,10 +1929,11 @@ failure, with nothing left, shows the start has none.
 :::theorem "interpreter_b4_converse" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, backtracking") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileNet.Idle, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileConverse.RunsFor, LaPToP.ProgramTheory.CompileConverse.le_of_halts, LaPToP.ProgramTheory.CompileConverse.size, LaPToP.ProgramTheory.CompileConverse.bt_step_progress, LaPToP.ProgramTheory.CompileConverse.Final, LaPToP.ProgramTheory.CompileConverse.reaches_final, LaPToP.ProgramTheory.CompileConverse.Stuck, LaPToP.ProgramTheory.CompileConverse.converse")
 The converse of {uses "interpreter_b4"}[] and {uses "interpreter_backtrack"}[]: the
 machine does nothing the language disallows. If the loaded machine halts, one of
-three things holds:
+four things holds:
 - the program ends in a state $`t` that the language's semantics allows, the
   machine's cells hold $`t`, and the failure flag is clear;
-- the program has no poststate at all, and the flag is set;
+- the program has no poststate at all, and the flag is $`-1`;
+- the search ran out of room for choice points, and the flag is $`-2`;
 - the language's own 32-bit execution got stuck on the way: some value would
   have left 32 bits, an index its array, or the program used what the compiler
   leaves out.
