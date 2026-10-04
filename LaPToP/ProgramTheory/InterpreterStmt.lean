@@ -55,6 +55,9 @@ inductive Stmt where
   /-- `if a/b then P else Q fi`, the probabilistic choice of Section 5.7. The
   compiler takes it once it is made deterministic over a seed (`CompileProb`). -/
   | prob (a b : Exp) (p q : Stmt)
+  /-- A run-time check the compiler puts in: go on if `c`; if not, the machine
+  stops with a fault. As a program it is `ok`. -/
+  | guard (c : Exp)
   deriving Repr
 
 /-- A statement as a program of the language. -/
@@ -78,6 +81,7 @@ def Stmt.toProg : Stmt → P
   | .scope x e p => declare x e p.toProg
   | .ret => .ok
   | .restore x v => .assign x fun _ => v
+  | .guard _ => .ok
 
 /-- A statement with no communication: `toProg` means it (the parser's program
 for a communication is the network's mark, `netSend`, `netRecv`, `netCheck`). -/

@@ -49,6 +49,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toNP : Stmt → NProc ℕ Value
   -- A probabilistic choice is made deterministic before it is compiled (`CompileProb`).
   | .prob _ _ p _ => p.toNP
   | .ensure c => .act (Lang.ensure c)
+  | .guard _ => .act .ok
 
 /-- A statement a program is written in: no return or end of scope, which only
 running makes. -/
@@ -172,6 +173,9 @@ inductive SAct (L : Layout) (pr : SProc) :
       vs.length = es.length → (∀ e ∈ es, Fits L st.mem e) →
       SAct L pr Λ (.fill x es :: ks, st)
         (ks, { st with mem := Function.update st.mem x ((Exp.ofList es).eval st.mem) }) Λ
+  /-- A run-time check that holds. -/
+  | guard {Λ ks st c} : Fits L st.mem c → c.eval st.mem = .bool true →
+      SAct L pr Λ (.guard c :: ks, st) (ks, st) Λ
   /-- `x:= √c`, with the message there: whether it was sent before now. -/
   | check {Λ ks st ch x m} : ch ∈ pr.ins → (Λ ch)[st.r ch]? = some m → x < L.n →
       L.arrayAt x = none → TFits m.2 →
@@ -209,6 +213,7 @@ theorem SAct.act {L : Layout} {net : SNet} {i : ℕ} {pr : SProc} (hpr : net.pro
   | restore => exact .loc .restore
   | store => exact .loc (.act (p := assignIdx _ [_] _) trivial .assign)
   | fill => exact .loc (.act (p := Lang.assign _ _) trivial .assign)
+  | guard => exact .loc (.act (u := ⟨_, _⟩) trivial .ok)
   | check hch hm => exact .check hpr' hch (.inl (by simp [hm]))
 
 /-- A step in 32 bits is one or two steps of the network machine: a call is the
@@ -246,6 +251,7 @@ theorem SStep.msteps {L : Layout} {net : SNet} (hdefs : L.defs = net.defs) {c c'
   | restore => exact one (by simp)
   | store => exact one (by simp)
   | fill => exact one (by simp)
+  | guard => exact one (by simp)
   | check => exact one (by simp)
 
 /-- A run in 32 bits is a run of the network machine. -/
@@ -704,6 +710,13 @@ theorem machine_sim (L : Layout) (hL : L.Ok) {pr : SProc} {Λ Λ' : Scripts Valu
   | @assign ks st x e hx ha hf =>
     obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
     obtain ⟨s', r', w', run', i', d', v', k'⟩ := assign_runs L hL hx ha hf s (getIP s)
+      ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
+    refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
+      hp.image.mono k'.low⟩, k'.low, k'.top, .inl (ne_of_ip (by rw [i']; simp [slen]))⟩
+    rw [i', k'.cs]; exact hk.mono k'.low
+  | @guard ks st c hf hc =>
+    obtain ⟨h₁, h₂, h₃, h₄, hk, -⟩ := hd.cons_inv (by simp) (by simp)
+    obtain ⟨s', r', w', run', i', d', v', k'⟩ := guard_runs L hL hf hc s (getIP s)
       ⟨hp.wf, hp.run, rfl, h₁, h₂, h₄, hp.vars, hp.stack, h₃, rfl, hp.image⟩
     refine ⟨s', r', ⟨w', run', d', ?_, v', by rw [k'.clk]; exact hp.clk, hp.tfit, hp.rd,
       hp.image.mono k'.low⟩, k'.low, k'.top, .inl (ne_of_ip (by rw [i']; simp [slen]))⟩
@@ -1319,6 +1332,7 @@ theorem sim_step (L : Layout) (hL : L.Ok) {net : SNet}
   | store hfi hf => exact local_case (.store hfi hf) (by simp) (by simp) (by simp)
   | fill hx hvs hl hf => exact local_case (.fill hx hvs hl hf) (by simp) (by simp) (by simp)
   | restore => exact local_case .restore (by simp) (by simp) (by simp)
+  | guard hf hc => exact local_case (.guard hf hc) (by simp) (by simp) (by simp)
   | @send ks' _ ch e hch hf =>
     obtain ⟨s₂, hw₂, hp₂⟩ := send_sim L hL hs₁ hp₁ hd₁ hf (hchb pr hprm ch (.inl hch))
       (hown hpr hch)

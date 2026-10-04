@@ -2,6 +2,7 @@ import LaPToP.ProgramTheory.CompileNet
 import LaPToP.ProgramTheory.NetworkLang
 import LaPToP.ProgramTheory.CompileBT
 import LaPToP.ProgramTheory.CompileProb
+import LaPToP.ProgramTheory.CompileFault
 
 /-!
 # Running the language on b4 (`interp --b4`)
@@ -925,8 +926,9 @@ def B4Program.prepare (bp : B4Program) (s : St) (seed : ℕ := 1) :
   for (x, y) in copies do
     if arrs.contains x && capOf x != capOf y then
       throw s!"b4's arrays keep their length: {name x} and {name y} have different lengths"
-  let procs := bp.procs.map fun p => p.expandCopies capOf
-  let defs := bp.defs.map fun (k, p) => (k, p.expandCopies capOf)
+  -- a check before every access to an array, that the index is inside it
+  let procs := bp.procs.map fun p => (p.expandCopies capOf).guarded capOf
+  let defs := bp.defs.map fun (k, p) => (k, (p.expandCopies capOf).guarded capOf)
   let bp' : B4Program := ⟨procs, defs, bp.names, bp.chans⟩
   let s' : St := fun x => match capOf x, s x with
     | some k, .int _ => .list (List.replicate k (.int 0))
@@ -974,6 +976,8 @@ inductive B4Status where
   | failed
   /-- Backtracking ran out of room for choice points. -/
   | full
+  /-- A run-time check failed: an index left its array. -/
+  | fault
   deriving DecidableEq, Repr
 
 /-- A word as an integer. -/
@@ -1039,8 +1043,8 @@ def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
   let L := { L₀ with choices := k }
   let m := runN (fuel * 10000) (load L p s)
   let flag := toInt32 (getVal m.mem (L.base + 4 * (L.W + 4)))
-  let st := if getRST m != 0 then B4Status.running else if flag == -1 then .failed
-    else if flag == -2 then .full else .halted
+  let st := if getRST m != 0 then B4Status.running else if dstack m == [FAULT] then .fault
+    else if flag == -1 then .failed else if flag == -2 then .full else .halted
   let isArr := fun k => L.arrays.any (·.1 == k)
   let value := fun x => B4Program.value (getVal m.mem (L.addr x))
   let cells := fun x => match L.arrayAt x with
@@ -1077,7 +1081,8 @@ def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
       throw s!"channel {(bp.chans[c]?.map (·.1)).getD "?"} is written by two processes"
   let w := (net.load L s).runK fuel
   let st :=
-    if w.ms.all (getRST · != 1) then B4Status.halted
+    if w.ms.any (fun m => getRST m == 0 && dstack m == [FAULT]) then B4Status.fault
+    else if w.ms.all (getRST · != 1) then B4Status.halted
     else if w.sweep.2 || w.settle.isSome then .running else .deadlock
   let owner := fun x => bp.procs.findIdx? (·.writes bp.writesLook |>.contains x)
   let value := fun x => match owner x with

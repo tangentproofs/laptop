@@ -30,6 +30,7 @@ import LaPToP.ProgramTheory.CompileB4
 import LaPToP.ProgramTheory.CompileNet
 import LaPToP.ProgramTheory.CompileNetDeadlock
 import LaPToP.ProgramTheory.CompileNetCheck
+import LaPToP.ProgramTheory.CompileFault
 import LaPToP.ProgramTheory.B4Lang
 import LaPToP.ProgramTheory.Alloc
 import LaPToP.ProgramTheory.CompileConverse
@@ -1964,6 +1965,48 @@ the other choice's code — which, kept with the choice point, runs what is left
 Every step of the abstract machine keeps the set of solutions — what is left
 and every choice point — exactly, so its end is a solution of the start, and a
 failure, with nothing left, shows the start has none.
+:::
+
+:::theorem "interpreter_b4_fault" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, arrays") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileB4.FAULT, LaPToP.ProgramTheory.CompileB4.guard_code, LaPToP.ProgramTheory.CompileB4.guard_runs, LaPToP.ProgramTheory.CompileB4.SFault, LaPToP.ProgramTheory.CompileB4.FRuns, LaPToP.ProgramTheory.CompileB4.fault_runs, LaPToP.ProgramTheory.CompileB4.compile_fault, LaPToP.ProgramTheory.CompileB4.load_fault, LaPToP.ProgramTheory.CompileB4.inBounds, LaPToP.ProgramTheory.CompileB4.bound, LaPToP.ProgramTheory.Interpreter.Lang.Exp.guards, LaPToP.ProgramTheory.CompileB4.Stmt.guarded, LaPToP.ProgramTheory.CompileB4.Checked, LaPToP.ProgramTheory.CompileB4.IsGuard, LaPToP.ProgramTheory.CompileB4.guards_pass, LaPToP.ProgramTheory.CompileB4.guarded_complete, LaPToP.ProgramTheory.CompileB4.Gd, LaPToP.ProgramTheory.CompileB4.gd_guarded, LaPToP.ProgramTheory.CompileB4.gd_sound, LaPToP.ProgramTheory.CompileB4.guarded_sound")
+An index outside its array stops the machine. The theorems of
+{uses "interpreter_b4"}[] speak of runs in which every index stays inside its
+array. Outside one, the code of `A i` reads, and the code of `A i:= e` writes,
+wherever the address it computes points. So `interp --b4` puts a run-time check
+before every access to an array: a statement `guard (0 ≤ i ∧ i < k)`, for `A` of
+`k` cells. These checks come in the order the code computes the expression, so
+the check for `A (B j)` follows the one for `B j`. In a loop they come before
+every test of the condition. As a program a check is `ok`. Its code tests the
+condition and goes on if it holds. If it does not, the code halts the machine
+with `-3` alone on the stack, and `interp --b4` reports that an index left its
+array.
+
+The theorems:
+- A run in 32 bits that reaches a check that fails, every step before it in 32
+  bits, halts the machine with `-3` on the stack.
+- The checks never stop a run that stays inside its arrays: a run of the
+  program in 32 bits is a run of its checked version.
+- Conversely, a run of the checked version in 32 bits is a run of the program.
+
+So on the checked program, every run in 32 bits that keeps its indices inside
+its arrays is computed as before, and one that does not stops at the check.
+
+Honest scope. A two-dimensional array is laid out by rows, and its index is
+checked against all its cells: `A i j` with `j` past the end of a row but inside
+the array reads the next row's item, as the flattened program says. Values
+leaving 32 bits are not checked: the machine's arithmetic wraps, and nothing is
+proved about such runs.
+:::
+
+:::proof "interpreter_b4_fault"
+A check compiles to its condition, the test of an `if`, and two jumps: to
+`li -3 hl` when the condition is false, past it when it is true. A run that
+fails a check runs the code of what comes before it as in {uses "interpreter_b4"}[],
+each statement's code ending where the next one's starts. It then runs the
+code of the statement around the check up to the check, and the check itself
+halts. In a run in 32 bits every index is inside its array, so each check's
+condition fits and holds, and a check is `ok`. Conversely, a statement with
+checks put in (before, after, or inside its parts) does what the statement
+does, since a check changes nothing.
 :::
 
 :::theorem "interpreter_b4_converse" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, backtracking") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileNet.Idle, LaPToP.ProgramTheory.CompileNet.machine_sim, LaPToP.ProgramTheory.CompileConverse.RunsFor, LaPToP.ProgramTheory.CompileConverse.le_of_halts, LaPToP.ProgramTheory.CompileConverse.size, LaPToP.ProgramTheory.CompileConverse.bt_step_progress, LaPToP.ProgramTheory.CompileConverse.Final, LaPToP.ProgramTheory.CompileConverse.reaches_final, LaPToP.ProgramTheory.CompileConverse.Stuck, LaPToP.ProgramTheory.CompileConverse.converse")
