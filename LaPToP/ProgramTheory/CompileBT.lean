@@ -531,6 +531,10 @@ theorem sact_not_recv {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt 
     (h : SAct L lone noScripts a b Λ) : ∀ ch x ks, a.1 ≠ .recv ch x :: ks := by
   intro ch x ks he; cases h <;> simp_all [lone]
 
+theorem sact_not_check {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ Value}
+    (h : SAct L lone noScripts a b Λ) : ∀ ch x ks, a.1 ≠ .check ch x :: ks := by
+  intro ch x ks he; cases h <;> simp_all [lone]
+
 /-- The machine at what is left, after its jumps. -/
 theorem BRel.follow {L : Layout} (hL : L.Ok) {c : BCfg} {s : State} (hr : BRel L c s) :
     ∃ s₁, Steps s s₁ ∧ BRel L c s₁ ∧ Direct L (high s₁) (cstack s₁) c.cur.1 (getIP s₁) ∧
@@ -549,7 +553,7 @@ theorem sim_act {L : Layout} (hL : L.Ok) {Λ : Scripts Value} {a b : List Stmt �
     (ht : ∀ ks, a.1 ≠ .tick :: ks) {s : State} (hr : BRel L ⟨a, cps⟩ s) :
     ∃ s', Steps s s' ∧ BRel L ⟨b, cps⟩ s' := by
   obtain ⟨s₁, r₁, hr₁, hd₁, -⟩ := hr.follow hL
-  obtain ⟨s₂, r₂, hp₂, lo₂, top₂, -⟩ := machine_sim L hL h (sact_not_send h) (sact_not_recv h) hr₁.p hd₁
+  obtain ⟨s₂, r₂, hp₂, lo₂, top₂, -⟩ := machine_sim L hL h (sact_not_send h) (sact_not_recv h) (sact_not_check h) hr₁.p hd₁
   obtain ⟨et, er⟩ := sact_tr h ht
   have hw : ∀ j, L.W ≤ j → Wd L (high s₂) j = Wd L (high s₁) j := fun j hj => wd_of_top top₂ hj
   refine ⟨s₂, r₁.trans r₂, ⟨by rw [er]; exact hp₂, by rw [hw _ le_rfl]; exact hr₁.cnt,
@@ -1332,6 +1336,7 @@ theorem sact_evalK {L : Layout} {Λ : Scripts Value} {a b : List Stmt × PSt ℕ
       | whileFalse _ => exact h⟩
   | send hch => simp [lone] at hch
   | recv hch => simp [lone] at hch
+  | check hch => simp [lone] at hch
   | call =>
     exact ⟨fun ⟨u, hu, v, hv, h⟩ => by cases hv; exact ⟨u, .call hu, h⟩,
       fun ⟨u, hu, h⟩ => by cases hu with | call hu => exact ⟨u, hu, _, .ok, h⟩⟩
