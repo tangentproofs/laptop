@@ -47,6 +47,8 @@ structure Options where
   grammar : Bool := false
   /-- Print the usage message. -/
   help : Bool := false
+  /-- The seed of `--b4`'s probabilistic choices; from the clock when absent. -/
+  seed : Option Nat := none
 
 /-- How to call it. -/
 def usage : String :=
@@ -75,9 +77,12 @@ usage: interp [options] [file]
                      on a swarm of b4 machines): ok, tick, x:= e, if, while,
                      do/exit and for loops, new, simultaneous assignment,
                      specifications with parameters and recursion, c! e, c?,
-                     a || of processes, arrays (A i, A i:= e, each array as
-                     long as the list it starts with), and backtracking (P or
-                     Q, ensure c, in a program without ||), on 32-bit integers
+                     a || of processes, arrays (A i, A i j, A i:= e, A:= [..],
+                     #A; each array keeps its length), backtracking (P or Q,
+                     ensure c) and probabilistic choice (if a/b then, rand n)
+                     in a program without ||, on 32-bit integers
+  --seed=K           the seed of --b4's probabilistic choices (default: the
+                     clock)
   --net              run as a network of communicating processes (Chapter 9),
                      as is done anyway when the program has channels and a ||:
                      each process has its own variables, communicates only on
@@ -186,6 +191,11 @@ def parseArgs : List String → Options → Except String Options
     else if a == "--selftest" then parseArgs rest { o with selftest := true }
     else if a == "--grammar" then parseArgs rest { o with grammar := true }
     else if a.startsWith "--demo=" then parseArgs rest { o with demo := some (optValue a 7) }
+    else if a.startsWith "--seed=" then
+      match parseIntArg "--seed" (optValue a 7) with
+      | .ok k => if k < 0 then .error "the seed must not be negative"
+                 else parseArgs rest { o with seed := some k.toNat }
+      | .error e => .error e
     else if a.startsWith "--fuel=" then
       match parseIntArg "--fuel" (optValue a 7) with
       | .ok k => if k < 0 then .error "the fuel must not be negative"
@@ -332,6 +342,21 @@ def runSelfTest : IO UInt32 := do
       if ok then IO.println s!"ok    {name}: b4 backtracks to what the interpreter's search finds"
       else IO.eprintln s!"FAIL  {name}: b4 and the interpreter's search differ"; bad := bad + 1
     | .error e, _ | _, .error e => IO.eprintln s!"FAIL  {name}: {e}"; bad := bad + 1
+  -- Probabilistic choice on b4: with any seed, an outcome the program may have.
+  let probTests : List (String × Toks) :=
+    [("probEx1", Lang.Demo.probEx1Toks), ("probEx2", Lang.Demo.probEx2Toks),
+     ("rand", Lang.Demo.randToks)]
+  for (name, toks) in probTests do
+    match parseToksWith [] toks with
+    | .ok prog =>
+      let outcomes := prog.runAll 1000 (given [])
+      let runs := (List.range 40).map fun i => b4Outcome [] toks (given []) 100000 (i * 7919 + 1)
+      let seen := runs.filterMap fun r => r.toOption
+      if seen.length == runs.length && seen.all (fun b => outcomes.any (b.agreesWith prog.names ·)) then
+        let kinds := (seen.map (·.vars)).eraseDups.length
+        IO.println s!"ok    {name}: b4 gives outcomes the program may have ({kinds} of them in 40 seeds)"
+      else IO.eprintln s!"FAIL  {name}: b4 gave an outcome the program cannot have"; bad := bad + 1
+    | .error e => IO.eprintln s!"FAIL  {name}: {e}"; bad := bad + 1
   for (name, names, toks, start) in b4Tests do
     match parseToksWith names toks, b4Outcome names toks start 100000 with
     | .ok prog, .ok b =>
@@ -477,7 +502,13 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
     let bp ← parseB4 setNames ts
     let (names, st) ← initialState bp.names o.sets
     let bp := { bp with names := names }
-    let out ← bp.run st o.fuel
+    return (bp, st)
+  let seed ← match o.seed with
+    | some k => pure k
+    | none => pure ((← IO.monoNanosNow) % 2147483646)
+  let parsed := do
+    let (bp, st) ← parsed
+    let out ← bp.run st o.fuel seed
     return (bp, st, out)
   match parsed with
   | .error e =>
@@ -491,7 +522,10 @@ def runB4 (o : Options) (setNames : List String) (ts : Toks) : IO UInt32 := do
       else if bp.procs.length == 1 && bp.chans.isEmpty then
         match parseToksMode false setNames ts with
         | .ok prog =>
-          if (bp.procs ++ bp.defs.map (·.2)).any (·.backtracks) then
+          if bp.names.contains "#seed" then
+            -- a probabilistic choice: one of the outcomes the program may have
+            (prog.runAll o.fuel st).any (out.agreesWith prog.names ·)
+          else if (bp.procs ++ bp.defs.map (·.2)).any (·.backtracks) then
             -- backtracking finds the first poststate of the search
             match out.status, prog.runAll o.fuel st with
             | .failed, [] => true

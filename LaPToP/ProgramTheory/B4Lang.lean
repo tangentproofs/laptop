@@ -1,6 +1,7 @@
 import LaPToP.ProgramTheory.CompileNet
 import LaPToP.ProgramTheory.NetworkLang
 import LaPToP.ProgramTheory.CompileBT
+import LaPToP.ProgramTheory.CompileProb
 
 /-!
 # Running the language on b4 (`interp --b4`)
@@ -88,6 +89,13 @@ def Exp.toB4Item (e : Exp) : Except String Exp :=
   | some rs => do .ok (Exp.ofList (← rs.mapM Exp.toB4))
   | none => e.toB4
 
+/-- Whether a statement makes a probabilistic choice. -/
+def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.hasProb : Stmt → Bool
+  | .prob _ _ _ _ => true
+  | .seq p q | .cond _ p q | .choice p q => p.hasProb || q.hasProb
+  | .loop _ p | .scope _ _ p => p.hasProb
+  | _ => false
+
 /-- A statement's expressions in the operators the compiler takes, or why not. A
 list literal assigned to a variable fills it as an array. -/
 def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toB4 : Stmt → Except String Stmt
@@ -107,6 +115,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toB4 : Stmt → Except String Stm
   | .choice p q => do .ok (.choice (← p.toB4) (← q.toB4))
   | .ensure c => do .ok (.ensure (← c.toB4))
   | .fill x es => do .ok (.fill x (← es.mapM Exp.toB4Item))
+  | .prob a b p q => do .ok (.prob (← a.toB4) (← b.toB4) (← p.toB4) (← q.toB4))
   | s => .ok s
 
 /-- A program for b4: its processes (one, if there is no `||`), the named
@@ -127,8 +136,15 @@ does. -/
 def parseB4 (names : List String) (ts : Toks) : Except String B4Program := do
   let _ ← parseToksMode true names ts
   let sh ← parseToksShadow names ts
-  .ok ⟨← sh.procs.mapM Stmt.toB4, ← sh.defs.mapM fun (k, p) => do .ok (k, ← p.toB4), sh.names,
-    sh.chans⟩
+  let procs ← sh.procs.mapM Stmt.toB4
+  let defs ← sh.defs.mapM fun (k, p) => do .ok (k, ← p.toB4)
+  if !(procs ++ defs.map (·.2)).any Stmt.hasProb then
+    return ⟨procs, defs, sh.names, sh.chans⟩
+  -- probabilistic choices, made deterministic over a hidden seed (`CompileProb`)
+  if procs.length > 1 then
+    throw "a probabilistic choice is compiled only for a program without ||"
+  let z := sh.names.length
+  .ok ⟨procs.map (·.det z), defs.map fun (k, p) => (k, p.det z), sh.names ++ ["#seed"], sh.chans⟩
 
 /-! ### Running -/
 
@@ -357,8 +373,12 @@ or from one) and their lengths (the list each starts with, or else the literal
 assigned to it, or else the array copied to it); check every literal and copy has
 that length; write each copy `A:= B` as `A:= [B 0; …]`; and start an array that
 does not start as a list as that many zeros. -/
-def B4Program.prepare (bp : B4Program) (s : St) :
+def B4Program.prepare (bp : B4Program) (s : St) (seed : ℕ := 1) :
     Except String (B4Program × St × List (ℕ × ℕ)) := do
+  -- the seed of the probabilistic choices: anything from 1 to 2³¹ – 2
+  let s := match bp.names.idxOf? "#seed" with
+    | some z => Function.update s z (.int (seed % 2147483646 + 1))
+    | none => s
   -- two-dimensional arrays, by rows
   let dims := bp.dims s
   let name := fun x => bp.names.getD x "?"
@@ -492,8 +512,9 @@ def Value.b4Int : Value → ℤ
 
 /-- Run a program that backtracks: on one machine, with as many choice points
 as fit above the cells (`CompileBT`). -/
-def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outcome := do
-  let (bp, s, cols) ← bp.prepare s
+def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
+    Except String B4Outcome := do
+  let (bp, s, cols) ← bp.prepare s seed
   let p ← match bp.procs with
     | [p] => pure p
     | _ => throw "backtracking ('or', 'ensure') is compiled only for a program without ||"
@@ -530,9 +551,10 @@ def B4Program.runBT (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Out
 
 /-- Run on b4: compile and load each process, run the swarm (a lone process is a
 swarm of one), and read back the result. -/
-def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outcome := do
-  if (bp.procs ++ bp.defs.map (·.2)).any (·.backtracks) then return ← bp.runBT s fuel
-  let (bp, s, cols) ← bp.prepare s
+def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
+    Except String B4Outcome := do
+  if (bp.procs ++ bp.defs.map (·.2)).any (·.backtracks) then return ← bp.runBT s fuel seed
+  let (bp, s, cols) ← bp.prepare s seed
   let L := bp.layout s
   let name := fun x => bp.names.getD x "?"
   for (x, _) in L.arrays do
@@ -573,8 +595,9 @@ def B4Program.run (bp : B4Program) (s : St) (fuel : ℕ) : Except String B4Outco
     cols.map fun (x, c) => (bp.names.getD x "?", c)⟩
 
 /-- Parse and run on b4. -/
-def b4Outcome (names : List String) (ts : Toks) (s : St) (fuel : ℕ) : Except String B4Outcome := do
-  (← parseB4 names ts).run s fuel
+def b4Outcome (names : List String) (ts : Toks) (s : St) (fuel : ℕ) (seed : ℕ := 1) :
+    Except String B4Outcome := do
+  (← parseB4 names ts).run s fuel seed
 
 /-- Whether the arrays a run on b4 shows are the lists `look` gives. -/
 def B4Outcome.arraysAre (b : B4Outcome) (look : String → Option Value) : Bool :=

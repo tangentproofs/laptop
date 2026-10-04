@@ -52,6 +52,9 @@ inductive Stmt where
   | ensure (c : Exp)
   /-- `A:= [e₀; …; eₖ₋₁]`, on an array variable `A` of `k` cells. -/
   | fill (x : ℕ) (es : List Exp)
+  /-- `if a/b then P else Q fi`, the probabilistic choice of Section 5.7. The
+  compiler takes it once it is made deterministic over a seed (`CompileProb`). -/
+  | prob (a b : Exp) (p q : Stmt)
   deriving Repr
 
 /-- A statement as a program of the language. -/
@@ -69,9 +72,18 @@ def Stmt.toProg : Stmt → P
   | .choice p q => .or p.toProg q.toProg
   | .ensure c => Lang.ensure c
   | .fill x es => Lang.assign x (Exp.ofList es)
+  | .prob a b p q => probIf a b p.toProg q.toProg
   | .call k => .call k
   | .scope x e p => declare x e p.toProg
   | .ret => .ok
   | .restore x v => .assign x fun _ => v
+
+/-- The body of `x:= rand n` as a statement (`Lang.randBody`). -/
+def randStmt (k x hn hi : ℕ) : Stmt :=
+  .cond (.bin .ge (.var hi) (.bin .sub (.var hn) (.lit (.int 1)))) (.assign x (.var hi))
+    (.prob (.lit (.int 1)) (.bin .sub (.var hn) (.var hi)) (.assign x (.var hi))
+      (.seq (.assign hi (.bin .add (.var hi) (.lit (.int 1)))) (.call k)))
+
+theorem randStmt_toProg (k x hn hi : ℕ) : (randStmt k x hn hi).toProg = randBody k x hn hi := rfl
 
 end LaPToP.ProgramTheory.CompileB4

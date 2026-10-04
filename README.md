@@ -192,6 +192,14 @@ lake exe interp --b4 --demo=subset --t=19
 echo 'A:= [[1;2];[3;4]]. A 0 1:= A 1 0 + A 1 1' | lake exe interp --b4
 # => A = [[1; 7]; [3; 4]], time = 0
 ```
+A probabilistic choice — `if a/b then P else Q fi`, `x:= rand n` — is made
+deterministic over a hidden seed, advanced by a 32-bit Lehmer generator at each
+choice (`CompileProb.lean`), and then compiled as any other program;
+`det_sound` proves that whatever it computes the original program may compute.
+The seed comes from the clock, or `--seed=K`:
+```sh
+lake exe interp --b4 --demo=rand      # => x = 3, r = 2, time = 0  (or another outcome)
+```
 
 ## Prove a theorem by calculation (`lake exe netty`)
 

@@ -249,7 +249,7 @@ def validName (w : String) : Bool :=
 
 /-! ### Programs, and what the b4 compiler makes of them -/
 
-open LaPToP.ProgramTheory.CompileB4 (Stmt)
+open LaPToP.ProgramTheory.CompileB4 (Stmt randStmt)
 
 /-- A program as read, with what the b4 compiler makes of it (`CompileB4.Stmt`):
 the statements of its processes — one, unless it is a `||` — or why it has none. -/
@@ -296,6 +296,10 @@ def declare (x : ℕ) (e : Exp) (a : PB) : PB := ⟨Lang.declare x e a.p, do .ok
 
 /-- `P or Q`. -/
 def choice (a b : PB) : PB := ⟨.or a.p b.p, do .ok [.choice (← a.one) (← b.one)]⟩
+
+/-- `if a/b then P else Q fi`. -/
+def prob (a b : Exp) (p q : PB) : PB :=
+  ⟨probIf a b p.p q.p, do .ok [.prob a b (← p.one) (← q.one)]⟩
 
 /-- `P || Q`. -/
 def par (a b : PB) : PB := ⟨.par (fun _ => false) a.p b.p, do .ok ((← a.s) ++ (← b.s))⟩
@@ -944,7 +948,7 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           let st ← expectWord "fi" st
           .ok (PB.ok, st)
       match d with
-      | some d => .ok (st.checksThen cs (PB.no (probIf c d p.p q.p) "a probabilistic choice"), st)
+      | some d => .ok (st.checksThen cs (PB.prob c d p q), st)
       | none => .ok (st.checksThen cs (PB.ifThen c p q), st)
     | .word "while" :: ts => do
       let (c, st) ← parseExp f (st.at ts)
@@ -1037,8 +1041,8 @@ def parseStmt (fuel : ℕ) (st : PS) : Except String (PB × PS) :=
           let (hn, st) := newHidden st
           let (hi, st) := newHidden st
           let (k, st) := newProc "rand" st
-          let st := st.define k (PB.no (randBody k x hn hi) "'rand'")
-          .ok (st.withChecks (PB.no (declare hn e (declare hi (.lit (.int 0)) (.call k))) "'rand'"))
+          let st := st.define k ⟨randBody k x hn hi, .ok [randStmt k x hn hi]⟩
+          .ok (st.withChecks (PB.declare hn e (PB.declare hi (.lit (.int 0)) (PB.call k))))
         | _ => do
           let (idx, st) ← parseTarget f st
           let (e, st) ← parseExp f st

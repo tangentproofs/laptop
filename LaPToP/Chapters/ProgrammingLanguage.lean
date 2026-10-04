@@ -1879,3 +1879,27 @@ Every step of the abstract machine keeps the set of solutions — what is left
 and every choice point — exactly, so its end is a solution of the start, and a
 failure, with nothing left, shows the start has none.
 :::
+
+:::theorem "interpreter_prob_b4" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, probability, hehner-5.7") (effort := "medium") (lean := "LaPToP.ProgramTheory.CompileB4.randStmt, LaPToP.ProgramTheory.CompileB4.randStmt_toProg, LaPToP.ProgramTheory.CompileProb.next, LaPToP.ProgramTheory.CompileProb.fix, LaPToP.ProgramTheory.CompileProb.coin, LaPToP.ProgramTheory.CompileProb.Des, LaPToP.ProgramTheory.CompileProb.des_det, LaPToP.ProgramTheory.CompileProb.Agree, LaPToP.ProgramTheory.CompileProb.eval_agree, LaPToP.ProgramTheory.CompileProb.coin_true, LaPToP.ProgramTheory.CompileProb.coin_false, LaPToP.ProgramTheory.CompileProb.det_sound, LaPToP.ProgramTheory.CompileProb.det_eval")
+Probabilistic choice — $`\mathbf{if}\ a/b\ \mathbf{then}\ P\ \mathbf{else}\ Q\ \mathbf{fi}`
+and $`x:= \mathit{rand}\ n` of Section 5.7 — on b4. Before it is compiled, each
+choice is made deterministic: a hidden variable holds a seed, which the choice
+advances by one step of the Lehmer generator $`z ↦ 16807 z \bmod (2^{31}-1)`
+(by Schrage's method, so every value stays within 32 bits), and the choice
+takes $`P` when $`z \bmod b < a`. The deterministic program is compiled and
+proved like any other ({uses "interpreter_b4"}[]). The theorem: whatever it
+computes in 32 bits, the original program may compute, but for the seed — a
+branch is taken only when it has a chance, since $`0 ≤ z \bmod b < b`. That the
+coin is fair, $`z \bmod b` spread evenly, is the generator's quality and is not
+proved; `interp --b4` seeds it from the clock (or `--seed`), and its self-test
+checks, over many seeds, that every outcome is one the program may have.
+:::
+
+:::proof "interpreter_prob_b4"
+By induction on the 32-bit execution of the deterministic program, related to the
+original by a relation that also admits a choice part way through, after the
+seed has moved on: the seed's own statements keep every other variable, the
+original's expressions do not read the seed and so have the same values in
+states that agree but for it, and a coin that comes up heads ($`z \bmod b < a`)
+shows $`0 < a/b`, tails ($`a ≤ z \bmod b`) shows $`a/b < 1`.
+:::

@@ -46,6 +46,8 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.toNP : Stmt → NProc ℕ Value
   | .fill x es => .act (Lang.assign x (Exp.ofList es))
   -- Backtracking is compiled for a lone program (`CompileBT`), not in a network.
   | .choice p _ => p.toNP
+  -- A probabilistic choice is made deterministic before it is compiled (`CompileProb`).
+  | .prob _ _ p _ => p.toNP
   | .ensure c => .act (Lang.ensure c)
 
 /-- A statement a program is written in: no return or end of scope, which only
@@ -55,7 +57,7 @@ def _root_.LaPToP.ProgramTheory.CompileB4.Stmt.clean : Stmt → Bool
   | .cond _ p q => p.clean && q.clean
   | .loop _ p => p.clean
   | .scope _ _ p => p.clean
-  | .choice p q => p.clean && q.clean
+  | .choice p q | .prob _ _ p q => p.clean && q.clean
   | .ret => false
   | .restore _ _ => false
   | _ => true

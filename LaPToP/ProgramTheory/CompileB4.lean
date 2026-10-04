@@ -814,6 +814,8 @@ def slen (L : Layout) : Stmt → ℕ
     match L.arrayAt x with
     | some _ => (ecodes L es).length + 6 * es.length
     | none => 0
+  -- made deterministic before it is compiled (`CompileProb`)
+  | .prob _ _ _ _ => 0
 
 /-- The code of the statements backtracking's runtime is written in — `ok`,
 assignment, sequence, `if`, `while` and stores — as `scode` makes it
@@ -908,6 +910,7 @@ def scode (L : Layout) (a : ℕ) : Stmt → List UInt8
     match L.arrayAt x with
     | some (a₀, _) => ecodes L es ++ storeCode a₀ es.length
     | none => []
+  | .prob _ _ _ _ => []
 
 theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).length = slen L p
   | .ok, _ => rfl
@@ -930,6 +933,7 @@ theorem length_scode (L : Layout) : ∀ (p : Stmt) (a : ℕ), (scode L a p).leng
     simp [scode, slen, length_scode L p, length_scode L q, length_scodeR_save, jmTo]; omega
   | .ensure _, _ => by simp [scode, slen, length_failCode, test, jmTo]
   | .fill x _, _ => by cases hx : L.arrayAt x <;> simp [scode, slen, hx]
+  | .prob _ _ _ _, _ => rfl
 
 /-- How deep the stack gets in any of several expressions. -/
 def maxDepth : List Exp → ℕ
@@ -955,6 +959,7 @@ def sdepth : Stmt → ℕ
   | .choice p q => max 4 (max (sdepth p) (sdepth q))
   | .ensure c => max (depth c) 4
   | .fill _ es => es.length + maxDepth es + 1
+  | .prob _ _ _ _ => 0
 
 /-- The named statements' code, each at its entry and followed by `rt`, below
 the variables. -/
@@ -1984,6 +1989,7 @@ theorem slen_congr (L L' : Layout) (h : ∀ x, (L.arrayAt x).isSome = (L'.arrayA
       | nil => rfl
       | cons e es ih => simp [ecodes, length_ecode_congr L L' h e, ih]
     cases h₁ : L.arrayAt x <;> cases h₂ : L'.arrayAt x <;> simp_all [slen]
+  | prob => rfl
   | _ => simp_all [slen, length_ecode_congr L L' h]
 
 /-- Entries for the names `ks`, laid end to end from `a`. -/
