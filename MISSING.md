@@ -5,9 +5,10 @@ This file lists what from Eric Hehner's *A Practical Theory of Programming*
 section-by-section and of the §11.3 law tables is otherwise complete; see
 `README.md`, `.sci/laws-survey.md`, and the Blueprint nodes.
 
-Exercise *statements* for Chapter 10 are inventoried as deferred theorem
-signatures in `LaPToP/Exercises/` (Memnar #1032 exception: `sorry` stubs only).
-Those stubs are not proofs and are not Blueprint nodes.
+Chapter 10's exercises are in `LaPToP/Exercises/`, one module per section: an
+exercise is either formalized and proved there, or still a deferred stub
+(`Statement n`, with `sorry`), or recorded below as informal. The stubs are not
+proofs and are not Blueprint nodes; see §5 for the count.
 
 ## 1. Three hard law classes (typed model)
 
@@ -101,8 +102,9 @@ chapter intro; there is no Lean statement.
   - **`or`.** Program-level choice is on level 13, with `ensure` and `assert`:
     between the assignments of level 12 and the `.` and `||` of level 14. That is
     where the interpreter has it.
-- **Exercise solutions** (hehner.ca/aPToP/solutions): out of scope. Chapter 10
-  statements are stubbed in `LaPToP/Exercises/`; solutions are not imported.
+- **Exercise solutions** (hehner.ca/aPToP/solutions): not imported. Chapter 10
+  exercises are being formalized from the book's text in `LaPToP/Exercises/`
+  (§5).
 
 ## 4. Residual honesty notes (already explained in nodes)
 
@@ -122,19 +124,25 @@ so “missing” is not confused with “unfinished demo”:
 
 ## 5. Chapter 10 exercise inventory
 
-| Book § | Theme | Stubs module | Count |
-|---|---|---|---|
-| 10.0 | Introduction | `LaPToP.Exercises.Ch0` | 4 |
-| 10.1 | Basic Theories | `LaPToP.Exercises.Ch1` | 37 |
-| 10.2 | Basic Data Structures | `LaPToP.Exercises.Ch2` | 28 |
-| 10.3 | Function Theory | `LaPToP.Exercises.Ch3` | 51 |
-| 10.4 | Program Theory | `LaPToP.Exercises.Ch4` | 185 |
-| 10.5 | Programming Language | `LaPToP.Exercises.Ch5` | 60 |
-| 10.6 | Recursive Definition | `LaPToP.Exercises.Ch6` | 55 |
-| 10.7 | Theory Design and Implementation | `LaPToP.Exercises.Ch7` | 55 |
-| 10.8 | Concurrency | `LaPToP.Exercises.Ch8` | 18 |
-| 10.9 | Interaction | `LaPToP.Exercises.Ch9` | 39 |
-| | **Total** | | **532** |
+| Book § | Theme | Module | Count | Proved | Informal | Stubs left |
+|---|---|---|---|---|---|---|
+| 10.0 | Introduction | `LaPToP.Exercises.Ch0` | 4 | 4 | 0 | 0 |
+| 10.1 | Basic Theories | `LaPToP.Exercises.Ch1` | 37 | 27 | 10 | 0 |
+| 10.2 | Basic Data Structures | `LaPToP.Exercises.Ch2` | 28 | | | 28 |
+| 10.3 | Function Theory | `LaPToP.Exercises.Ch3` | 51 | | | 51 |
+| 10.4 | Program Theory | `LaPToP.Exercises.Ch4` | 185 | | | 185 |
+| 10.5 | Programming Language | `LaPToP.Exercises.Ch5` | 60 | | | 60 |
+| 10.6 | Recursive Definition | `LaPToP.Exercises.Ch6` | 55 | | | 55 |
+| 10.7 | Theory Design and Implementation | `LaPToP.Exercises.Ch7` | 55 | | | 55 |
+| 10.8 | Concurrency | `LaPToP.Exercises.Ch8` | 18 | | | 18 |
+| 10.9 | Interaction | `LaPToP.Exercises.Ch9` | 39 | | | 39 |
+| | **Total** | | **532** | **31** | **10** | **491** |
+
+*Informal* exercises ask to design notation, to explain in words, or to
+translate English, and have no single formal statement: in §10.1 these are 13,
+17, 20, 25, 32, 33, 34, 37, 39 and 40. Some proved exercises also have informal
+parts, named in their module's docstring (4's succinctness, 11(e)–(f),
+15(b)–(d), 19's discussion, 29(c)–(f)).
 
 Numbering follows the book’s Chapter 10. Gaps **94** and **393** do not appear
 as exercises in this edition’s text extract. A minority of exercises already

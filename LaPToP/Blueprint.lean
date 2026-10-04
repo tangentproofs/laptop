@@ -39,8 +39,9 @@ multi-dimensional lists).
 Every node quotes the book and points at sorry-free Lean declarations; where
 the model departs from the book, adds a side condition, or corrects the book's
 argument, the node prose and the module docstrings say so — nothing is
-asserted that is not proved. Chapter 10 exercise *statements* live as deferred
-stubs in `LaPToP/Exercises/` (signatures with `sorry` only; not Blueprint nodes).
+asserted that is not proved. Chapter 10's exercises live in `LaPToP/Exercises/`
+(not Blueprint nodes): formalized and proved section by section, the rest still
+deferred stubs, as `MISSING.md` §5 counts.
 Gaps that are not formalized on purpose are listed in `MISSING.md`. The Collatz
 chapter records the proved Exercise 255 timing development only.
 
