@@ -129,14 +129,14 @@ so “missing” is not confused with “unfinished demo”:
 | 10.0 | Introduction | `LaPToP.Exercises.Ch0` | 4 | 4 | 0 | 0 |
 | 10.1 | Basic Theories | `LaPToP.Exercises.Ch1` | 37 | 27 | 10 | 0 |
 | 10.2 | Basic Data Structures | `LaPToP.Exercises.Ch2` | 28 | 16 | 12 | 0 |
-| 10.3 | Function Theory | `LaPToP.Exercises.Ch3` | 51 | | | 51 |
+| 10.3 | Function Theory | `LaPToP.Exercises.Ch3` | 52 | 38 | 14 | 0 |
 | 10.4 | Program Theory | `LaPToP.Exercises.Ch4` | 185 | | | 185 |
 | 10.5 | Programming Language | `LaPToP.Exercises.Ch5` | 60 | | | 60 |
 | 10.6 | Recursive Definition | `LaPToP.Exercises.Ch6` | 55 | | | 55 |
 | 10.7 | Theory Design and Implementation | `LaPToP.Exercises.Ch7` | 55 | | | 55 |
 | 10.8 | Concurrency | `LaPToP.Exercises.Ch8` | 18 | | | 18 |
 | 10.9 | Interaction | `LaPToP.Exercises.Ch9` | 39 | | | 39 |
-| | **Total** | | **532** | **47** | **22** | **463** |
+| | **Total** | | **533** | **85** | **36** | **412** |
 
 *Informal* exercises ask to design notation, to explain in words, or to
 translate English, and have no single formal statement: in §10.1 these are 13,
@@ -144,7 +144,8 @@ translate English, and have no single formal statement: in §10.1 these are 13,
 parts, named in their module's docstring (4's succinctness, 11(e)–(f),
 15(b)–(d), 19's discussion, 29(c)–(f)).
 
-Numbering follows the book’s Chapter 10. Gaps **94** and **393** do not appear
-as exercises in this edition’s text extract. A minority of exercises already
+Numbering follows the book’s Chapter 10. Exercise **94** is in the book (the
+earlier inventory missed it, and it is now proved); **393** does not appear in
+this edition. A minority of exercises already
 have real developments under `LaPToP/**` (e.g. 172, 174, 255, 491, …); the
 Chapter 10 stubs remain as inventory only.
