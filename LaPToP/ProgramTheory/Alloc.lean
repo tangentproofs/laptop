@@ -1,4 +1,5 @@
 import LaPToP.ProgramTheory.CompileB4
+import B4.MM
 
 /-!
 # A memory allocator, in the language, proved
@@ -36,8 +37,10 @@ block it meets with the free blocks after it, and splitting off what is left
 when that is at least four cells. It answers in `r` where the data starts, or
 `-1` when no block is big enough. `M (r-1):= 0` frees it again.
 
-`Alloc.alloc` is the same algorithm on a list of blocks (`B4.MM.alloc`, counted
-in cells rather than bytes). **`alloc_sEval`** proves that the program, run on a
+`Alloc.alloc` is the same algorithm on a list of blocks: `B4.Heap.alloc 3 4`,
+the one model of the allocator in the b4 repository, counted in cells (a header
+of 3, a split at 4), of which `B4.MM.alloc` is the instance in bytes (12, 16);
+`alloc_bytes` says the two agree, bytes being four times cells. **`alloc_sEval`** proves that the program, run on a
 heap that holds blocks `bs`, leaves a heap that holds `(alloc n bs).2` and answers
 `(alloc n bs).1` — in 32 bits, so that `CompileB4.load_correct` carries it to the
 b4 machine (`alloc_on_b4`), and `CompileB4.eval_of_sEval` to the language's
@@ -53,52 +56,34 @@ open LaPToP.ProgramTheory.CompileB4
 /-! ### The model -/
 
 /-- A block: the size of its data, in cells, and whether it is used. -/
-structure Blk where
-  /-- The size of its data, in cells. -/
-  size : ℕ
-  /-- Whether it is used. -/
-  used : Bool
-  deriving Repr, DecidableEq, Inhabited
+abbrev Blk := B4.Heap.Blk
 
-/-- Absorb the free blocks at the front of `bs` into a free block of `size`. -/
-def absorb (size : ℕ) : List Blk → ℕ × List Blk
-  | b :: bs => if b.used then (size, b :: bs) else absorb (size + 3 + b.size) bs
-  | [] => (size, [])
+/-- Absorb the free blocks at the front of `bs` into a free block of `size`
+(headers of 3 cells). -/
+abbrev absorb (size : ℕ) (bs : List Blk) : ℕ × List Blk := B4.Heap.absorb 3 size bs
 
-theorem absorb_length (size : ℕ) : ∀ bs : List Blk, (absorb size bs).2.length ≤ bs.length
-  | [] => by simp [absorb]
-  | b :: bs => by
-    unfold absorb
-    split
-    · simp
-    · have := absorb_length (size + 3 + b.size) bs; simp only [List.length_cons]; omega
+theorem absorb_length (size : ℕ) (bs : List Blk) : (absorb size bs).2.length ≤ bs.length :=
+  B4.Heap.absorb_length 3 size bs
 
 /-- Take a free block of `size` for `n`, splitting off the rest when it is at
 least four cells. -/
-def claim (n size : ℕ) : List Blk :=
-  if n + 4 ≤ size then [⟨n, true⟩, ⟨size - n - 3, false⟩] else [⟨size, true⟩]
+abbrev claim (n size : ℕ) : List Blk := B4.Heap.claim 3 4 n size
 
-/-- **Allocation, on the blocks**: the offset of the block taken, if one is big
-enough, and the blocks after — merged as far as the search went. -/
-def alloc (n : ℕ) : List Blk → Option ℕ × List Blk
-  | [] => (none, [])
-  | b :: bs =>
-    if b.used then
-      let r := alloc n bs
-      (r.1.map (· + 3 + b.size), b :: r.2)
-    else
-      have := absorb_length b.size bs
-      if n ≤ (absorb b.size bs).1 then (some 0, claim n (absorb b.size bs).1 ++ (absorb b.size bs).2)
-      else
-        let r := alloc n (absorb b.size bs).2
-        (r.1.map (· + 3 + (absorb b.size bs).1), ⟨(absorb b.size bs).1, false⟩ :: r.2)
-termination_by bs => bs.length
-decreasing_by all_goals simp only [List.length_cons]; omega
+/-- **Allocation, on the blocks**: `B4.Heap.alloc` in cells, a header of 3 and a
+split at 4 — the offset of the block taken, if one is big enough, and the
+blocks after, merged as far as the search went. -/
+abbrev alloc (n : ℕ) (bs : List Blk) : Option ℕ × List Blk := B4.Heap.alloc 3 4 n bs
 
 /-- **Freeing, on the blocks**: the block at offset `o` is free. -/
-def free (o : ℕ) : List Blk → List Blk
-  | [] => []
-  | b :: bs => if o = 0 then { b with used := false } :: bs else b :: free (o - 3 - b.size) bs
+abbrev free (o : ℕ) (bs : List Blk) : List Blk := B4.Heap.free 3 o bs
+
+/-- **Cells are four bytes**: `B4.MM.alloc`, the model of `mm.b4a` in bytes, on
+the blocks four times the size, does what this model does, with offsets four
+times. -/
+theorem alloc_bytes (n : ℕ) (bs : List Blk) :
+    B4.MM.alloc (4 * n) (bs.map (B4.Heap.Blk.scale 4)) =
+      ((alloc n bs).1.map (4 * ·), (alloc n bs).2.map (B4.Heap.Blk.scale 4)) :=
+  B4.MM.alloc_cells n bs
 
 /-- The cells blocks take. -/
 def span (bs : List Blk) : ℕ := (bs.map fun b => 3 + b.size).sum
@@ -433,8 +418,8 @@ theorem merge_runs {L : Layout} {cap : ℕ} (c : Ctx L cap) {d : ℕ} : ∀ (bs 
   | [], h, S, hl, hg, hp, h1, hS, hpq, _, hch => by
     have hcap := c.cap_lt
     simp only [Chain] at hch
-    refine ⟨h.ms, ?_, rfl, fun _ _ _ => rfl, by simpa [absorb] using hS, by simpa [absorb] using h1,
-      by simp [absorb, hpq, hch], by simp [absorb, hpq, hch, Chain]⟩
+    refine ⟨h.ms, ?_, rfl, fun _ _ _ => rfl, by simpa [absorb, B4.Heap.absorb] using hS, by simpa [absorb, B4.Heap.absorb] using h1,
+      by simp [absorb, B4.Heap.absorb, hpq, hch], by simp [absorb, B4.Heap.absorb, hpq, hch, Chain]⟩
     have e : ({ h with ms := h.ms, g := false, q := rd h.ms h.p } : HS) = { h with g := false } := by
       rw [hpq]
     rw [e]
@@ -462,9 +447,9 @@ theorem merge_runs {L : Layout} {cap : ℕ} (c : Ctx L cap) {d : ℕ} : ∀ (bs 
     by_cases hu : b.used
     · -- a used block: stop
       rw [ite_eq_left hu] at qu
-      refine ⟨h.ms, ?_, rfl, fun _ _ _ => rfl, by simp [absorb, hu, hS], by simp [absorb, hu]; omega,
-        by simp [absorb, hu, hpq, hq'], by
-          simp only [absorb, hu, ite_true, hpq]; exact ⟨q0, qlen, qs, by simp [hu, qu], qn, qch⟩⟩
+      refine ⟨h.ms, ?_, rfl, fun _ _ _ => rfl, by simp [absorb, B4.Heap.absorb, hu, hS], by simp [absorb, B4.Heap.absorb, hu]; omega,
+        by simp [absorb, B4.Heap.absorb, hu, hpq, hq'], by
+          simp only [absorb, B4.Heap.absorb, B4.Heap.absorb, hu, ite_true, hpq]; exact ⟨q0, qlen, qs, by simp [hu, qu], qn, qch⟩⟩
       have e : ({ h with ms := h.ms, g := false, q := rd h.ms h.p } : HS) = { h with g := false } := by
         rw [hpq]
       rw [e]
@@ -500,7 +485,7 @@ theorem merge_runs {L : Layout} {cap : ℕ} (c : Ctx L cap) {d : ℕ} : ∀ (bs 
       obtain ⟨ms', run', hl', hfr', hS', hb', hp', hch'⟩ := merge_runs c bs h₂ (S + 3 + b.size)
         (by simp [h₂, l₂, hl]) hg hp (by simp only [h₂, l₂]; push_cast; omega)
         (by simp only [h₂]; rw [m2p1]; push_cast; omega) m2p hnext hch₂
-      have ha : absorb S (b :: bs) = absorb (S + 3 + b.size) bs := by simp [absorb, hu]
+      have ha : absorb S (b :: bs) = absorb (S + 3 + b.size) bs := by simp [absorb, B4.Heap.absorb, hu]
       refine ⟨ms', ?_, by rw [hl', l₂], fun j h1 h2 => (hfr' j h1 h2).trans (frame j h1 h2),
         by rw [ha]; exact hS', by rw [ha, ← l₂]; exact hb', by rw [ha]; exact hp',
         by rw [ha]; exact hch'⟩
@@ -600,7 +585,7 @@ theorem take_runs {L : Layout} {cap : ℕ} (c : Ctx L cap) {d : ℕ} {h : HS} {S
         exact chain_frame (by simp) X _ (fun j hj => by rw [r₁, ite_eq_right (by omega)]) mch
   have hclaim : claim h.n.toNat S = if h.n + 4 ≤ S then [⟨h.n.toNat, true⟩, ⟨S - h.n.toNat - 3, false⟩]
       else [⟨S, true⟩] := by
-    unfold claim; congr 1; apply propext; omega
+    unfold claim B4.Heap.claim; congr 1; apply propext; omega
   by_cases hsp : h.n + 4 ≤ S
   · -- split off the rest
     rw [hclaim, ite_eq_left hsp]
@@ -681,14 +666,14 @@ theorem take_runs {L : Layout} {cap : ℕ} (c : Ctx L cap) {d : ℕ} {h : HS} {S
 
 theorem alloc_used {n : ℕ} {b : Blk} {bs : List Blk} (hu : b.used) :
     alloc n (b :: bs) = ((alloc n bs).1.map (· + 3 + b.size), b :: (alloc n bs).2) := by
-  rw [alloc]; simp [hu]
+  rw [alloc, B4.Heap.alloc]; simp [hu]
 
 theorem alloc_free {n : ℕ} {b : Blk} {bs : List Blk} (hu : ¬b.used) :
     alloc n (b :: bs) = if n ≤ (absorb b.size bs).1 then
       (some 0, claim n (absorb b.size bs).1 ++ (absorb b.size bs).2)
     else ((alloc n (absorb b.size bs).2).1.map (· + 3 + (absorb b.size bs).1),
       ⟨(absorb b.size bs).1, false⟩ :: (alloc n (absorb b.size bs).2).2) := by
-  rw [alloc]; simp [hu]
+  rw [alloc, B4.Heap.alloc]; simp [hu]
 
 section
 variable {L : Layout} {cap : ℕ} (c : Ctx L cap) {h : HS}
@@ -725,7 +710,7 @@ theorem search_nil {L : Layout} {cap : ℕ} (c : Ctx L cap) {d : ℕ} {h : HS} {
       h'.ms.length = h.ms.length ∧ Chain h'.ms 0 (pre ++ (alloc h.n.toNat []).2) ∧
       h'.r = ((alloc h.n.toNat []).1.map fun o : ℕ => (span pre : ℤ) + (o : ℤ) + 3).getD (-1) :=
   ⟨h, .loopF (fit_pge c (by omega) (by omega)) (by simp [BinOp.apply, UnOp.apply, hp]), rfl, rfl, rfl,
-    by simpa [alloc] using hch, by simp [alloc, hr]⟩
+    by simpa [alloc, B4.Heap.alloc] using hch, by simp [alloc, B4.Heap.alloc, hr]⟩
 
 /-- **The search loop** does what `alloc` does, from the blocks at `p`, after
 blocks `pre`. -/
@@ -801,7 +786,7 @@ theorem search_runs {L : Layout} {cap : ℕ} (c : Ctx L cap) {d : ℕ} :
           rfl, rfl, by simp [h₄, tl, h₃, ml], ?_, by simp [h₄, hpre.1]⟩
         · exact .seq s₁ (.seq s₂ (.seq mrun (.condT fsz
             (by simp [BinOp.apply, UnOp.apply]; simp only [h₂]; rw [mS]; omega) trun)))
-        · exact hpre₁.2 ms₂ tl tbelow _ (by unfold claim; split <;> simp) tch
+        · exact hpre₁.2 ms₂ tl tbelow _ (by unfold claim B4.Heap.claim; split <;> simp) tch
       · rw [ite_eq_right hfit]
         have hu₁' : rd ms₁ (h.p + 2) = (if (false : Bool) = true then 1 else 0) := hu₁
         let h₄ : HS := { h with ms := ms₁, q := rd ms₁ h.p, g := false, p := rd ms₁ h.p }
@@ -863,11 +848,13 @@ def At (bs : List Blk) (o : ℕ) : Prop := ∃ pre b post, bs = pre ++ b :: post
 
 theorem free_at : ∀ (pre : List Blk) (b : Blk) (post : List Blk),
     free (span pre) (pre ++ b :: post) = pre ++ { b with used := false } :: post
-  | [], b, post => by simp [free, span]
+  | [], b, post => by simp [free, B4.Heap.free, span]
   | x :: pre, b, post => by
-    rw [List.cons_append, free, ite_eq_right (by simp), span_cons,
-      show 3 + x.size + span pre - 3 - x.size = span pre by omega, free_at pre b post]
-    rfl
+    rw [List.cons_append, free, B4.Heap.free, ite_eq_right (by simp), span_cons,
+      show 3 + x.size + span pre - 3 - x.size = span pre by omega]
+    have := free_at pre b post
+    simp only [free] at this
+    rw [this]; rfl
 
 theorem chain_free {ms : List ℤ} : ∀ (pre : List Blk) (b : Blk) (post : List Blk) (a : ℤ),
     Chain ms a (pre ++ b :: post) →

@@ -1888,7 +1888,7 @@ search keeps the first with the least clock, which is the process the network
 settles, since the earliest is unique. The answer, false, is stored as before.
 :::
 
-:::theorem "interpreter_alloc" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, arrays, memory allocation") (effort := "large") (lean := "LaPToP.ProgramTheory.Alloc.Blk, LaPToP.ProgramTheory.Alloc.absorb, LaPToP.ProgramTheory.Alloc.claim, LaPToP.ProgramTheory.Alloc.alloc, LaPToP.ProgramTheory.Alloc.free, LaPToP.ProgramTheory.Alloc.Chain, LaPToP.ProgramTheory.Alloc.allocStmt, LaPToP.ProgramTheory.Alloc.allocSrc, LaPToP.ProgramTheory.Alloc.freeStmt, LaPToP.ProgramTheory.Alloc.merge_runs, LaPToP.ProgramTheory.Alloc.take_runs, LaPToP.ProgramTheory.Alloc.search_runs, LaPToP.ProgramTheory.Alloc.alloc_sEval, LaPToP.ProgramTheory.Alloc.free_sEval, LaPToP.ProgramTheory.Alloc.alloc_eval, LaPToP.ProgramTheory.Alloc.alloc_on_b4, LaPToP.ProgramTheory.Alloc.alloc_on_b4', LaPToP.ProgramTheory.Interpreter.Lang.allocSrc_reads")
+:::theorem "interpreter_alloc" (parent := "programming_language_core") (tags := "programs, compiler, virtual machine, b4, arrays, memory allocation") (effort := "large") (lean := "LaPToP.ProgramTheory.Alloc.Blk, LaPToP.ProgramTheory.Alloc.absorb, LaPToP.ProgramTheory.Alloc.claim, LaPToP.ProgramTheory.Alloc.alloc, LaPToP.ProgramTheory.Alloc.free, LaPToP.ProgramTheory.Alloc.Chain, LaPToP.ProgramTheory.Alloc.allocStmt, LaPToP.ProgramTheory.Alloc.allocSrc, LaPToP.ProgramTheory.Alloc.freeStmt, LaPToP.ProgramTheory.Alloc.merge_runs, LaPToP.ProgramTheory.Alloc.take_runs, LaPToP.ProgramTheory.Alloc.search_runs, LaPToP.ProgramTheory.Alloc.alloc_sEval, LaPToP.ProgramTheory.Alloc.free_sEval, LaPToP.ProgramTheory.Alloc.alloc_eval, LaPToP.ProgramTheory.Alloc.alloc_on_b4, LaPToP.ProgramTheory.Alloc.alloc_on_b4', LaPToP.ProgramTheory.Interpreter.Lang.allocSrc_reads, LaPToP.ProgramTheory.Alloc.alloc_bytes, B4.Heap.alloc, B4.Heap.alloc_scale, B4.MM.alloc")
 A memory allocator, written in the language and proved. It is the allocator of
 b4's `mm.b4a` (first fit, merging free neighbours as it searches, splitting off
 what a request leaves), rewritten over an array $`M` of cells: the heap is a
@@ -1909,8 +1909,14 @@ heap's cells holding the model's blocks.
 The program's source text, tokenized and read by `interp --b4`'s parser, is
 the statement proved: the kernel checks it (`Lang.allocSrc_reads`).
 
-Honest scope. The model counts
-in cells, where `mm.b4a` counts in bytes (a header of 12, a split at 16).
+The model is the b4 repository's one model of the allocator, `B4.Heap.alloc`,
+counted in cells (a header of 3, a split at 4); `B4.MM.alloc`, the model of
+`mm.b4a`, is the same model counted in bytes (a header of 12, a split at 16), and
+on blocks four times the size it does the same, with offsets four times
+(`alloc_bytes`).
+
+Honest scope. `mm.b4a` itself is related to its model by a random test, not by
+a proof.
 :::
 
 :::proof "interpreter_alloc"
