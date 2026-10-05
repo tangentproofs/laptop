@@ -1,4 +1,4 @@
-import Netty.Lean
+import Netty.Twins
 
 namespace Netty.Proofs.Demo
 netty_proofs "demo.calc"

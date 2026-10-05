@@ -127,6 +127,15 @@ structure Law where
   vars : List String := []
   /-- The statement, with `vars` appearing as `Expr.mvar`. -/
   stmt : Expr
+  /-- The name of the law's *Lean twin*: the Lean theorem that states it
+  (`Netty.Twins`), which the translation of a calculation cites for every step
+  the law takes. `""` when there is none, and then a step by the law is proved
+  by Lean's automation instead, and said to be. -/
+  twin : String := ""
+  /-- For a law that is an earlier theorem of a calculation file, the
+  identifiers its twin — that theorem — is stated over, in order: the twin is
+  applied to them rather than to law variables, which such a law has none of. -/
+  twinArgs : List String := []
   deriving Repr, DecidableEq, Inhabited
 
 /-- One of the (at most six) ways a law can be read as a proof step: match a
@@ -143,6 +152,19 @@ structure Variant where
   /-- What must hold for the step to be licensed, for a *conditional* reading of
   a law (`Law.conditional`); `none` for the readings that need nothing. -/
   premise : Option Expr := none
+  /-- Which reading of the law this is, which is what the translation needs to
+  derive the step from the law's twin: `direct` (the law as written), `flip`
+  (its direction reversed), `eqTop`/`topEq` with the form they read (`0` the law
+  as written, `1` reversed), `cond`/`condFlip` (the conditional readings). -/
+  kind : String := "direct"
+  /-- Which form a `⊤` reading reads: `false` the law as written. -/
+  flipped : Bool := false
+  /-- The twin of the law. -/
+  twin : String := ""
+  /-- The law's variables, in the order its twin takes them. -/
+  vars : List String := []
+  /-- What the twin is applied to instead, for a theorem (`Law.twinArgs`). -/
+  twinArgs : List String := []
   deriving Repr, DecidableEq, Inhabited
 
 /-- A binding of law variables to expressions. -/
@@ -398,9 +420,11 @@ def conditional (l : Law) : List Variant :=
   match l.stmt with
   | .bin .imp q (.bin o a b) | .bin .rimp (.bin o a b) q =>
       if o.isMargin then
-        { law := name, lhs := a, op := o, rhs := b, premise := some q } ::
+        { law := name, lhs := a, op := o, rhs := b, premise := some q, kind := "cond",
+          twin := l.twin, vars := l.vars, twinArgs := l.twinArgs } ::
           (match o.flip with
-           | some f => [{ law := name, lhs := b, op := f, rhs := a, premise := some q }]
+           | some f => [{ law := name, lhs := b, op := f, rhs := a, premise := some q,
+                          kind := "condFlip", twin := l.twin, vars := l.vars, twinArgs := l.twinArgs }]
            | none => [])
       else []
   | _ => []
@@ -411,15 +435,21 @@ def variants (l : Law) : List Variant :=
   -- "Laws are not required to have names; any law without a name is labelled
   -- ‘unnamed law’."
   let name := if l.name.isEmpty then "unnamed law" else l.name
-  let direct := l.forms.filterMap fun s =>
+  let forms := l.forms.zipIdx
+  let direct := forms.filterMap fun (s, i) =>
     match s with
     | .bin o a b =>
-        if o.isMargin then some ({ law := name, lhs := a, op := o, rhs := b } : Variant)
+        if o.isMargin then
+          some ({ law := name, lhs := a, op := o, rhs := b,
+                  kind := if i == 0 then "direct" else "flip",
+                  twin := l.twin, vars := l.vars, twinArgs := l.twinArgs } : Variant)
         else none
     | _ => none
-  let tops := l.forms.flatMap fun s =>
-    [({ law := name, lhs := s, op := .eq, rhs := .top } : Variant),
-     { law := name, lhs := .top, op := .eq, rhs := s }]
+  let tops := forms.flatMap fun (s, i) =>
+    [({ law := name, lhs := s, op := .eq, rhs := .top, kind := "eqTop", flipped := i != 0,
+        twin := l.twin, vars := l.vars, twinArgs := l.twinArgs } : Variant),
+     { law := name, lhs := .top, op := .eq, rhs := s, kind := "topEq", flipped := i != 0,
+       twin := l.twin, vars := l.vars, twinArgs := l.twinArgs }]
   -- The conditional readings come last, so that when a law can write one and the
   -- same line both with a premise and without, `Doc.suggestions` keeps the one
   -- that needs nothing.

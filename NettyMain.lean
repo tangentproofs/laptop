@@ -1243,6 +1243,11 @@ def apiTest : IO Bool := do
       IO.eprintln s!"api: the answer to an unknown request does not parse: {e}"
   return ok
 
+/-- A law list without its twins' names, which a law file does not write: the
+compiled lists carry them (`Law.twin`), and a list read back from its file does
+not. -/
+def untwinned (ls : List Law) : List Law := ls.map fun l => { l with twin := "", twinArgs := [] }
+
 /-- Run the kernel's checks on itself: that every shipped law is a tautology,
 that the law list survives being written out and read back, that the law file
 on disk is the one compiled in, that every demonstration script is the command
@@ -1264,7 +1269,7 @@ def selftest : IO Bool := do
     IO.eprintln s!"laws: not a tautology: {String.intercalate "; " (bad.map Law.render)}"
   match Parser.lawFile (renderLawFile Laws.boolean) with
   | .ok ls =>
-      if ls == Laws.boolean then IO.println "laws: written out and read back unchanged"
+      if ls == untwinned Laws.boolean then IO.println "laws: written out and read back unchanged"
       else
         ok := false
         IO.eprintln "laws: writing the law list out and reading it back changed it"
@@ -1276,7 +1281,7 @@ def selftest : IO Bool := do
   if ← System.FilePath.pathExists lawFilePath then
     match Parser.lawFile (← IO.FS.readFile lawFilePath) with
     | .ok ls =>
-        if ls == Laws.boolean then
+        if ls == untwinned Laws.boolean then
           IO.println s!"laws: {lawFilePath} is the list compiled in"
         else
           ok := false
@@ -1290,7 +1295,7 @@ def selftest : IO Bool := do
   if ← System.FilePath.pathExists numberLawFilePath then
     match Parser.lawFile (← IO.FS.readFile numberLawFilePath) with
     | .ok ls =>
-        if ls == Laws.number then
+        if ls == untwinned Laws.number then
           IO.println s!"laws: {numberLawFilePath} is the list compiled in, and \
             {Laws.number.length} number laws hold on small integers"
         else
@@ -1303,7 +1308,7 @@ def selftest : IO Bool := do
   if ← System.FilePath.pathExists quantifierLawFilePath then
     match Parser.lawFile (← IO.FS.readFile quantifierLawFilePath) with
     | .ok ls =>
-        if ls == Laws.quantifier then
+        if ls == untwinned Laws.quantifier then
           IO.println s!"laws: {quantifierLawFilePath} is the list compiled in, \
             {Laws.quantifier.length} quantifier laws, trusted as transcribed"
         else
@@ -1317,7 +1322,7 @@ def selftest : IO Bool := do
   -- notation too, and a law's name is whatever precedes the first `:`.
   match Parser.lawFile (renderLawFile Laws.quantifier) with
   | .ok ls =>
-      if ls == Laws.quantifier then
+      if ls == untwinned Laws.quantifier then
         IO.println "laws: the quantifier list is written out and read back unchanged"
       else
         ok := false
