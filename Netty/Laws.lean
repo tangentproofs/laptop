@@ -63,28 +63,36 @@ private def expr : Expr → Lean.Term
 
 /-- Quote a law as a term. -/
 def lawTerm (l : Law) : Lean.Term :=
-  Lean.Syntax.mkCApp ``Law.mk #[Lean.quote l.name, Lean.quote l.vars, expr l.stmt]
+  Lean.Syntax.mkCApp ``Law.mk
+    #[Lean.quote l.name, Lean.quote l.vars, expr l.stmt, Lean.quote l.twin,
+      Lean.quote l.twinArgs]
 
 end Quoting
 
 open Lean Elab Term in
 /-- `lawFile% "path"` reads a law file relative to the Lean source file it
 appears in, parses it at elaboration time, and elaborates to the resulting
-`List Law`. -/
-elab "lawFile% " p:str : term => do
+`List Law`. With a second string, law `k` of the file is given the twin
+`PREFIX.lk` (`Law.twin`). -/
+elab "lawFile% " p:str tw:(str)? : term => do
   let dir := (System.FilePath.mk (← getFileName)).parent.getD (System.FilePath.mk ".")
   let path := dir / p.getString
   let text ← IO.FS.readFile path
   match Netty.Parser.lawFile text with
   | .error e => throwError s!"{path}: {e}"
   | .ok ls =>
+      -- With a twin prefix, law `k` of the file has the twin `PREFIX.lk`.
+      let ls := match tw with
+        | some t => ls.zipIdx.map fun ((l : Netty.Law), (k : Nat)) =>
+            { l with twin := s!"{t.getString}.l{k}" }
+        | none => ls
       let terms := (ls.map Netty.Quoting.lawTerm).toArray
       elabTerm (← `([$terms,*])) none
 
 namespace Laws
 
 /-- The boolean law list: the "Binary" laws of aPToP §11.3.1. -/
-def boolean : List Law := lawFile% "laws/boolean.laws"
+def boolean : List Law := lawFile% "laws/boolean.laws" "Netty.Twin.boolean"
 
 /-- The quantifier law list, `Netty/laws/quantifier.laws`: `∀` and `∃` with an
 explicit domain.
@@ -100,7 +108,7 @@ def quantifier : List Law := lawFile% "laws/quantifier.laws"
 §11.3.2 and does not pretend to be: it exists so that the conditional readings of
 a law (`Law.conditional`) have something to work with at the number level, and so
 that a user has a number law file to copy. -/
-def number : List Law := lawFile% "laws/number.laws"
+def number : List Law := lawFile% "laws/number.laws" "Netty.Twin.number"
 
 end Laws
 

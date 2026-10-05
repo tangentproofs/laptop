@@ -315,11 +315,23 @@ theorems of the file it extends, and must refine every specification it
 inherits or calls — the book's way of going from a specification to a program
 (`LaPToP/Exercises/calc/sum.spec.calc` and `sum.calc`, Exercise 140).
 
-A hint that names no law (`arithmetic`) is left to Lean, and the command says so.
+Every law has a **Lean twin**, a theorem `Netty.Twin.boolean.l7` generated from
+the law file and proved by Lean, and the kernel records how it took each step.
+So the Lean proof of a step *is* the law it names: the twin, instantiated where
+the kernel applied it and carried to the whole line by congruence or
+monotonicity. A rule (`substitution law`, `one point`) is a tactic in the same
+way. Only a hint that names no law (`arithmetic`) is left to Lean's automation,
+and `netty_proofs` reports, for each theorem, how many steps came from the twins,
+the rule tactics and automation. The twins work as a tactic in any Lean proof:
+
+```lean
+example (a b : Prop) : (¬(a ∧ b)) = (¬a ∨ ¬b) := by law "duality"
+```
 
 ```bash
 lake exe netty --check=Netty/Proofs/demo.calc      # check with the Netty kernel
 lake env lean LaPToP/Exercises/Calc.lean           # check, translate, and prove in Lean
+NETTY_TRACE=1 lake env lean LaPToP/Exercises/Calc.lean   # …printing each Lean theorem
 ```
 
 ### The three panes in a browser (`netty-web/`)

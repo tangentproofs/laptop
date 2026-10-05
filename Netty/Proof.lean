@@ -112,14 +112,35 @@ structure PTheorem where
   lineNo : Nat
   deriving Repr, Inhabited
 
+/-- How one application of a law or rule was made, recorded so that the
+translation can prove the step from the law's Lean twin: the line it started
+from and the line it wrote, the connective at the root, the zooms that reached
+the place it was applied (outermost first), the suggestion taken there — which
+carries the place, the reading of the law and the substitution — and the
+variables supplied by hand. -/
+structure Cert where
+  /-- The line the application starts from. -/
+  src : Expr
+  /-- The line it writes. -/
+  dst : Expr
+  /-- The connective it puts in the margin. -/
+  op : BinOp
+  /-- The zooms to the level the law was applied at, outermost first. -/
+  path : List Part
+  /-- The suggestion taken there. -/
+  sugg : Suggestion
+  /-- The unconstrained variables, supplied. -/
+  bind : Subst
+  deriving Repr, DecidableEq, Inhabited
+
 /-- How a step was justified. -/
 inductive StepCheck
-  /-- The kernel applied the named laws and wrote the next line. -/
-  | law (names : List String)
+  /-- The kernel applied the named laws and wrote the next line, as `certs` say. -/
+  | law (names : List String) (certs : List Cert)
   /-- The kernel applied the named laws and wrote the next line, but a
   conditional law left premises the laws in force do not settle; those are left
   to Lean, which proves the step outright. -/
-  | lawIf (names : List String) (premises : List Expr)
+  | lawIf (names : List String) (premises : List Expr) (certs : List Cert)
   /-- The hint names no law in force; the step is left to Lean. -/
   | lean (hint : String)
   deriving Repr, Inhabited, DecidableEq
@@ -185,6 +206,8 @@ structure Reach where
   expr : Expr
   /-- What is left to prove, if anything. -/
   premise : Option Expr := none
+  /-- How the kernel took the step (`Cert`), for the translation to Lean. -/
+  cert : Option Cert := none
   deriving Repr, DecidableEq, Inhabited
 
 /-- Zoom out `k` times. -/
@@ -214,13 +237,16 @@ def holeBinds (s : Suggestion) (target : Expr) : List Subst :=
 focus line of `d`, which is `k` zooms deep, at any depth up to `fuel` more
 zooms. `target` is the line the step should reach, used only to fill in
 variables the match leaves unconstrained. -/
-def reachFrom (name : String) (target : Expr) : Nat → Nat → Doc → List Reach
-  | k, fuel, d =>
+def reachFrom (name : String) (target src : Expr) :
+    List Part → Nat → Nat → Doc → List Reach
+  | path, k, fuel, d =>
       let here := (d.suggestions.filter (·.law == name)).flatMap fun s =>
         (holeBinds s target).filterMap fun b =>
           match d.applySuggestion s b with
           | .ok d' => match zoomOutN k d' with
-            | .ok d'' => rootStep d''
+            | .ok d'' => (rootStep d'').map fun r =>
+                { r with cert := some { src := src, dst := r.expr, op := r.op,
+                                        path := path.reverse, sugg := s, bind := b } }
             | .error _ => none
           | .error _ => none
       let deeper := match fuel with
@@ -230,7 +256,7 @@ def reachFrom (name : String) (target : Expr) : Nat → Nat → Doc → List Rea
             | some fl =>
                 ((Doc.parts fl.expr).filter Part.zoomable).flatMap fun p =>
                   match d.step (.zoomIn p) with
-                  | .ok d' => reachFrom name target (k + 1) f d'
+                  | .ok d' => reachFrom name target src (p :: path) (k + 1) f d'
                   | .error _ => []
             | none => []
       here ++ deeper
@@ -244,7 +270,7 @@ def reach (cx : Ctx) (ty : Ty) (dir : Dir) (name : String) (target a : Expr) :
     List Reach :=
   let named := cx.laws.filter (·.name == name)
   match ({ laws := named, prog := cx.prog } : Doc).step (.start ty dir a) with
-  | .ok d => reachFrom name target 0 maxDepth d
+  | .ok d => reachFrom name target a [] 0 maxDepth d
   | .error _ => []
 
 /-- Whether a step the kernel derived with connective `got` licenses the
@@ -260,44 +286,44 @@ def licenses (got want : BinOp) : Bool :=
 
 /-- One line a sequence of law applications reaches: the relation the steps add
 up to, the line, and the premises conditional laws left on the way. -/
-abbrev End := Rel × Expr × List Expr
+abbrev End := Rel × Expr × List Expr × List Cert
 
 /-- Every line a sequence of law applications takes `a` to. -/
 def chain (cx : Ctx) (ty : Ty) (dir : Dir) (target : Expr) :
     List String → List End → List End
   | [], acc => acc
   | n :: ns, acc =>
-      let next := acc.flatMap fun (r, e, qs) =>
+      let next := acc.flatMap fun (r, e, qs, cs) =>
         (reach cx ty dir n target e).filterMap fun x => do
           let r' ← x.op.rel?
           let rc ← Rel.combine [r, r']
-          some (rc, x.expr, qs ++ x.premise.toList)
+          some (rc, x.expr, qs ++ x.premise.toList, cs ++ x.cert.toList)
       -- Keep one of each line, so a long hint does not multiply its work; a
       -- reading that leaves no premise is kept over one that leaves some.
-      let sorted := next.filter (·.2.2.isEmpty) ++ next.filter (!·.2.2.isEmpty)
+      let sorted := next.filter (·.2.2.1.isEmpty) ++ next.filter (!·.2.2.1.isEmpty)
       let dedup := sorted.foldl (fun acc' p =>
         if acc'.any (fun q => q.2.1 == p.2.1 && q.1 == p.1) then acc' else acc' ++ [p]) []
       chain cx ty dir target ns dedup
 
 /-- Check one step: the laws named by `names` take `a` to `b` with `op`. The
 result is the premises conditional laws left, which are empty for a step that
-needs nothing. -/
+needs nothing, and how each application was made. -/
 def checkStep (cx : Ctx) (ty : Ty) (names : List String) (a : Expr) (op : BinOp)
-    (b : Expr) : Except String (List Expr) := do
+    (b : Expr) : Except String (List Expr × List Cert) := do
   let r ← orElseError s!"‘{op.symbol}’ cannot stand in the margin" op.rel?
   -- The level's direction is the step's own, so `=` steps and steps in the
   -- step's direction are the ones offered.
-  let ends := chain cx ty r.dir b names [(⟨.same, false⟩, a, [])]
+  let ends := chain cx ty r.dir b names [(⟨.same, false⟩, a, [], [])]
   let nb := b.normAssoc
   let hits := ends.filter fun (rel, e, _) => e.normAssoc == nb && licenses (rel.op ty) op
-  match hits.find? (·.2.2.isEmpty), hits.head? with
-  | some _, _ => return []
-  | none, some (_, _, qs) => return qs
+  match hits.find? (·.2.2.1.isEmpty), hits.head? with
+  | some (_, _, _, cs), _ => return ([], cs)
+  | none, some (_, _, qs, cs) => return (qs, cs)
   | none, none => pure ()
   let law := String.intercalate ", " names
   -- Say what the law does do: in the other directions, if it reaches `b` there.
   let others := [Dir.down, Dir.up].flatMap fun d =>
-    if d == r.dir then [] else chain cx ty d b names [(⟨.same, false⟩, a, [])]
+    if d == r.dir then [] else chain cx ty d b names [(⟨.same, false⟩, a, [], [])]
   match (ends ++ others).find? (fun (_, e, _) => e.normAssoc == nb) with
   | some (rel, _, _) =>
       throw s!"{law} gives {(rel.op ty).symbol} here, not {op.symbol}"
@@ -347,8 +373,8 @@ def check (t : PTheorem) : Except String Checked := do
         let s ← match hintLaws t.cx a.hint with
           | some names =>
               match checkStep t.cx ty names a.expr op b.expr with
-              | .ok [] => pure (StepCheck.law names)
-              | .ok qs => pure (StepCheck.lawIf names qs)
+              | .ok ([], cs) => pure (StepCheck.law names cs)
+              | .ok (qs, cs) => pure (StepCheck.lawIf names qs cs)
               | .error e => throw s!"line {a.lineNo}: {e}"
           | none =>
               if a.hint.isEmpty then throw s!"line {a.lineNo}: the step to the next line has no hint"
@@ -427,6 +453,25 @@ private def firstWord (s : String) : String × String :=
   (String.ofList (cs.takeWhile fun c => !c.isWhitespace),
    Parser.trim (String.ofList (cs.dropWhile fun c => !c.isWhitespace)))
 
+/-- The identifiers a theorem is stated over, in order, as its Lean translation
+binds them: the whole state before and after when any line is written in
+programming notation, then the free identifiers of the claim and the lines. -/
+def theoremParams (p : Prog) (claim : Expr) (lines : List Expr) : List String :=
+  let exprs := claim :: lines
+  let plain := exprs.all p.isPlain
+  let free := (exprs.flatMap Expr.vars).filter fun n =>
+    n != "ok" && !p.specs.any (·.1 == n) && !["int", "nat", "bin", "bool"].contains n
+  ((if plain then [] else p.params) ++ free).eraseDups
+
+/-- The name of a theorem's Lean twin: its name, spaces become `_`. -/
+def twinName (name : String) : String := name.map fun ch => if ch == ' ' then '_' else ch
+
+/-- A theorem as a law of the rest of its file: a ground law, whose twin is the
+theorem's own translation. -/
+def theoremLaw (c : PTheorem) : Law :=
+  { name := c.name, stmt := c.claim, twin := twinName c.name,
+    twinArgs := theoremParams c.cx.prog c.claim (c.lines.map (·.expr)) }
+
 /-- A parsed calculation file: its theorems, what is in force at its end, and
 the specifications it names itself. -/
 structure PFile where
@@ -485,7 +530,7 @@ def file (init : Ctx) (text : String) : Except String PFile := do
     if !isProofLine then
       if let some c := cur then
         done := c :: done
-        cx := { cx with laws := cx.laws ++ [{ name := c.name, stmt := c.claim }] }
+        cx := { cx with laws := cx.laws ++ [theoremLaw c] }
         cur := none
     if w == "extends" then continue
     else if w == "laws" then
@@ -542,7 +587,7 @@ def file (init : Ctx) (text : String) : Except String PFile := do
       | none => throw s!"line {n}: a proof line outside a theorem"
   if let some c := cur then
     done := c :: done
-    cx := { cx with laws := cx.laws ++ [{ name := c.name, stmt := c.claim }] }
+    cx := { cx with laws := cx.laws ++ [theoremLaw c] }
   return { theorems := done.reverse, cx := cx, ownSpecs := own }
 
 /-- What an implementation still owes: a file with refinements must refine every
@@ -596,7 +641,7 @@ partial def load (path : System.FilePath) (depth : Nat := 0) : IO PFile := do
 /-- A one-line summary of a checked theorem. -/
 def _root_.Netty.Checked.summary (c : Checked) : String :=
   let byLaw := (c.steps.filter fun s => match s with | .lean _ => false | _ => true).length
-  let premises := c.steps.flatMap fun s => match s with | .lawIf _ qs => qs | _ => []
+  let premises := c.steps.flatMap fun s => match s with | .lawIf _ qs _ => qs | _ => []
   let left := c.steps.filterMap fun s => match s with | .lean h => some h | _ => none
   s!"{c.thm.name}: {c.thm.claim.render} — {c.steps.length} steps, {byLaw} checked by law" ++
     (if left.isEmpty then "" else

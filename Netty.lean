@@ -10,6 +10,8 @@ import Netty.Api
 import Netty.Replay
 import Netty.Proof
 import Netty.Lean
+import Netty.Tactics
+import Netty.Twins
 import Netty.Proofs.Demo
 
 /-!

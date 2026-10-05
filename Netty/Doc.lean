@@ -551,6 +551,18 @@ structure Suggestion where
   (`Doc.suggestions`); what this field is for is the *order* the suggestions come
   in, where it is the key after the length of the line (`Doc.rank`). -/
   part : Part
+  /-- The subexpression the step rewrote: the part of the line it matched. -/
+  site : Expr := .top
+  /-- The reading of the law that made the step, and the substitution of its
+  variables the match found: with the law's twin they are what proves the step
+  in Lean (`Netty.ToLean`). `none` for a rule's step. -/
+  variant : Option Variant := none
+  /-- The substitution the match found. -/
+  subst : Subst := []
+  /-- The rule that made the step, for a rule's step (`Netty.Program`). -/
+  rule : Option Rule := none
+  /-- What the step wrote in place of `site`. -/
+  replacement : Expr := .top
   deriving Repr, DecidableEq, Inhabited
 
 /-- A place in the line before the focus where a law may be applied: the whole
@@ -879,7 +891,9 @@ def suggestions (d : Doc) : List Suggestion :=
                       | none => none
                     some { law := v.law, op := o, result := r,
                            holes := (r.mvars ++ (left.elim [] Expr.mvars)).eraseDups,
-                           premise := left, part := site.part }
+                           premise := left, part := site.part, site := site.expr,
+                           variant := some v, subst := σ,
+                           replacement := v.rhs.instantiate σ }
               | none => none
       -- The programming rules (`Netty.Program`) are offered at every place as
       -- well. Each is an equality, which every direction allows.
@@ -890,7 +904,8 @@ def suggestions (d : Doc) : List Suggestion :=
             | some (o, r') =>
                 if r' == line.expr then none
                 else some { law := Prog.ruleName rule, op := o, result := r', holes := [],
-                            part := site.part }
+                            part := site.part, site := site.expr, rule := some rule,
+                            replacement := r }
             | none => none
       let raw := raw ++ ruled
       -- Two places can write one line: rewriting `x ∧ y` inside `x ∧ y ∧ z` and
