@@ -12,7 +12,9 @@ three come through here.
 The grammar, weakest operator first:
 
 ```
-expr   := imp  (('≡' | '⟹' | '⟸') imp)*
+expr   := seq  (('≡' | '⟹' | '⟸') seq)*
+seq    := asgn ('.' asgn)*
+asgn   := imp  [':=' imp]          (the left side a variable)
 imp    := or   (('⇒' | '⇐') or)*
 or     := and  ('∨' and)*
 and    := neg  ('∧' neg)*
@@ -24,6 +26,12 @@ atom   := identifier | number | '⊤' | '⊥' | '(' expr ')'
         | 'if' expr 'then' expr 'else' expr 'fi'
         | ('∀' | '∃') identifiers ':' expr '·' expr
 ```
+
+`.` and `:=` are the book's programming notation: `x:= e` is an assignment and
+`P. Q` sequential composition, both specifications and so both boolean. An
+identifier may end in primes, `x′` (or `x'`), naming the final value of `x`.
+Since `.` is also the ASCII spelling of the `·` that ends a quantifier's domain,
+a domain stops short of a `.`: `∀x: nat. b` still reads as it always did.
 
 Two features of it are the book's and look odd at first.
 
@@ -99,6 +107,8 @@ inductive Tok
   /-- `)`. -/                               | rpar
   /-- `,`, separating law variables. -/     | comma
   /-- `·`, ending a quantifier. -/          | dot
+  /-- `.`: sequential composition, or in ASCII the `·` ending a quantifier. -/
+                                            | period
   /-- `∀`. -/                               | univ
   /-- `∃`. -/                               | exis
   deriving Repr, DecidableEq, Inhabited
@@ -113,7 +123,7 @@ def render : Tok → String
   | bigOp .eq => "≡" | bigOp .imp => "⟹" | bigOp .rimp => "⟸"
   | bigOp o => o.symbol
   | neg => "¬" | top => "⊤" | bot => "⊥"
-  | lpar => "(" | rpar => ")" | comma => "," | dot => "·"
+  | lpar => "(" | rpar => ")" | comma => "," | dot => "·" | period => "."
   | univ => "∀" | exis => "∃"
 
 instance : ToString Tok := ⟨render⟩
@@ -137,12 +147,14 @@ def beginsWith (s : String) (c : Char) : Bool :=
 private def isIdentStart (c : Char) : Bool := c.isAlpha || c == '_'
 
 /-- Characters that may continue an identifier. -/
-private def isIdentRest (c : Char) : Bool := c.isAlphanum || c == '_' || c == '\''
+private def isIdentRest (c : Char) : Bool :=
+  c.isAlphanum || c == '_' || c == '\'' || c == '′' || c == '″'
 
 /-- Every symbol, longest spelling first, so that `==>` is read before `==`
 and `==` before `=>`. -/
 private def symbols : List (List Char × Tok) :=
-  [ ("==>".toList, .bigOp .imp), ("<==".toList, .bigOp .rimp),
+  [ (":=".toList, .op .assign),
+    ("==>".toList, .bigOp .imp), ("<==".toList, .bigOp .rimp),
     ("-->".toList, .bigOp .imp), ("<--".toList, .bigOp .rimp),
     ("->".toList, .op .imp), ("<-".toList, .op .rimp),
     ("==".toList, .bigOp .eq),
@@ -161,7 +173,7 @@ private def symbols : List (List Char × Tok) :=
     ("¬".toList, .neg), ("~".toList, .neg),
     ("⊤".toList, .top), ("⊥".toList, .bot),
     ("(".toList, .lpar), (")".toList, .rpar), (",".toList, .comma),
-    ("·".toList, .dot), (".".toList, .dot), ("∀".toList, .univ), ("∃".toList, .exis),
+    ("·".toList, .dot), (".".toList, .period), ("∀".toList, .univ), ("∃".toList, .exis),
     (":".toList, .op .mem) ]
 
 /-- Split text into tokens. The fuel is the length of the input and every step
@@ -200,12 +212,12 @@ def tokenize (s : String) : Except String (List Tok) :=
 atom, so those three do not appear here. -/
 private def opsAt : Nat → List BinOp
   | 0 => [.eq, .imp, .rimp]
-  | 1 => [.imp, .rimp]
-  | 2 => [.or]
-  | 3 => [.and]
-  | 5 => [.eq, .ne, .lt, .gt, .le, .ge, .mem]
-  | 6 => [.add, .sub]
-  | 7 => [.mul]
+  | 3 => [.imp, .rimp]
+  | 4 => [.or]
+  | 5 => [.and]
+  | 7 => [.eq, .ne, .lt, .gt, .le, .ge, .mem]
+  | 8 => [.add, .sub]
+  | 9 => [.mul]
   | _ => []
 
 /-- The result of parsing a prefix of a token list. -/
@@ -228,7 +240,7 @@ private def boundIds : List Tok → List String → Except String (List String �
       if acc.contains n then .error s!"‘{n}’ is bound twice by the one quantifier"
       else boundIds rest (n :: acc)
   | .comma :: rest, acc => boundIds rest acc
-  | .dot :: _, _ =>
+  | .dot :: _, _ | .period :: _, _ =>
       .error "a quantifier needs a domain: write ‘∀x: d· b’, not ‘∀x· b’"
   | t :: _, _ => .error s!"unexpected ‘{t}’ among the identifiers a quantifier binds"
   | [], _ => .error "expected ‘:’ and a domain after the identifiers a quantifier binds"
@@ -238,11 +250,27 @@ mutual
 /-- Parse at precedence level `lvl`, returning the unconsumed tokens. -/
 private partial def pLevel (lvl : Nat) (ts : List Tok) : PRes :=
   match lvl with
-  | 4 =>
+  -- Sequential composition: a chain of `.`, weaker than everything but the
+  -- large operators.
+  | 1 => do
+      let (e, r) ← pLevel 2 ts
+      seqChain e r
+  -- Assignment: `x:= e`, the expression running as far as `⇒ ⇐` reach.
+  | 2 => do
+      let (e, r) ← pLevel 3 ts
+      match r with
+      | .op .assign :: rest =>
+          match e with
+          | .var _ => do
+              let (v, r') ← pLevel 3 rest
+              .ok (Expr.bin .assign e v, r')
+          | _ => .error s!"only a variable can be assigned, not {e.render}"
+      | _ => .ok (e, r)
+  | 6 =>
       match ts with
-      | .neg :: rest => (pLevel 4 rest).map (fun p => (Expr.neg p.1, p.2))
-      | _ => pLevel 5 ts
-  | 8 =>
+      | .neg :: rest => (pLevel 6 rest).map (fun p => (Expr.neg p.1, p.2))
+      | _ => pLevel 7 ts
+  | 10 =>
       match ts with
       -- `∀ids: d· b`. The `·` closes the domain; the body is parsed at the
       -- weakest level and so runs to the end of the expression, which is where
@@ -282,17 +310,26 @@ quantifier binds is refused here, so nothing downstream has to wonder what it
 would have meant. -/
 private partial def quantifier (k : Quant) (ts : List Tok) : PRes := do
   let (ids, r) ← boundIds ts []
-  let (d, r) ← pLevel 0 r
+  -- The domain stops short of `.`, which closes it as `·` does.
+  let (d, r) ← pLevel 2 r
   let clash := d.vars.filter ids.contains
   if !clash.isEmpty then
     .error s!"the domain of ‘{k.symbol}{String.intercalate ", " ids}’ mentions \
       {String.intercalate ", " clash}, which it binds"
   match r with
-  | .dot :: r' => do
+  | .dot :: r' | .period :: r' => do
       let (b, r') ← pLevel 0 r'
       .ok (Expr.quant k ids d b, r')
   | t :: _ => .error s!"expected ‘·’ after the domain but found ‘{t}’"
   | [] => .error "expected ‘·’ after the domain"
+
+/-- Continue a chain of sequential compositions. -/
+private partial def seqChain (acc : Expr) (ts : List Tok) : PRes :=
+  match ts with
+  | .period :: rest => do
+      let (e, r) ← pLevel 2 rest
+      seqChain (Expr.bin .seq acc e) r
+  | _ => .ok (acc, ts)
 
 /-- Continue a left-associative chain at level `lvl`; `big` says whether the
 level's operators are the large ones. -/

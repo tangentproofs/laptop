@@ -1,0 +1,33 @@
+# Exercise 137 of aPToP §10.4: in integer variables a, b and c, express as
+# simply as possible without assignments or sequential compositions.
+
+laws boolean
+state a, b, c: int
+
+theorem ex137a: (b:= a–b. b:= a–b) ≡ ok
+    b:= a–b. b:= a–b                           assignment
+=   b:= a–b. a′ = a ∧ b′ = a–b ∧ c′ = c        substitution law
+=   a′ = a ∧ b′ = a–(a–b) ∧ c′ = c             arithmetic
+=   a′ = a ∧ b′ = b ∧ c′ = c                   ok
+=   ok
+
+theorem ex137b: (a:= a+b. b:= a–b. a:= a–b) ≡ a′ = b ∧ b′ = a ∧ c′ = c
+    a:= a+b. b:= a–b. a:= a–b                              assignment
+=   a:= a+b. b:= a–b. a′ = a–b ∧ b′ = b ∧ c′ = c           substitution law
+=   a:= a+b. a′ = a–(a–b) ∧ b′ = a–b ∧ c′ = c              substitution law
+=   a′ = (a+b)–((a+b)–b) ∧ b′ = (a+b)–b ∧ c′ = c           arithmetic
+=   a′ = b ∧ b′ = a ∧ c′ = c
+
+theorem ex137d: (a:= a+b. b:= a+b. c:= a+b) ≡ a′ = a+b ∧ b′ = a+2×b ∧ c′ = 2×a+3×b
+    a:= a+b. b:= a+b. c:= a+b                              assignment
+=   a:= a+b. b:= a+b. a′ = a ∧ b′ = b ∧ c′ = a+b           substitution law
+=   a:= a+b. a′ = a ∧ b′ = a+b ∧ c′ = a+(a+b)              substitution law
+=   a′ = a+b ∧ b′ = (a+b)+b ∧ c′ = (a+b)+((a+b)+b)         arithmetic
+=   a′ = a+b ∧ b′ = a+2×b ∧ c′ = 2×a+3×b
+
+theorem ex137h: (a:= a–b. b:= a–b. a:= a+b) ≡ a′ = 2×a–3×b ∧ b′ = a–2×b ∧ c′ = c
+    a:= a–b. b:= a–b. a:= a+b                              assignment
+=   a:= a–b. b:= a–b. a′ = a+b ∧ b′ = b ∧ c′ = c           substitution law
+=   a:= a–b. a′ = a+(a–b) ∧ b′ = a–b ∧ c′ = c              substitution law
+=   a′ = (a–b)+((a–b)–b) ∧ b′ = (a–b)–b ∧ c′ = c           arithmetic
+=   a′ = 2×a–3×b ∧ b′ = a–2×b ∧ c′ = c

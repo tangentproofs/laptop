@@ -26,6 +26,7 @@ deriving instance Lean.ToJson, Lean.FromJson for Law
 deriving instance Lean.ToJson, Lean.FromJson for Part
 deriving instance Lean.ToJson, Lean.FromJson for Line
 deriving instance Lean.ToJson, Lean.FromJson for Frame
+deriving instance Lean.ToJson, Lean.FromJson for Prog
 deriving instance Lean.ToJson, Lean.FromJson for Doc
 
 /-- The version of the save format written by this kernel.

@@ -497,7 +497,7 @@ namespace Parser
 
 /-- Read the law variables of an explicit `∀a, b·` prefix. -/
 private def lawVars : List Tok → List String → Except String (List String × List Tok)
-  | .dot :: rest, acc => .ok (acc.reverse, rest)
+  | .dot :: rest, acc | .period :: rest, acc => .ok (acc.reverse, rest)
   | .ident n :: rest, acc => lawVars rest (n :: acc)
   | .comma :: rest, acc => lawVars rest acc
   | t :: _, _ => .error s!"unexpected ‘{t}’ among the law variables"
@@ -512,7 +512,7 @@ The law line's binder leaves the domain out — the document writes the law
 document having excluded the abbreviated forms. So the `:` before the `·` is
 exactly what tells the two apart, and a law file can write either. -/
 private def isLawBinder : List Tok → Bool
-  | .dot :: _ => true
+  | .dot :: _ | .period :: _ => true
   | .op .mem :: _ => false
   | .ident _ :: rest | .comma :: rest => isLawBinder rest
   | _ => false

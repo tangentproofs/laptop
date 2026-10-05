@@ -287,6 +287,41 @@ demonstration in Lean and proves that each ends with no gaps, fully
 zoomed out, and proving the formula it claims. Exit status is 1 when a `check`
 fails and 2 for a bad script or law file.
 
+### Proofs written in aPToP's notation, checked by Lean
+
+A *calculation file* holds proofs laid out as the book lays them out: the
+connective in the margin, the law that justifies the step at the end of the
+line. Netty checks every step by applying the named law (anywhere in the line),
+and `netty_proofs` translates each calculation into a Lean theorem whose every
+step Lean proves again.
+
+```
+laws boolean
+state x, y: int
+
+theorem ex121g: (x:= 1. y:= 2) ≡ x′ = 1 ∧ y′ = 2
+    x:= 1. y:= 2                   assignment
+=   x:= 1. x′ = x ∧ y′ = 2         substitution law
+=   x′ = 1 ∧ y′ = 2
+```
+
+Programs are specifications: `state` declares the state, `x′` is a final value,
+and `x:= e`, `P. Q` and `ok` are expanded by the rules `assignment`, `sequential
+composition` and `ok`, with the `substitution law`, `one point` and `vacuous
+quantifier` to simplify. `spec R = …` names a specification (`definition of R`
+unfolds it), and `refine R ⟸ PROGRAM` states a refinement to be proved. A file
+that `extends "spec.calc"` inherits the state, the specifications and the
+theorems of the file it extends, and must refine every specification it
+inherits or calls — the book's way of going from a specification to a program
+(`LaPToP/Exercises/calc/sum.spec.calc` and `sum.calc`, Exercise 140).
+
+A hint that names no law (`arithmetic`) is left to Lean, and the command says so.
+
+```bash
+lake exe netty --check=Netty/Proofs/demo.calc      # check with the Netty kernel
+lake env lean LaPToP/Exercises/Calc.lean           # check, translate, and prove in Lean
+```
+
 ### The three panes in a browser (`netty-web/`)
 
 `netty --serve` answers one JSON request per line of standard input with the

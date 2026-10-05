@@ -1,4 +1,5 @@
 import Netty.Law
+import Netty.Program
 
 /-!
 # The proof document
@@ -520,6 +521,9 @@ structure Doc where
   stack : List Frame := []
   /-- The focus sits just after this line. -/
   focus : Nat := 0
+  /-- The state and the named specifications the programming rules work with
+  (`Netty.Program`); empty when the proof is not about programs. -/
+  prog : Prog := {}
   deriving Repr, DecidableEq, Inhabited
 
 /-- What the tool offers as a possible next line. `holes` are the law variables
@@ -877,6 +881,18 @@ def suggestions (d : Doc) : List Suggestion :=
                            holes := (r.mvars ++ (left.elim [] Expr.mvars)).eraseDups,
                            premise := left, part := site.part }
               | none => none
+      -- The programming rules (`Netty.Program`) are offered at every place as
+      -- well. Each is an equality, which every direction allows.
+      let ruled := (sites f line.expr).flatMap fun site =>
+        d.prog.rules.flatMap fun rule =>
+          (d.prog.apply rule site.expr).filterMap fun r =>
+            match rewriteAt f line.expr site .eq r with
+            | some (o, r') =>
+                if r' == line.expr then none
+                else some { law := Prog.ruleName rule, op := o, result := r', holes := [],
+                            part := site.part }
+            | none => none
+      let raw := raw ++ ruled
       -- Two places can write one line: rewriting `x ∧ y` inside `x ∧ y ∧ z` and
       -- rewriting the whole line can come to the same thing. That is one step,
       -- not two, so it is offered once — credited to the first place that made
