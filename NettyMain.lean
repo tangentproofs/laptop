@@ -36,6 +36,8 @@ structure Options where
   selftest : Bool := false
   /-- Answer JSON requests on standard input instead of running a script. -/
   serve : Bool := false
+  /-- Proof files to check, instead of running a script. -/
+  check : List String := []
   /-- Print the usage message. -/
   help : Bool := false
 
@@ -58,6 +60,9 @@ usage: netty [options] [script]
   --selftest          check the shipped laws and the demonstrations, and stop
   --serve             answer one JSON request per line of standard input with
                       one line of JSON, for a user interface to talk to
+  --check=FILE        check the calculations of a calculation file (‘theorem’,
+                      then one line per step, connective in the margin and
+                      the law's name at the end of the line); may be repeated
   --help              print this message
 
 A script is one command per line; ‘#’ begins a comment.
@@ -100,6 +105,7 @@ def parseArgs (args : List String) : Except String Options :=
     else if a == "--emit-laws" then .ok { o with emitLaws := true }
     else if a == "--selftest" then .ok { o with selftest := true }
     else if a == "--serve" then .ok { o with serve := true }
+    else if a.startsWith "--check=" then .ok { o with check := o.check ++ [after 8 a] }
     else if a.startsWith "--demo=" then .ok { o with demo := some (after 7 a) }
     else if a.startsWith "--laws=" then .ok { o with laws := o.laws ++ [after 7 a] }
     else if a.startsWith "--load=" then .ok { o with load := some (after 7 a) }
@@ -1376,6 +1382,13 @@ def main (args : List String) : IO UInt32 := do
     if o.help then IO.print usage; return 0
     if o.emitLaws then IO.print (renderLawFile Laws.boolean); return 0
     if o.selftest then return (if (← selftest) then 0 else 1)
+    if !o.check.isEmpty then
+      let mut ok := true
+      for path in o.check do
+        match Proof.checkFile (← IO.FS.readFile path) with
+        | .ok cs => for c in cs do IO.println c.summary
+        | .error e => IO.eprintln s!"{path}: {e}"; ok := false
+      return (if ok then 0 else 1)
     -- The laws in force: the built-in boolean list unless `--bare`, then each
     -- law file named on the command line.
     let mut laws := if o.bare then [] else Laws.boolean
