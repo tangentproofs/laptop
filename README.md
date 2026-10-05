@@ -320,9 +320,12 @@ the law file and proved by Lean, and the kernel records how it took each step.
 So the Lean proof of a step *is* the law it names: the twin, instantiated where
 the kernel applied it and carried to the whole line by congruence or
 monotonicity. A rule (`substitution law`, `one point`) is a tactic in the same
-way. Only a hint that names no law (`arithmetic`) is left to Lean's automation,
-and `netty_proofs` reports, for each theorem, how many steps came from the twins,
-the rule tactics and automation. The twins work as a tactic in any Lean proof:
+way, and so are `arithmetic` (polynomial normalization, checked by the kernel and
+proved in Lean by reflection through Lean's verified normalizer) and `binary
+algebra` (a truth table). A hint that names nothing the kernel knows is left to
+Lean's automation, and `netty_proofs` reports, for each theorem, how many steps
+came from the twins, the rule tactics and automation — for every calculation in
+`LaPToP/Exercises/calc/` that last number is zero. The twins work as a tactic in any Lean proof:
 
 ```lean
 example (a b : Prop) : (¬(a ∧ b)) = (¬a ∨ ¬b) := by law "duality"

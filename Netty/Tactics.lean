@@ -88,6 +88,30 @@ simproc_decl onePoint (Exists _) := fun e => do
   let pf ← mkAppOptM ``exists_eq_elim #[α, p, t, hl]
   return .visit { expr := (mkApp p t).headBeta, proof? := some pf }
 
+/-! ### The twin of `arithmetic`
+
+Two integer expressions whose polynomials are equal are equal: that is Lean's
+own verified normalizer (`Lean.Grind.CommRing.Expr.denote_toPoly`), and a step
+by arithmetic is proved by reflection — the two sides, read as
+`Lean.Grind.CommRing.Expr`, normalize to the same polynomial by computation. A
+comparison is first put in normal form (`0 ≤ p`, `p = 0`, `¬(p = 0)`) by the
+lemmas below, and its polynomial compared the same way. -/
+
+open Lean.Grind.CommRing in
+/-- Equal polynomials, equal integers. -/
+theorem ring_eq {ctx : Lean.RArray Int} (a b : Expr) (h : a.toPoly == b.toPoly) :
+    a.denote ctx = b.denote ctx := by
+  rw [← Expr.denote_toPoly, ← Expr.denote_toPoly, eq_of_beq h]
+
+theorem ge_norm (a b : Int) : (a ≥ b) = (0 ≤ a - b - 0) := by apply propext; omega
+theorem le_norm (a b : Int) : (a ≤ b) = (0 ≤ b - a - 0) := by apply propext; omega
+theorem gt_norm (a b : Int) : (a > b) = (0 ≤ a - b - 1) := by apply propext; omega
+theorem lt_norm (a b : Int) : (a < b) = (0 ≤ b - a - 1) := by apply propext; omega
+theorem eq_norm (a b : Int) : (a = b) = (a - b - 0 = 0) := by apply propext; omega
+theorem ne_norm (a b : Int) : (a ≠ b) = ¬(a - b - 0 = 0) := by apply propext; omega
+theorem eq_zero_neg (p q : Int) (h : p = -q) : (p = 0) = (q = 0) := by apply propext; omega
+theorem ne_zero_neg (p q : Int) (h : p = -q) : (¬(p = 0)) = ¬(q = 0) := by apply propext; omega
+
 end Netty.Calc
 
 /-- Prove that two formulas differ only by association, symmetry and units. -/
@@ -110,7 +134,15 @@ macro "netty_rule" : tactic =>
         and_true, exists_and_left, exists_and_right, Netty.Calc.exists_nonneg]; done)
     | ((simp only [and_assoc, Netty.Calc.onePoint, exists_const, eq_self_iff_true, true_and,
         and_true, exists_and_left, exists_and_right, Netty.Calc.exists_nonneg]) <;>
-       first | netty_ac | grind))
+       -- What is left of a guard over `nat` is the theorem's own hypothesis
+       -- that the variable is at least zero, a numeral, or a sum or product of
+       -- those.
+       (first
+         | netty_ac
+         | (simp only [*, and_true, true_and, Int.reduceLE, Int.le_refl, Int.add_nonneg,
+             Int.mul_nonneg]; done)
+         | ((simp only [*, and_true, true_and, Int.reduceLE, Int.le_refl, Int.add_nonneg,
+             Int.mul_nonneg]) <;> netty_ac))))
 
 /-- Prove one link of a translated calculation by Lean's automation: for the
 steps no law or rule justifies. -/

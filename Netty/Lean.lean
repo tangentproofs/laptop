@@ -45,8 +45,16 @@ exactly the positions the kernel's direction rules went through. A rule's step
 (`Netty.Program`) is proved the same way by the rule's tactic (`netty_rule`), and
 an earlier theorem cited as a law is its own twin.
 
+`arithmetic` and `binary algebra` are decisions the kernel computes
+(`Netty.Arith`), and their twins are a theorem and a truth table: an arithmetic
+step is proved by reflection (`Netty.Calc.ring_eq`, from Lean's verified
+polynomial normalizer), a comparison through its normal form, and a binary
+algebra step case by case on its identifiers. A step by a fact of the context
+(`context`) is carried by congruence lemmas that gain the same facts the kernel
+gained on the way in (`ctxEq`).
+
 Each such proof is tried on its own first (`accepts`). A step with no
-certificate — a hint that names no law, such as `arithmetic` — or whose
+certificate — a hint that names nothing the kernel knows — or whose
 certificate's proof Lean does not accept is proved by Lean's automation
 (`netty_step`) instead, and the command reports, for every theorem, how many
 steps came from the twins, how many from rule tactics and how many from
@@ -484,13 +492,214 @@ partial def mono (leaf : Scope → Bool → CommandElabM Term) (sc : Scope) (wan
         | none => `(Exists.imp (fun ($x) => $acc))) inner
   | _ => throwError "Netty: no monotonicity through this operator"
 
+/-- An integer expression as a `Lean.Grind.CommRing.Expr`, its identifiers
+numbered by `vs`. -/
+partial def reify (vs : List String) : Expr → CommandElabM Term
+  | .num n => `(Lean.Grind.CommRing.Expr.num $(quote n))
+  | .var x => do
+      let some i := vs.idxOf? x | throwError s!"Netty: {x} is not numbered"
+      `(Lean.Grind.CommRing.Expr.var $(quote i))
+  | .bin .add a b => do `(Lean.Grind.CommRing.Expr.add $(← reify vs a) $(← reify vs b))
+  | .bin .sub a b => do `(Lean.Grind.CommRing.Expr.sub $(← reify vs a) $(← reify vs b))
+  | .bin .mul a b => do `(Lean.Grind.CommRing.Expr.mul $(← reify vs a) $(← reify vs b))
+  | e => throwError s!"Netty: {e.render} is not an integer expression"
+
+/-- The context a reified expression is read in: its identifiers, as a
+`Lean.RArray`, balanced. -/
+partial def rarray (ts : List Term) (lo : Nat := 0) : CommandElabM Term := do
+  match ts with
+  | [] => `(Lean.RArray.leaf (0 : Int))
+  | [t] => `(Lean.RArray.leaf $t)
+  | _ =>
+      let half := ts.length / 2
+      let l ← rarray (ts.take half) lo
+      let r ← rarray (ts.drop half) (lo + half)
+      `(Lean.RArray.branch $(quote (lo + half)) $l $r)
+
+/-- The proof that `s` is `t` by arithmetic (`Netty.Arith.arith`): the ring
+twin `Netty.Calc.ring_eq` on the two sides, or on the normal forms of two
+comparisons, or the value of a comparison of numerals. -/
+def arithLeaf (sc : Scope) (s t : Expr) (s' t' : Term) : CommandElabM Term := do
+  let some how := Arith.arith s t | throwError "Netty: not arithmetic"
+  let vs := (s.vars ++ t.vars).eraseDups
+  let ctx ← rarray (← vs.mapM fun v => term sc .number (.var v))
+  let ringEq (a b : Term) : CommandElabM Term :=
+    `((Netty.Calc.ring_eq (ctx := $ctx) $a $b (by decide)))
+  match how with
+  | .ring =>
+      `((show $s' = $t' from $(← ringEq (← reify vs s) (← reify vs t))))
+  | .ground v =>
+      -- The comparison's polynomial is a constant `c`: rewrite it to `c` by the
+      -- ring twin, then decide `c`. (Its sides may mention identifiers that
+      -- cancel, as `m = m + 9 - 9` does, which `decide` alone cannot read.)
+      let some a := Arith.cmp? s | throwError "Netty: not a comparison"
+      let c := (a.poly.head?.map (·.2)).getD 0
+      let diff : Expr := .bin .sub (.bin .sub a.big a.small) (.num a.k.toNat)
+      let pd ← term sc .number diff
+      let cE : Expr := if c ≥ 0 then .num c.toNat else .bin .sub (.num 0) (.num c.natAbs)
+      let cT ← term sc .number cE
+      let hp ← `((show $pd = $cT from $(← ringEq (← reify vs diff) (← reify vs cE))))
+      let .bin o l r := s | throwError "Netty: not a comparison"
+      let l' ← term sc .number l
+      let r' ← term sc .number r
+      let norm ← match o with
+        | .ge => `(Netty.Calc.ge_norm $l' $r')
+        | .le => `(Netty.Calc.le_norm $l' $r')
+        | .gt => `(Netty.Calc.gt_norm $l' $r')
+        | .lt => `(Netty.Calc.lt_norm $l' $r')
+        | .eq => `(Netty.Calc.eq_norm $l' $r')
+        | _ => `(Netty.Calc.ne_norm $l' $r')
+      let motive ← match a.kind with
+        | "ge" => `(fun (p : Int) => 0 ≤ p)
+        | "eq" => `(fun (p : Int) => p = 0)
+        | _ => `(fun (p : Int) => ¬(p = 0))
+      let canon ← `(($norm).trans (congrArg $motive $hp))
+      if v then `((show $s' = $t' from ($canon).trans (eq_true (by decide))))
+      else `((show $s' = $t' from ($canon).trans (eq_false (by decide))))
+  | .cmp neg => do
+      let some a := Arith.cmp? s | throwError "Netty: not a comparison"
+      let some b := Arith.cmp? t | throwError "Netty: not a comparison"
+      let norm (e : Expr) : CommandElabM Term := do
+        let .bin o l r := e | throwError "Netty: not a comparison"
+        let l' ← term sc .number l
+        let r' ← term sc .number r
+        match o with
+        | .ge => `(Netty.Calc.ge_norm $l' $r')
+        | .le => `(Netty.Calc.le_norm $l' $r')
+        | .gt => `(Netty.Calc.gt_norm $l' $r')
+        | .lt => `(Netty.Calc.lt_norm $l' $r')
+        | .eq => `(Netty.Calc.eq_norm $l' $r')
+        | _ => `(Netty.Calc.ne_norm $l' $r')
+      let diff (c : Arith.Cmp) : Expr := .bin .sub (.bin .sub c.big c.small) (.num c.k.toNat)
+      let da := diff a
+      let db := diff b
+      let pa ← term sc .number da
+      let pb ← term sc .number db
+      let ra ← reify vs da
+      let rb ← reify vs db
+      let normS ← norm s
+      let normT ← norm t
+      match a.kind, neg with
+      | "ge", _ =>
+          let hp ← `((show $pa = $pb from $(← ringEq ra rb)))
+          `((show $s' = $t' from ($normS).trans ((congrArg (fun p => 0 ≤ p) $hp).trans ($normT).symm)))
+      | "eq", false =>
+          let hp ← `((show $pa = $pb from $(← ringEq ra rb)))
+          `((show $s' = $t' from ($normS).trans ((congrArg (fun p => p = 0) $hp).trans ($normT).symm)))
+      | "eq", true =>
+          let hp ← `((show $pa = -$pb from $(← ringEq ra (← `(Lean.Grind.CommRing.Expr.neg $rb)))))
+          `((show $s' = $t' from ($normS).trans ((Netty.Calc.eq_zero_neg _ _ $hp).trans ($normT).symm)))
+      | _, false =>
+          let hp ← `((show $pa = $pb from $(← ringEq ra rb)))
+          `((show $s' = $t' from ($normS).trans ((congrArg (fun p => ¬(p = 0)) $hp).trans ($normT).symm)))
+      | _, true =>
+          let hp ← `((show $pa = -$pb from $(← ringEq ra (← `(Lean.Grind.CommRing.Expr.neg $rb)))))
+          `((show $s' = $t' from ($normS).trans ((Netty.Calc.ne_zero_neg _ _ $hp).trans ($normT).symm)))
+  | .taut => throwError "Netty: not arithmetic"
+
+/-- The facts a hypothesis `h` of `e` gives: one per conjunct, by projection —
+as the kernel gains a conjunction as one context law per conjunct. -/
+partial def splitFacts (e : Expr) (h : Term) : CommandElabM (List (Expr × Term)) := do
+  match e with
+  | .bin .and a b => return (← splitFacts a (← `(($h).1))) ++ (← splitFacts b (← `(($h).2)))
+  | _ => return [(e, h)]
+
+/-- Equality of the context filled one way and the other, for a step by a fact
+of the context (`context`): down to the place by congruence, gaining, as the
+kernel did, the other conjuncts of `∧`, the antecedent of `⇒`, the condition of
+a branch, and the domain of a bound identifier, each as a hypothesis — which
+the leaf then cites. Below a place that gains nothing, plain congruence. -/
+partial def ctxEq (sc : Scope) (facts : List (Expr × Term)) (n : Nat)
+    (leaf : Scope → List (Expr × Term) → CommandElabM Term) (ty : Ty) :
+    Expr → CommandElabM Term
+  | .mvar m => do
+      if m != holeName then throwError "Netty: not a context"
+      leaf sc facts
+  | .bin .and l r => do
+      let h := mkIdent (Name.mkSimple s!"hctx{n}")
+      if hasHole r then
+        let sub ← ctxEq sc (facts ++ (← splitFacts l h)) (n + 1) leaf .boolean r
+        `(propext (and_congr_right (fun $h => Iff.of_eq $sub)))
+      else
+        let sub ← ctxEq sc (facts ++ (← splitFacts r h)) (n + 1) leaf .boolean l
+        `(propext (and_congr_left (fun $h => Iff.of_eq $sub)))
+  | .bin .imp l r => do
+      let h := mkIdent (Name.mkSimple s!"hctx{n}")
+      if hasHole r then
+        let sub ← ctxEq sc (facts ++ (← splitFacts l h)) (n + 1) leaf .boolean r
+        `(propext (imp_congr_right (fun $h => Iff.of_eq $sub)))
+      else
+        let sub ← ctxEq sc facts (n + 1) leaf .boolean l
+        `(propext (imp_congr_left (Iff.of_eq $sub)))
+  | .bin .rimp l r => do
+      -- `l ⇐ r` is `r → l`.
+      let h := mkIdent (Name.mkSimple s!"hctx{n}")
+      if hasHole l then
+        let sub ← ctxEq sc (facts ++ (← splitFacts r h)) (n + 1) leaf .boolean l
+        `(propext (imp_congr_right (fun $h => Iff.of_eq $sub)))
+      else
+        let sub ← ctxEq sc facts (n + 1) leaf .boolean r
+        `(propext (imp_congr_left (Iff.of_eq $sub)))
+  | .cond c x y => do
+      if hasHole c then throwError "Netty: no context in a condition"
+      let h := mkIdent (Name.mkSimple s!"hctx{n}")
+      let t := (tyIn sc.env x).getD ((tyIn sc.env y).getD ty)
+      if t != .boolean then throwError "Netty: a number conditional"
+      if hasHole x then
+        let sub ← ctxEq sc (facts ++ (← splitFacts c h)) (n + 1) leaf .boolean x
+        `(propext (and_congr_left (fun _ => imp_congr_right (fun $h => Iff.of_eq $sub))))
+      else
+        let sub ← ctxEq sc (facts ++ (← splitFacts (Expr.negate c) h)) (n + 1) leaf .boolean y
+        `(propext (and_congr_right (fun _ => imp_congr_right (fun $h => Iff.of_eq $sub))))
+  | .quant k ids d b => do
+      if hasHole d then throwError "Netty: no context in a domain"
+      let dt := (domainTy d).getD .number
+      let sc' := { sc with env := ids.map (·, dt) ++ sc.env,
+                           ren := sc.ren.filter fun p => !ids.contains p.1 }
+      -- `x: nat` is the guard `0 ≤ x`; `x: int` says nothing.
+      let guarded := d == .var "nat"
+      let hs := ids.map fun v => guardHyp (ident v).getId.toString
+      let mems ← (ids.zip hs).filterMapM fun (v, h) => do
+        if guarded then return some (Expr.bin .mem (.var v) d, (h : Term)) else return none
+      let sub ← ctxEq sc' (facts ++ mems) (n + 1) leaf .boolean b
+      (ids.zip hs).foldrM (fun (v, h) acc => do
+        let x := ident v
+        match k, guarded with
+        | .all, true => `(propext (forall_congr' (fun $x => imp_congr_right (fun $h => Iff.of_eq $acc))))
+        | .all, false => `(propext (forall_congr' (fun $x => Iff.of_eq $acc)))
+        | .ex, true => `(propext (exists_congr (fun $x => and_congr_right (fun $h => Iff.of_eq $acc))))
+        | .ex, false => `(propext (exists_congr (fun $x => Iff.of_eq $acc)))) sub
+  | .bin .seq .. => throwError "Netty: no context through a composition"
+  | e => do
+      -- A place that gains nothing: plain congruence on the child that holds the
+      -- hole, through this one operator.
+      let (child, rebuild) : Expr × (Expr → Expr) := match e with
+        | .bin o l r => if hasHole l then (l, fun c => .bin o c r) else (r, fun c => .bin o l c)
+        | .neg a => (a, fun c => .neg c)
+        | e => (e, id)
+      if child == e then throwError "Netty: no congruence here"
+      let cty : Ty := match e with
+        | .bin o l r => match o.operandTy with
+          | some t => t
+          | none => (tyIn sc.env (if hasHole l then r else l)).getD
+              ((tyIn sc.env child).getD (if Arith.isNumberish child then .number else .boolean))
+        | _ => .boolean
+      let sub ← ctxEq sc facts (n + 1) leaf cty child
+      let H := mkIdent `H
+      let τ ← leanTy cty
+      let body ← term { sc with hole := some (H, []) } ty (rebuild (.mvar holeName))
+      `(congrArg (fun ($H : $τ) => $body) $sub)
+
 /-- The Lean proof of one application of a law or rule, as a link from `a` to
 `b` (the line the certificate wrote, or the written line it stands for) with
 the certificate's connective. -/
 def certLink (env : Tys) (p : Prog) (ty : Ty) (a b : Expr) (c : Cert) :
     CommandElabM (Term × How) := do
   let s := c.sugg
-  let some ctx := plug c.src c.path s.part | throwError "Netty: the place is not in the line"
+  let some ctx := (match c.ctx with
+      | some k => some (k.replaceHole (.mvar holeName))
+      | none => plug c.src c.path s.part)
+    | throwError "Netty: the place is not in the line"
   if !hasHole ctx then throwError "Netty: the place is not in the line"
   let S := s.site
   let T := s.replacement
@@ -523,7 +732,101 @@ def certLink (env : Tys) (p : Prog) (ty : Ty) (a b : Expr) (c : Cert) :
     let x := ident v
     return (guardHyp x.getId.toString, ← `(0 ≤ $x))
   -- The leaf: the step at the place, `S` to `T`.
+  -- A fact of the context: congruence that gains the facts, and the fact itself
+  -- at the leaf.
+  if let some v := s.variant then
+    if v.law == "context" then
+      if v.op != .eq then throwError "Netty: a context step in a direction"
+      let f := match v.kind with
+        | "eqTop" | "topEq" => if v.kind == "eqTop" then v.lhs else v.rhs
+        | _ => .bin .eq v.lhs v.rhs
+      let leaf : Scope → List (Expr × Term) → CommandElabM Term := fun sc' facts => do
+        let some (_, hf) := facts.find? (fun (e, _) =>
+            e.normAssoc == f.normAssoc || (match v.kind with
+              | "eqTop" | "topEq" => false
+              | _ => e.normAssoc == (Expr.bin .eq v.rhs v.lhs).normAssoc))
+          | throwError s!"Netty: the fact {f.render} is not in the context Lean gains"
+        let S' ← term sc' sty S
+        let T' ← term sc' sty T
+        let L' ← term sc' sty v.lhs
+        let base ← match v.kind with
+          | "eqTop" => `(eq_true $hf)
+          | "topEq" => `((eq_true $hf).symm)
+          | "flip" => `((show $(← term sc' sty v.lhs) = $(← term sc' sty v.rhs) from
+              by first | exact ($hf).symm | exact $hf))
+          | _ => `((show $(← term sc' sty v.lhs) = $(← term sc' sty v.rhs) from
+              by first | exact $hf | exact ($hf).symm))
+        if S == v.lhs then `((show $S' = $T' from $base))
+        else `((show $S' = $T' from Eq.trans (show $S' = $L' by netty_ac) $base))
+      let core ← ctxEq sc [] 0 leaf ty ctx
+      let A' ← term sc ty a
+      let B' ← term sc ty b
+      let CS' ← term sc ty (fill S ctx)
+      let CT' ← term sc ty (fill T ctx)
+      let e ← `(Eq.trans (show $A' = $CS' by netty_ac)
+        (Eq.trans (show $CS' = $CT' from $core) (show $CT' = $B' by netty_ac)))
+      let pf ← if ty == .boolean then `(Iff.of_eq $e) else pure e
+      return (pf, How.twin)
   let (leafProof, how, isEq, fwd) ← match s.rule, s.variant with
+    | some .arith, _ =>
+        let pf ← arithLeaf scL S T S' T'
+        pure (pf, How.rule, true, true)
+    | some .binAlg, _ =>
+        let atoms := (S.vars ++ T.vars).eraseDups
+        let close ← `(tactic| simp [*])
+        let tac ← (atoms.zipIdx).foldrM (fun (x, i) acc => do
+          let h := mkIdent (Name.mkSimple s!"hc{i}")
+          `(tactic| (by_cases $h : $(ident x)) <;> $acc)) close
+        let pf ← `((show $S' = $T' by apply propext; $tac))
+        pure (pf, How.rule, true, true)
+    | some .onePoint, _ => do
+        -- The identifier, the equation and the value the kernel used, so Lean
+        -- eliminates the same one: `Netty.Calc.exists_eq_elim` with the
+        -- equation projected out of the body.
+        let some (layer, v, i, t, _) := (Prog.onePointAll S).find? (·.2.2.2.2 == T)
+          | throwError "Netty: no such one-point reading"
+        let (pre, body) := Prog.exPrefix S
+        let some (ids0, d0) := pre.head? | throwError "Netty: not a quantifier"
+        if layer != 0 || ids0.head? != some v then
+          throwError "Netty: one point on an inner quantifier"
+        let t' ← term scL .number t
+        -- From a proof `hx` of the body under `∃v`, the proof of `v = t`.
+        let rec conjCount : Expr → Nat
+          | .bin .and l r => conjCount l + conjCount r
+          | _ => 1
+        let rec proj (e : Expr) (k : Nat) (h : Term) : CommandElabM Term := do
+          match e with
+          | .bin .and l r =>
+              let n := conjCount l
+              if k < n then proj l k (← `(($h).1)) else proj r (k - n) (← `(($h).2))
+          | _ => return h
+        let eqn := (Expr.conjuncts body)[i]?
+        let rev : Bool := match eqn with
+          | some (.bin .eq l _) => l != .var v
+          | _ => false
+        let guarded (d : Expr) := d == .var "nat"
+        -- The quantifiers after `v`: the rest of its layer, then the inner ones.
+        let inner := (ids0.drop 1).map (·, d0) ++ (pre.drop 1).flatMap fun (ids, d) => ids.map (·, d)
+        -- Open the quantifiers after `v` one by one, then project the equation.
+        let rec opens (cur : Term) (k : Nat) : List (String × Expr) → CommandElabM Term
+          | [] => do
+              let c ← proj body i cur
+              if rev then `(($c).symm) else pure c
+          | (w, d) :: rest => do
+              let hg := mkIdent (Name.mkSimple s!"hg{k}")
+              let next ← if guarded d then `(($hg).2) else pure hg
+              let inner ← opens next (k + 1) rest
+              `(Exists.elim $cur (fun $(ident w) $hg => $inner))
+        let hx := mkIdent `hx
+        let start ← if guarded d0 then `(($hx).2) else pure hx
+        let h ← `(fun $(ident v) $hx => $(← opens start 0 inner))
+        let pf ← `((show $S' = $T' from Eq.trans (Netty.Calc.exists_eq_elim $t' $h)
+          (by simp only [eq_self_iff_true, true_and, and_true] <;> netty_ac)))
+        pure (pf, How.rule, true, true)
+    | some .domain, _ =>
+        -- The theorem's own hypothesis that the variable is in its domain.
+        let pf ← `((show $S' = $T' from eq_true (by assumption)))
+        pure (pf, How.rule, true, true)
     | some _, _ =>
         let pf ← `((show $S' = $T' by netty_rule))
         pure (pf, How.rule, true, true)
@@ -745,7 +1048,11 @@ def theoremCmd (c : Checked) : CommandElabM (Syntax × List How) := do
     | .imp, .bot => `(fun h => ($chain) h)
     | _, _ => pure chain
   let declName := mkIdent (Name.mkSimple (Proof.twinName t.name))
-  let cmd ← `(open Classical in theorem $declName:ident $bs* : $claim := $body)
+  -- Each step was already checked on its own; the theorem gets the time of all
+  -- of them.
+  let beats : TSyntax `num := Syntax.mkNumLit (toString (200000 * (t.lines.length + 1)))
+  let cmd ← `(open Classical in set_option maxHeartbeats $beats in
+    theorem $declName:ident $bs* : $claim := $body)
   return (cmd, proofs.map (·.2))
 
 /-- `netty_proofs "file"` checks every calculation of a calculation file with the

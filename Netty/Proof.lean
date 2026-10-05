@@ -1,5 +1,6 @@
 import Netty.Laws
 import Netty.Doc
+import Netty.Arith
 
 /-!
 # Proofs written as the book writes them
@@ -59,7 +60,12 @@ grammar allows.
 A step may claim less than the kernel derives — `⇒` where the law gives `=` —
 but never more.
 
-A hint that names no law in force is not checked here. The step is reported as
+Two hints are decisions rather than laws (`Netty.Arith`): `arithmetic` (equal
+polynomials, comparisons with the same normal form, a comparison of numerals)
+and `binary algebra` (equal truth tables). The kernel finds where the lines
+differ and checks each place.
+
+A hint that names no law in force and no decision is not checked here. The step is reported as
 *left to Lean*: the translation (`Netty.ToLean`) proves every step, law or not, so
 such a step is still checked, only not by this kernel. This is what lets a proof
 file carry the book's own hints — "arithmetic", "Substitution Law" — before the
@@ -131,6 +137,10 @@ structure Cert where
   sugg : Suggestion
   /-- The unconstrained variables, supplied. -/
   bind : Subst
+  /-- The line with the hole where the step rewrote, when the step was not made
+  by zooming (`arithmetic`, `binary algebra`); otherwise it is computed from the
+  path and the place. -/
+  ctx : Option Expr := none
   deriving Repr, DecidableEq, Inhabited
 
 /-- How a step was justified. -/
@@ -363,6 +373,21 @@ def hintLaws (cx : Ctx) (hint : String) : Option (List String) :=
       names.all (fun n => n == "context" || rules.contains n || cx.laws.any (·.name == n))
   then some names else none
 
+/-- A step by a decision (`arithmetic`, `binary algebra`): the places where the
+lines differ, each shown by the decision, as certificates. -/
+def decide (r : Rule) (a b : Expr) : Option (List Cert) := do
+  let ok : Expr → Expr → Bool := match r with
+    | .arith => fun s t => (Arith.arith s t).isSome
+    | _ => fun s t => Arith.taut s t
+  let ds ← Arith.diffs ok a b
+  if ds.isEmpty then none
+  return ds.map fun (c, s, t) =>
+    let src := c.replaceHole s
+    let dst := c.replaceHole t
+    { src := src, dst := dst, op := .eq, path := [], bind := [], ctx := some c,
+      sugg := { law := Prog.ruleName r, op := .eq, result := dst, holes := [], part := .whole,
+                site := s, rule := some r, replacement := t } }
+
 /-- Check a theorem. -/
 def check (t : PTheorem) : Except String Checked := do
   let ty := lineTy t.lines
@@ -370,13 +395,25 @@ def check (t : PTheorem) : Except String Checked := do
     | a :: b :: rest => do
         let op ← orElseError s!"line {b.lineNo}: a line after the first needs a connective"
           b.conn
-        let s ← match hintLaws t.cx a.hint with
-          | some names =>
+        let decision := match a.hint with
+          | "arithmetic" => some Rule.arith
+          | "binary algebra" => some Rule.binAlg
+          | _ => none
+        let s ← match decision, hintLaws t.cx a.hint with
+          | some r, _ =>
+              match decide r a.expr b.expr with
+              | some cs => pure (StepCheck.law [a.hint] cs)
+              | none =>
+                  if op != .eq then
+                    throw s!"line {a.lineNo}: {a.hint} shows equalities; write = here"
+                  else throw s!"line {a.lineNo}: {a.hint} does not show {a.expr.render} = {b.expr.render}"
+          | none, names? => match names? with
+            | some names =>
               match checkStep t.cx ty names a.expr op b.expr with
               | .ok ([], cs) => pure (StepCheck.law names cs)
               | .ok (qs, cs) => pure (StepCheck.lawIf names qs cs)
               | .error e => throw s!"line {a.lineNo}: {e}"
-          | none =>
+            | none =>
               if a.hint.isEmpty then throw s!"line {a.lineNo}: the step to the next line has no hint"
               else pure (StepCheck.lean a.hint)
         return s :: (← go (b :: rest))
