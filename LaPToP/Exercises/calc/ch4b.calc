@@ -15,3 +15,11 @@ theorem ex136a: (x:= x=y. x:= x=y) ≡ ok
 =   x′ = (x = ⊤) ∧ y′ = y                  identity
 =   x′ = x ∧ y′ = y                        ok
 =   ok
+
+# Exercise 136 (b): x:= x⧧y. y:= x⧧y. x:= x⧧y swaps x and y.
+theorem ex136b: (x:= x⧧y. y:= x⧧y. x:= x⧧y) ≡ x′ = y ∧ y′ = x
+    x:= x⧧y. y:= x⧧y. x:= x⧧y                          assignment
+=   x:= x⧧y. y:= x⧧y. x′ = (x⧧y) ∧ y′ = y              substitution law
+=   x:= x⧧y. x′ = (x⧧(x⧧y)) ∧ y′ = (x⧧y)               substitution law
+=   x′ = (x⧧y⧧(x⧧y⧧y)) ∧ y′ = (x⧧y⧧y)                  binary algebra
+=   x′ = y ∧ y′ = x

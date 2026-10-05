@@ -77,15 +77,11 @@ theorem exercise_135 : Statement 135 := by
   -- exercise 135: statement only, proof deferred
   sorry
 
-/-- aPToP Exercise 136: Let x and y be binary variables. Simplify -/
-theorem exercise_136 : Statement 136 := by
-  -- exercise 136: statement only, proof deferred
-  sorry
+/-! aPToP Exercise 136 is proved as a calculation in aPToP's notation (`LaPToP.Exercises.Calc`):
+both parts, `LaPToP.Exercises.Calc.Ch4b.ex136a` and `ex136b`, from `calc/ch4b.calc`. -/
 
-/-- aPToP Exercise 137: Let a , b , and c be integer variables. Express as simply as possible without using -/
-theorem exercise_137 : Statement 137 := by
-  -- exercise 137: statement only, proof deferred
-  sorry
+/-! aPToP Exercise 137 is proved as a calculation in aPToP's notation (`LaPToP.Exercises.Calc`):
+all eight parts, `LaPToP.Exercises.Calc.Ch4c.ex137a` … `ex137h`, from `calc/ch4c.calc`. -/
 
 /-- aPToP Exercise 138: (factorial) In natural variables n and f prove -/
 theorem exercise_138 : Statement 138 := by

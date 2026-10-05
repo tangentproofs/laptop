@@ -157,26 +157,41 @@ def seqBody (p : Prog) (a b : Expr) : Expr :=
   let b' := b.subst (mids.map fun (y, _, m) => (y, .var m))
   mids.foldr (fun (_, d, m) acc => .quant .ex [m] d acc) (.bin .and a' b')
 
+/-- The run of existential quantifiers at the front of an expression, outermost
+first, and what they quantify. -/
+def exPrefix : Expr → List (List String × Expr) × Expr
+  | .quant .ex ids d b => let (ps, body) := exPrefix b; ((ids, d) :: ps, body)
+  | e => ([], e)
+
 /-- The one-point rule on `∃v: d· b`: when a conjunct of `b` is `v = e` or
 `e = v` with `v` not in `e`, the quantifier over `v` goes, `e` replaces `v`, and
 `e: d` is kept unless the domain is `int` (where every number expression is
-an element). -/
+an element).
+
+A run of existentials `∃v: d· ∃w: d′· b` is read as one quantifier — the
+order of existentials does not matter — so `v` may be pinned by a conjunct of
+the innermost body, as sequential composition writes them. Then `e` must
+mention none of the identifiers the run binds, which keeps every quantifier's
+scope what it was. -/
 def onePoint (e : Expr) : List Expr :=
-  match e with
-  | .quant .ex ids d b =>
-      ids.flatMap fun v =>
-        let cs := Expr.conjuncts b
-        (List.range cs.length).filterMap fun i => do
-          let c ← cs[i]?
-          let t ← match c with
-            | .bin .eq (.var w) t => if w == v && !t.occurs v then some t else none
-            | _ => none
-          let rest := (cs.eraseIdx i).map (Expr.subst [(v, t)])
-          let mem := if d == .var "int" then [] else [Expr.bin .mem t d]
-          let body := Expr.conj (mem ++ rest)
-          let ids' := ids.erase v
-          some (if ids'.isEmpty then body else .quant .ex ids' d body)
-  | _ => []
+  let (pre, body) := exPrefix e
+  let bound := pre.flatMap (·.1)
+  let cs := Expr.conjuncts body
+  (List.range pre.length).flatMap fun layer =>
+    let (ids, d) := pre[layer]!
+    ids.flatMap fun v =>
+      (List.range cs.length).filterMap fun i => do
+        let c ← cs[i]?
+        let t ← match c with
+          | .bin .eq l r =>
+              if l == .var v then some r else if r == .var v then some l else none
+          | _ => none
+        if bound.any (t.occurs ·) then none
+        let rest := (cs.eraseIdx i).map (Expr.subst [(v, t)])
+        let mem := if d == .var "int" then [] else [Expr.bin .mem t d]
+        let inner := Expr.conj (mem ++ rest)
+        let pre' := (pre.set layer (ids.erase v, d)).filter (!·.1.isEmpty)
+        some (pre'.foldr (fun (ids', d') acc => .quant .ex ids' d' acc) inner)
 
 /-- The name a rule is cited by. -/
 def ruleName : Rule → String

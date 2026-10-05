@@ -130,13 +130,13 @@ so “missing” is not confused with “unfinished demo”:
 | 10.1 | Basic Theories | `LaPToP.Exercises.Ch1` | 37 | 27 | 10 | 0 |
 | 10.2 | Basic Data Structures | `LaPToP.Exercises.Ch2` | 28 | 16 | 12 | 0 |
 | 10.3 | Function Theory | `LaPToP.Exercises.Ch3` | 52 | 38 | 14 | 0 |
-| 10.4 | Program Theory | `LaPToP.Exercises.Ch4` | 185 | 2 | | 183 |
+| 10.4 | Program Theory | `LaPToP.Exercises.Ch4` | 185 | 4 | | 181 |
 | 10.5 | Programming Language | `LaPToP.Exercises.Ch5` | 60 | | | 60 |
 | 10.6 | Recursive Definition | `LaPToP.Exercises.Ch6` | 55 | | | 55 |
 | 10.7 | Theory Design and Implementation | `LaPToP.Exercises.Ch7` | 55 | | | 55 |
 | 10.8 | Concurrency | `LaPToP.Exercises.Ch8` | 18 | | | 18 |
 | 10.9 | Interaction | `LaPToP.Exercises.Ch9` | 39 | | | 39 |
-| | **Total** | | **533** | **87** | **36** | **410** |
+| | **Total** | | **533** | **89** | **36** | **408** |
 
 *Informal* exercises ask to design notation, to explain in words, or to
 translate English, and have no single formal statement: in §10.1 these are 13,
@@ -147,9 +147,8 @@ parts, named in their module's docstring (4's succinctness, 11(e)–(f),
 In §10.4 the proofs are written in aPToP's own notation, as calculation files
 (`LaPToP/Exercises/calc/`), checked step by step by the Netty kernel and
 translated into Lean theorems by `netty_proofs` (`LaPToP.Exercises.Calc`):
-121 (all parts) and 140 (a specification file and an implementation extending
-it) are proved; 136 (a) and 137 (a), (b), (d), (h) are proved and the rest of
-those two are still stubs.
+121, 136 and 137 (all parts) and 140 (a specification file and an
+implementation extending it) are proved.
 
 Numbering follows the book’s Chapter 10. Exercise **94** is in the book (the
 earlier inventory missed it, and it is now proved); **393** does not appear in
