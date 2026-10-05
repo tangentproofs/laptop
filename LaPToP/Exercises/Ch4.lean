@@ -88,10 +88,8 @@ theorem exercise_138 : Statement 138 := by
   -- exercise 138: statement only, proof deferred
   sorry
 
-/-- aPToP Exercise 139: In natural variables n and m prove -/
-theorem exercise_139 : Statement 139 := by
-  -- exercise 139: statement only, proof deferred
-  sorry
+/-! aPToP Exercise 139 is proved as a calculation in aPToP's notation (`LaPToP.Exercises.Calc`):
+`LaPToP.Exercises.Calc.Ex139.P_refinement_1`, from `calc/ex139.calc`. -/
 
 /-! aPToP Exercise 140 is proved as a calculation in aPToP's notation (`LaPToP.Exercises.Calc`):
 `LaPToP.Exercises.Calc.R_refinement_1` and `Q_refinement_1`, from `calc/sum.spec.calc` and `calc/sum.calc`. -/

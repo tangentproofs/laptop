@@ -30,6 +30,12 @@ namespace Ch4c
 netty_proofs "calc/ch4c.calc"
 end Ch4c
 
+/-! ### Exercise 139 -/
+
+namespace Ex139
+netty_proofs "calc/ex139.calc"
+end Ex139
+
 /-! ### Exercise 140 -/
 
 netty_proofs "calc/sum.spec.calc"

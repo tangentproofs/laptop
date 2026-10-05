@@ -257,13 +257,13 @@ partial def seqTerm (sc : Scope) (a b : Expr) : CommandElabM Term := do
   let scB := { scA with ren := mids.map (fun (v, _, m) => (v, m)) ++ sc.ren }
   let a' ← term scA .boolean a
   let b' ← term scB .boolean b
-  let body ← `($a' ∧ $b')
-  mids.foldrM (fun (v, d, m) acc => do
+  -- The domain guards go last, after the equations an assignment writes, so
+  -- that the one-point simplification finds the equations first.
+  let guards ← mids.filterMapM fun (_, d, m) => guard d (ident m)
+  let body ← guards.foldlM (fun acc g => `($acc ∧ $g)) (← `($a' ∧ $b'))
+  mids.foldrM (fun (v, _, m) acc => do
     let lty ← leanTy ((sc.env.lookup v).getD .number)
-    let x := ident m
-    match ← guard d x with
-    | some g => `(∃ $x:ident : $lty, $g ∧ $acc)
-    | none => `(∃ $x:ident : $lty, $acc)) body
+    `(∃ $(ident m):ident : $lty, $acc)) body
 
 end
 
@@ -381,6 +381,8 @@ open _root_.Lean Elab Command in
         prog := { prog with specs := prog.specs ++ [(n, body)] }
       for c in cs do
         let cmd ← theoremCmd c
+        -- `NETTY_TRACE=1` prints each Lean theorem before it is elaborated.
+        if (← IO.getEnv "NETTY_TRACE").isSome then logInfo m!"{cmd}"
         let before := (← get).messages.toList.filter (·.severity == .error) |>.length
         withRef stx (elabCommand cmd)
         let after := (← get).messages.toList.filter (·.severity == .error) |>.length

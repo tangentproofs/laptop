@@ -2,6 +2,10 @@
 # state n, s and the specification R, and it owes a refinement of R. The new
 # specification Q it introduces is called by the refinement of R, so it owes a
 # refinement of Q too; that one calls Q itself, which is the loop.
+#
+# n is natural, so the substitution law for n:= n–1 keeps n–1: nat — the
+# assignment has no final state when n is 0 — and it is the if that makes
+# that branch reachable only when n is not 0.
 
 extends "sum.spec.calc"
 laws boolean
@@ -20,7 +24,7 @@ refine Q ⟸ if n = 0 then ok else n:= n–1. s:= s+n. Q fi
     Q ⟸ if n = 0 then ok else n:= n–1. s:= s+n. Q fi                              definition of Q
 =   Q ⟸ if n = 0 then ok else n:= n–1. s:= s+n. 2×s′ = 2×s + n×(n–1) fi          substitution law
 =   Q ⟸ if n = 0 then ok else n:= n–1. 2×s′ = 2×(s+n) + n×(n–1) fi               substitution law
-=   Q ⟸ if n = 0 then ok else 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi             ok
-=   Q ⟸ if n = 0 then n′ = n ∧ s′ = s else 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi    definition of Q
-=   (2×s′ = 2×s + n×(n–1)) ⟸ if n = 0 then n′ = n ∧ s′ = s else 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi    arithmetic
+=   Q ⟸ if n = 0 then ok else n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi             ok
+=   Q ⟸ if n = 0 then n′ = n ∧ s′ = s else n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi    definition of Q
+=   (2×s′ = 2×s + n×(n–1)) ⟸ if n = 0 then n′ = n ∧ s′ = s else n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi    arithmetic
 =   ⊤
