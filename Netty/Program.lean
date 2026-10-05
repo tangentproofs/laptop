@@ -13,7 +13,9 @@ rewrite by *substitution*, or mention every state variable:
 * **sequential composition** — `P. Q = ∃x″, y″, …· P′ ∧ Q″` where `P′` is `P`
   with `x″, y″, …` for `x′, y′, …` and `Q″` is `Q` with `x″, y″, …` for
   `x, y, …`;
-* **substitution law** — `x:= e. P = P` with `e` for `x`.
+* **substitution law** — `x:= e. P = P` with `e` for `x`; over `nat`, when
+  `e` may not be a natural number, `x:= e. P = e: nat ∧ P` with `e` for `x`,
+  since the assignment then has no final state.
 
 and one law of the quantifier theory needs substitution too:
 
@@ -140,6 +142,18 @@ specification. -/
 def params (p : Prog) : List String :=
   p.state.map (·.1) ++ p.state.map (prime ·.1)
 
+/-- Whether an expression is certainly an element of a domain: anything is an
+`int` or a `bin`, as far as the kernel's expressions go, and a `nat` expression
+built from numerals and `nat` state variables by `+` and `×` is a `nat`. -/
+def staysIn (p : Prog) (d : Expr) (e : Expr) : Bool :=
+  d != .var "nat" || natExpr e
+where
+  natExpr : Expr → Bool
+    | .num _ => true
+    | .var v => p.state.lookup v == some (.var "nat")
+    | .bin .add a b | .bin .mul a b => natExpr a && natExpr b
+    | _ => false
+
 /-- `x′ = e` for `x`, `y′ = y` for every other state variable. -/
 def assignBody (p : Prog) (x : String) (e : Expr) : Expr :=
   Expr.conj (p.state.map fun (y, _) =>
@@ -221,7 +235,16 @@ def apply (p : Prog) : Rule → Expr → List Expr
   | .seq, .bin .seq a b =>
       if p.isPlain a && p.isPlain b && !p.state.isEmpty then [p.seqBody a b] else []
   | .substitution, .bin .seq (.bin .assign (.var x) v) b =>
-      if p.isPlain b && p.state.any (·.1 == x) then [b.subst [(x, v)]] else []
+      match p.state.lookup x with
+      | some d =>
+          if !p.isPlain b then [] else
+          -- Over a domain that the expression may leave, the assignment has no
+          -- final state at all when it does, so its membership stays as a
+          -- conjunct: over `nat`, `m:= m–1. P` is `m–1: nat ∧ P` with `m–1` for
+          -- `m`, which is `⊥` when `m` is `0`, as the left side is.
+          if p.staysIn d v then [b.subst [(x, v)]]
+          else [.bin .and (.bin .mem v d) (b.subst [(x, v)])]
+      | none => []
   | .onePoint, e => onePoint e
   -- A domain the kernel knows is not empty, so a quantifier over it that binds
   -- nothing the body mentions can go.
