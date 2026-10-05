@@ -8,6 +8,9 @@ import Netty.Json
 import Netty.Script
 import Netty.Api
 import Netty.Replay
+import Netty.Proof
+import Netty.Lean
+import Netty.Proofs.Demo
 
 /-!
 # Netty
@@ -34,7 +37,12 @@ with no user interface but a script language and `lake exe netty`:
 * `Netty.Script` — a session and the script language `lake exe netty` runs;
 * `Netty.Api` — the same session as one JSON request and one JSON answer, which
   is what a window with three panes talks to;
-* `Netty.Replay` — the document's own example, replayed and checked in Lean.
+* `Netty.Replay` — the document's own example, replayed and checked in Lean;
+* `Netty.Proof` — calculations written as the book writes them, in a
+  calculation file, read back and checked step by step;
+* `Netty.Lean` — `netty_proofs`, which translates a checked calculation file
+  into Lean theorems, every step re-proved by Lean;
+* `Netty.Proofs.Demo` — a calculation file so translated.
 
 It is deliberately independent of the rest of this repository: it imports
 neither Mathlib nor `LaPToP`, so it builds in seconds. The laws it ships with
