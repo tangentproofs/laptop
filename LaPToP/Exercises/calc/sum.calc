@@ -26,5 +26,15 @@ refine Q ⟸ if n = 0 then ok else n:= n–1. s:= s+n. Q fi
 =   Q ⟸ if n = 0 then ok else n:= n–1. 2×s′ = 2×(s+n) + n×(n–1) fi               substitution law
 =   Q ⟸ if n = 0 then ok else n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi             ok
 =   Q ⟸ if n = 0 then n′ = n ∧ s′ = s else n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi    definition of Q
-=   (2×s′ = 2×s + n×(n–1)) ⟸ if n = 0 then n′ = n ∧ s′ = s else n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi    arithmetic
+=   (2×s′ = 2×s + n×(n–1)) ⟸ if n = 0 then n′ = n ∧ s′ = s else n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1) fi    case analysis
+=   (2×s′ = 2×s + n×(n–1)) ⟸ n = 0 ∧ (n′ = n ∧ s′ = s) ∨ ¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1))    mirror
+=   n = 0 ∧ (n′ = n ∧ s′ = s) ∨ ¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⟹ 2×s′ = 2×s + n×(n–1)    antidistributive
+=   (n = 0 ∧ (n′ = n ∧ s′ = s) ⇒ 2×s′ = 2×s + n×(n–1)) ∧ (¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⇒ 2×s′ = 2×s + n×(n–1))    context
+=   (n = 0 ∧ (n′ = n ∧ s′ = s) ⇒ 2×s = 2×s + n×(n–1)) ∧ (¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⇒ 2×s′ = 2×s + n×(n–1))    context
+=   (n = 0 ∧ (n′ = n ∧ s′ = s) ⇒ 2×s = 2×s + 0×(n–1)) ∧ (¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⇒ 2×s′ = 2×s + n×(n–1))    arithmetic
+=   (n = 0 ∧ (n′ = n ∧ s′ = s) ⇒ ⊤) ∧ (¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⇒ 2×s′ = 2×s + n×(n–1))    base
+=   ⊤ ∧ (¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⇒ 2×s′ = 2×s + n×(n–1))    identity
+=   ¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⇒ 2×s′ = 2×s + n×(n–1)    context
+=   ¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⇒ 2×(s+(n–1)) + (n–1)×(n–1–1) = 2×s + n×(n–1)    arithmetic
+=   ¬n = 0 ∧ (n–1: nat ∧ 2×s′ = 2×(s+(n–1)) + (n–1)×(n–1–1)) ⇒ ⊤    base
 =   ⊤

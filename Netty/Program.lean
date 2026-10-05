@@ -22,9 +22,12 @@ and one law of the quantifier theory needs substitution too:
 * **one point** — `∃v: d· v = e ∧ b = e: d ∧ b` with `e` for `v`, when `v` does
   not appear in `e`;
 
-and one that does not substitute but needs to know the domain is not empty:
+and two that do not substitute:
 
-* **vacuous quantifier** — `∃v: d· b = b` and `∀v: d· b = b` when `v` does not
+* **domain** — `x: d = ⊤` for a state variable `x` (or `x′`) declared of domain `d`;
+
+* **vacuous quantifier**, which needs to know the domain is not empty —
+  `∃v: d· b = b` and `∀v: d· b = b` when `v` does not
   appear in `b`, for the domains `int`, `nat` and `bin`.
 
 So these are *rules*: functions from the expression at a place of a line to the
@@ -67,6 +70,9 @@ inductive Rule
   /-- `∃v: d· v = e ∧ b`. -/ | onePoint
   /-- `∃v: d· b` with `v` not in `b`. -/ | vacuous
   /-- A named specification. -/ | definition (name : String)
+  /-- `x: d` for a state variable of domain `d`. -/ | domain
+  /-- `arithmetic`: a decision, not a rewrite (`Netty.Arith`). -/ | arith
+  /-- `binary algebra`: a truth table (`Netty.Arith`). -/ | binAlg
   deriving Repr, DecidableEq, Inhabited
 
 /-- The name of a variable's final value. -/
@@ -187,7 +193,7 @@ order of existentials does not matter — so `v` may be pinned by a conjunct of
 the innermost body, as sequential composition writes them. Then `e` must
 mention none of the identifiers the run binds, which keeps every quantifier's
 scope what it was. -/
-def onePoint (e : Expr) : List Expr :=
+def onePointAll (e : Expr) : List (Nat × String × Nat × Expr × Expr) :=
   let (pre, body) := exPrefix e
   let bound := pre.flatMap (·.1)
   let cs := Expr.conjuncts body
@@ -205,7 +211,11 @@ def onePoint (e : Expr) : List Expr :=
         let mem := if d == .var "int" then [] else [Expr.bin .mem t d]
         let inner := Expr.conj (mem ++ rest)
         let pre' := (pre.set layer (ids.erase v, d)).filter (!·.1.isEmpty)
-        some (pre'.foldr (fun (ids', d') acc => .quant .ex ids' d' acc) inner)
+        some (layer, v, i, t, pre'.foldr (fun (ids', d') acc => .quant .ex ids' d' acc) inner)
+
+/-- The one-point rule's results (`onePointAll`, which also says which layer,
+identifier, conjunct and value each one used). -/
+def onePoint (e : Expr) : List Expr := (onePointAll e).map (·.2.2.2.2)
 
 /-- The name a rule is cited by. -/
 def ruleName : Rule → String
@@ -216,13 +226,16 @@ def ruleName : Rule → String
   | .onePoint => "one point"
   | .vacuous => "vacuous quantifier"
   | .definition n => "definition of " ++ n
+  | .domain => "domain"
+  | .arith => "arithmetic"
+  | .binAlg => "binary algebra"
 
 /-- The rules in force: the five when there is a state, and a definition per
 named specification. -/
 def rules (p : Prog) : List Rule :=
   -- A proof that declares no state is not about programs, and is offered what
   -- it always was.
-  (if p.state.isEmpty then [] else [.ok, .assignment, .seq, .substitution, .onePoint, .vacuous])
+  (if p.state.isEmpty then [] else [.ok, .assignment, .seq, .substitution, .onePoint, .vacuous, .domain])
     ++ p.specs.map (.definition ·.1)
 
 /-- What a rule may replace the expression `e` with; every result is equal to
@@ -246,6 +259,9 @@ def apply (p : Prog) : Rule → Expr → List Expr
           else [.bin .and (.bin .mem v d) (b.subst [(x, v)])]
       | none => []
   | .onePoint, e => onePoint e
+  -- A state variable, initial or final, is an element of its domain.
+  | .domain, .bin .mem (.var x) d =>
+      if p.state.any fun (y, d') => (y == x || prime y == x) && d' == d then [.top] else []
   -- A domain the kernel knows is not empty, so a quantifier over it that binds
   -- nothing the body mentions can go.
   | .vacuous, .quant k ids d b =>
