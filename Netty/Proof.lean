@@ -71,6 +71,18 @@ ends in `⊤` under `=` or `⇐` proves its first line) must be the theorem's cl
 
 namespace Netty
 
+/-- What is in force where a theorem is stated: the laws, and the state and named
+specifications the programming rules work with. -/
+structure Ctx where
+  /-- The laws in force. -/
+  laws : List Law := []
+  /-- The state and the named specifications. -/
+  prog : Prog := {}
+  /-- The named specifications a parent file declared (`extends`), which an
+  implementation must refine. -/
+  inherited : List String := []
+  deriving Repr, Inhabited
+
 /-- One line of a written proof. -/
 structure PLine where
   /-- The connective in the margin; `none` on the first line. -/
@@ -92,8 +104,10 @@ structure PTheorem where
   claim : Expr
   /-- The lines of the calculation. -/
   lines : List PLine
-  /-- The laws in force for it. -/
-  laws : List Law
+  /-- What is in force for it. -/
+  cx : Ctx
+  /-- For a refinement `S ⇐ P`, the specification `S` it refines. -/
+  refines : Option String := none
   /-- The line of the file the theorem starts on. -/
   lineNo : Nat
   deriving Repr, Inhabited
@@ -226,10 +240,10 @@ def maxDepth : Nat := 12
 
 /-- The lines one application of law `name` takes `a` to, from a level of type
 `ty` and direction `dir`. -/
-def reach (laws : List Law) (ty : Ty) (dir : Dir) (name : String) (target a : Expr) :
+def reach (cx : Ctx) (ty : Ty) (dir : Dir) (name : String) (target a : Expr) :
     List Reach :=
-  let named := laws.filter (·.name == name)
-  match ({ laws := named } : Doc).step (.start ty dir a) with
+  let named := cx.laws.filter (·.name == name)
+  match ({ laws := named, prog := cx.prog } : Doc).step (.start ty dir a) with
   | .ok d => reachFrom name target 0 maxDepth d
   | .error _ => []
 
@@ -249,12 +263,12 @@ up to, the line, and the premises conditional laws left on the way. -/
 abbrev End := Rel × Expr × List Expr
 
 /-- Every line a sequence of law applications takes `a` to. -/
-def chain (laws : List Law) (ty : Ty) (dir : Dir) (target : Expr) :
+def chain (cx : Ctx) (ty : Ty) (dir : Dir) (target : Expr) :
     List String → List End → List End
   | [], acc => acc
   | n :: ns, acc =>
       let next := acc.flatMap fun (r, e, qs) =>
-        (reach laws ty dir n target e).filterMap fun x => do
+        (reach cx ty dir n target e).filterMap fun x => do
           let r' ← x.op.rel?
           let rc ← Rel.combine [r, r']
           some (rc, x.expr, qs ++ x.premise.toList)
@@ -263,17 +277,17 @@ def chain (laws : List Law) (ty : Ty) (dir : Dir) (target : Expr) :
       let sorted := next.filter (·.2.2.isEmpty) ++ next.filter (!·.2.2.isEmpty)
       let dedup := sorted.foldl (fun acc' p =>
         if acc'.any (fun q => q.2.1 == p.2.1 && q.1 == p.1) then acc' else acc' ++ [p]) []
-      chain laws ty dir target ns dedup
+      chain cx ty dir target ns dedup
 
 /-- Check one step: the laws named by `names` take `a` to `b` with `op`. The
 result is the premises conditional laws left, which are empty for a step that
 needs nothing. -/
-def checkStep (laws : List Law) (ty : Ty) (names : List String) (a : Expr) (op : BinOp)
+def checkStep (cx : Ctx) (ty : Ty) (names : List String) (a : Expr) (op : BinOp)
     (b : Expr) : Except String (List Expr) := do
   let r ← orElseError s!"‘{op.symbol}’ cannot stand in the margin" op.rel?
   -- The level's direction is the step's own, so `=` steps and steps in the
   -- step's direction are the ones offered.
-  let ends := chain laws ty r.dir b names [(⟨.same, false⟩, a, [])]
+  let ends := chain cx ty r.dir b names [(⟨.same, false⟩, a, [])]
   let nb := b.normAssoc
   let hits := ends.filter fun (rel, e, _) => e.normAssoc == nb && licenses (rel.op ty) op
   match hits.find? (·.2.2.isEmpty), hits.head? with
@@ -283,7 +297,7 @@ def checkStep (laws : List Law) (ty : Ty) (names : List String) (a : Expr) (op :
   let law := String.intercalate ", " names
   -- Say what the law does do: in the other directions, if it reaches `b` there.
   let others := [Dir.down, Dir.up].flatMap fun d =>
-    if d == r.dir then [] else chain laws ty d b names [(⟨.same, false⟩, a, [])]
+    if d == r.dir then [] else chain cx ty d b names [(⟨.same, false⟩, a, [])]
   match (ends ++ others).find? (fun (_, e, _) => e.normAssoc == nb) with
   | some (rel, _, _) =>
       throw s!"{law} gives {(rel.op ty).symbol} here, not {op.symbol}"
@@ -316,9 +330,11 @@ def lineTy (lines : List PLine) : Ty :=
   | none => (lines.findSome? fun l => l.conn.bind BinOp.connTy).getD .boolean
 
 /-- Whether a hint names laws in force: every comma-separated name does. -/
-def hintLaws (laws : List Law) (hint : String) : Option (List String) :=
+def hintLaws (cx : Ctx) (hint : String) : Option (List String) :=
   let names := (hint.splitOn ",").map Parser.trim
-  if !names.isEmpty && names.all (fun n => n == "context" || laws.any (·.name == n))
+  let rules := cx.prog.rules.map Prog.ruleName
+  if !names.isEmpty &&
+      names.all (fun n => n == "context" || rules.contains n || cx.laws.any (·.name == n))
   then some names else none
 
 /-- Check a theorem. -/
@@ -328,9 +344,9 @@ def check (t : PTheorem) : Except String Checked := do
     | a :: b :: rest => do
         let op ← orElseError s!"line {b.lineNo}: a line after the first needs a connective"
           b.conn
-        let s ← match hintLaws t.laws a.hint with
+        let s ← match hintLaws t.cx a.hint with
           | some names =>
-              match checkStep t.laws ty names a.expr op b.expr with
+              match checkStep t.cx ty names a.expr op b.expr with
               | .ok [] => pure (StepCheck.law names)
               | .ok qs => pure (StepCheck.lawIf names qs)
               | .error e => throw s!"line {a.lineNo}: {e}"
@@ -347,12 +363,12 @@ def check (t : PTheorem) : Except String Checked := do
   | none => pure ()
   let steps ← go t.lines
   let (op, proved) ← proves ty t.lines
-  let top := (t.lines.head?.map (·.expr)).getD .top
-  let bottom := (t.lines.getLast?.map (·.expr)).getD .top
+  let first := (t.lines.head?.map (·.expr)).getD .top
+  let last := (t.lines.getLast?.map (·.expr)).getD .top
   -- The claim may be what the calculation proves, or the calculation's own
-  -- `top op bottom`.
+  -- `first op last`.
   if proved.normAssoc != t.claim.normAssoc &&
-      (Expr.bin op top bottom).normAssoc != t.claim.normAssoc then
+      (Expr.bin op first last).normAssoc != t.claim.normAssoc then
     throw s!"theorem {t.name}: the calculation proves {proved.render}, not {t.claim.render}"
   return { thm := t, ty := ty, rel := op, steps := steps }
 
@@ -411,9 +427,49 @@ private def firstWord (s : String) : String × String :=
   (String.ofList (cs.takeWhile fun c => !c.isWhitespace),
    Parser.trim (String.ofList (cs.dropWhile fun c => !c.isWhitespace)))
 
-/-- Parse a calculation file. -/
-def file (text : String) : Except String (List PTheorem) := do
-  let mut laws : List Law := []
+/-- A parsed calculation file: its theorems, what is in force at its end, and
+the specifications it names itself. -/
+structure PFile where
+  /-- The theorems, refinements among them, in order. -/
+  theorems : List PTheorem
+  /-- What is in force at the end of the file, which a file extending it starts
+  from. -/
+  cx : Ctx
+  /-- The specifications this file names (`spec`). -/
+  ownSpecs : List String
+  deriving Repr, Inhabited
+
+/-- The files a calculation file extends: its `extends "PATH"` lines. -/
+def extendsOf (text : String) : List String :=
+  (text.splitOn "\n").filterMap fun raw =>
+    let (w, rest) := firstWord raw
+    if w == "extends" then some (Parser.trim (rest.replace "\"" "")) else none
+
+/-- Read `state NAMES: DOMAIN`. -/
+def stateLine (n : Nat) (rest : String) : Except String (List (String × Expr)) := do
+  match rest.splitOn ":" with
+  | [names, dom] =>
+      let d ← (Parser.expr dom).mapError (s!"line {n}: " ++ ·)
+      let ns := ((names.splitOn ",").map Parser.trim).filter (!·.isEmpty)
+      if ns.isEmpty then throw s!"line {n}: ‘state’ wants variable names"
+      return ns.map (·, d)
+  | _ => throw s!"line {n}: write ‘state x, y: int’"
+
+/-- Whether an expression is a program: built from `ok`, assignments, `.`,
+`if … then … else … fi` with a plain condition, and named specifications —
+what the right side of a refinement may be. -/
+def isProgram (p : Prog) : Expr → Bool
+  | .var n => n == "ok" || p.specs.any (·.1 == n)
+  | .bin .assign (.var _) e => p.isPlain e
+  | .bin .seq a b => isProgram p a && isProgram p b
+  | .cond c a b => p.isPlain c && isProgram p a && isProgram p b
+  | _ => false
+
+/-- Parse a calculation file, starting from what is in force at the start (the
+end of the files it extends). -/
+def file (init : Ctx) (text : String) : Except String PFile := do
+  let mut cx := init
+  let mut own : List String := []
   let mut done : List PTheorem := []
   let mut cur : Option PTheorem := none
   let mut n := 0
@@ -422,36 +478,120 @@ def file (text : String) : Except String (List PTheorem) := do
     let t := Parser.trim raw
     if t.isEmpty || Parser.beginsWith t '#' then continue
     let (w, rest) := firstWord t
-    if w == "laws" then
+    -- A directive ends the theorem before it, which is then a law of the rest of
+    -- the file under its own name.
+    let isProofLine := !["laws", "law", "theorem", "state", "spec", "refine",
+      "extends"].contains w
+    if !isProofLine then
+      if let some c := cur then
+        done := c :: done
+        cx := { cx with laws := cx.laws ++ [{ name := c.name, stmt := c.claim }] }
+        cur := none
+    if w == "extends" then continue
+    else if w == "laws" then
       for name in (rest.splitOn " ").filter (!·.isEmpty) do
         match shipped name with
-        | some ls => laws := laws ++ ls
+        | some ls => cx := { cx with laws := cx.laws ++ ls }
         | none => throw s!"line {n}: there is no shipped law list called ‘{name}’"
     else if w == "law" then
       match Parser.lawLine rest with
-      | .ok (some l) => laws := laws ++ [l]
+      | .ok (some l) => cx := { cx with laws := cx.laws ++ [l] }
       | .ok none => throw s!"line {n}: an empty law"
       | .error e => throw s!"line {n}: {e}"
+    else if w == "state" then
+      let vs ← stateLine n rest
+      for (v, _) in vs do
+        if cx.prog.state.any (·.1 == v) then
+          throw s!"line {n}: ‘{v}’ is already a state variable"
+      cx := { cx with prog := { cx.prog with state := cx.prog.state ++ vs } }
+    else if w == "spec" then
+      let (name, body) := firstWord rest
+      let body := Parser.trim body
+      if name.isEmpty || !Parser.beginsWith body '=' then
+        throw s!"line {n}: write ‘spec NAME = SPECIFICATION’"
+      if cx.prog.specs.any (·.1 == name) then
+        throw s!"line {n}: ‘{name}’ is already a specification"
+      let e ← (Parser.expr (String.ofList (body.toList.drop 1))).mapError (s!"line {n}: " ++ ·)
+      cx := { cx with prog := { cx.prog with specs := cx.prog.specs ++ [(name, e)] } }
+      own := own ++ [name]
     else if w == "theorem" then
-      if let some c := cur then done := c :: done
       match rest.splitOn ":" with
       | name :: claim@(_ :: _) =>
           let e ← (Parser.expr (String.intercalate ":" claim)).mapError (s!"line {n}: " ++ ·)
-          cur := some { name := Parser.trim name, claim := e, lines := [], laws := laws,
+          cur := some { name := Parser.trim name, claim := e, lines := [], cx := cx,
                         lineNo := n }
       | _ => throw s!"line {n}: write ‘theorem NAME: CLAIM’"
+    else if w == "refine" then
+      let e ← (Parser.expr rest).mapError (s!"line {n}: " ++ ·)
+      match e with
+      | .bin .rimp (.var spec) prog =>
+          if !cx.prog.specs.any (·.1 == spec) then
+            throw s!"line {n}: ‘{spec}’ is not a specification; name it with ‘spec’ first"
+          if !isProgram cx.prog prog then
+            throw s!"line {n}: the right side of a refinement must be a program — \
+              ok, assignments, ‘.’, if … fi and specifications — not {prog.render}"
+          let k := (done.filter (·.refines == some spec)).length + 1
+          cur := some { name := s!"{spec} refinement {k}", claim := e, lines := [],
+                        cx := cx, refines := some spec, lineNo := n }
+      | _ => throw s!"line {n}: write ‘refine SPEC ⇐ PROGRAM’"
     else
       match cur with
       | some c =>
           let l ← (proofLine n raw).mapError (s!"line {n}: " ++ ·)
           cur := some { c with lines := c.lines ++ [l] }
       | none => throw s!"line {n}: a proof line outside a theorem"
-  if let some c := cur then done := c :: done
-  return done.reverse
+  if let some c := cur then
+    done := c :: done
+    cx := { cx with laws := cx.laws ++ [{ name := c.name, stmt := c.claim }] }
+  return { theorems := done.reverse, cx := cx, ownSpecs := own }
 
-/-- Parse and check a whole calculation file. -/
+/-- What an implementation still owes: a file with refinements must refine every
+specification its parents named, and every specification any of its refinements
+calls. Recursion is allowed — a refinement may call the specification it refines
+— so what is required is that every specification reached is refined somewhere,
+not that the calls bottom out. -/
+def unrefined (f : PFile) : List String :=
+  let refined := f.theorems.filterMap (·.refines)
+  if refined.isEmpty then [] else
+  let called := f.theorems.flatMap fun t =>
+    if t.refines.isSome then
+      match t.claim with
+      | .bin .rimp _ prog => prog.vars.filter fun v => f.cx.prog.specs.any (·.1 == v)
+      | _ => []
+    else []
+  (f.cx.inherited ++ called).eraseDups.filter (!refined.contains ·)
+
+/-- Check every theorem of a parsed file, and that an implementation refines
+everything it owes. -/
+def checkParsed (f : PFile) : Except String (List Checked) := do
+  let cs ← f.theorems.mapM check
+  match unrefined f with
+  | [] => return cs
+  | us => throw s!"not refined: {String.intercalate ", " us} — an implementation \
+      must refine every specification it inherits or calls"
+
+/-- Parse and check a calculation file that extends nothing. -/
 def checkFile (text : String) : Except String (List Checked) := do
-  (← file text).mapM check
+  checkParsed (← file {} text)
+
+/-- Read a calculation file and the files it extends, each path relative to the
+file that names it. `depth` stops a cycle of `extends`. -/
+partial def load (path : System.FilePath) (depth : Nat := 0) : IO PFile := do
+  if depth > 16 then throw (IO.userError s!"{path}: ‘extends’ goes round in a circle")
+  let text ← IO.FS.readFile path
+  let dir := path.parent.getD "."
+  let mut init : Ctx := {}
+  for p in extendsOf text do
+    let parent ← load (dir / p) (depth + 1)
+    init := { laws := init.laws ++ parent.cx.laws,
+              prog := { state := init.prog.state ++ parent.cx.prog.state,
+                        specs := init.prog.specs ++ parent.cx.prog.specs },
+              -- What the parent named or inherited and did not refine itself.
+              inherited := init.inherited ++ ((parent.cx.inherited ++ parent.ownSpecs).filter
+                fun n => !parent.theorems.any (·.refines == some n)) }
+  match file init text with
+  | .ok f => return f
+  | .error e => throw (IO.userError s!"{path}: {e}")
 
 /-- A one-line summary of a checked theorem. -/
 def _root_.Netty.Checked.summary (c : Checked) : String :=

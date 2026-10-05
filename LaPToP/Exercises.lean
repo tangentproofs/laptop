@@ -8,6 +8,7 @@ import LaPToP.Exercises.Ch6
 import LaPToP.Exercises.Ch7
 import LaPToP.Exercises.Ch8
 import LaPToP.Exercises.Ch9
+import LaPToP.Exercises.Calc
 
 /-!
 # aPToP Chapter 10 exercise statement stubs

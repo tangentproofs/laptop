@@ -4,10 +4,8 @@ namespace LaPToP.Exercises.Ch4
 
 open LaPToP.Exercises
 
-/-- aPToP Exercise 121: √ Simplify each of the following (in integer variables x and y ). -/
-theorem exercise_121 : Statement 121 := by
-  -- exercise 121: statement only, proof deferred
-  sorry
+/-! aPToP Exercise 121 is proved as a calculation in aPToP's notation (`LaPToP.Exercises.Calc`):
+all eleven parts, `LaPToP.Exercises.Calc.Ch4.ex121a` … `ex121k`, from `calc/ch4.calc`. -/
 
 /-- aPToP Exercise 122: Prove speci cation S is satis able for prestate σ if and only if (S. ⊤) . Note: ⊤ is the -/
 theorem exercise_122 : Statement 122 := by
@@ -99,10 +97,8 @@ theorem exercise_139 : Statement 139 := by
   -- exercise 139: statement only, proof deferred
   sorry
 
-/-- aPToP Exercise 140: Let n and s be natural variables. The program -/
-theorem exercise_140 : Statement 140 := by
-  -- exercise 140: statement only, proof deferred
-  sorry
+/-! aPToP Exercise 140 is proved as a calculation in aPToP's notation (`LaPToP.Exercises.Calc`):
+`LaPToP.Exercises.Calc.R_refinement_1` and `Q_refinement_1`, from `calc/sum.spec.calc` and `calc/sum.calc`. -/
 
 /-- aPToP Exercise 141: Let s and n be number variables. Let Q be a speci cation de ned as -/
 theorem exercise_141 : Statement 141 := by

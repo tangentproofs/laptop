@@ -54,6 +54,11 @@ inductive BinOp
   be an expression before it can be a law. The rest of the bunch notation —
   `::`, the bunch comma, the set brackets — is not here. -/
                              | mem
+  /-- `x:= e`, assignment: the specification that `x` ends as `e` and every
+  other state variable is unchanged. Its left operand is the variable. -/
+                             | assign
+  /-- `P. Q`, sequential composition of specifications. -/
+                             | seq
   deriving Repr, DecidableEq, Inhabited, Hashable
 
 /-- The type of a line of a proof. Netty allows lines of any type; the kernel
@@ -129,6 +134,8 @@ def symbol : BinOp → String
   | eq => "=" | ne => "⧧" | lt => "<" | gt => ">" | le => "≤" | ge => "≥"
   | add => "+" | sub => "-" | mul => "×"
   | mem => ":"
+  | assign => ":="
+  | seq => "."
 
 /-- Binding power, following the aPToP grammar of the Netty document: the
 larger the number, the *weaker* the operator binds. Note that `¬` (8) sits
@@ -141,11 +148,15 @@ def prec : BinOp → Nat
   | eq | ne | lt | gt | le | ge | mem => 7
   | add | sub => 4
   | mul => 3
+  -- aPToP's table: `:=` binds more weakly than `⇒ ⇐`, and `.` more weakly still,
+  -- so `x:= x+1. y′ > x` is `(x:= (x+1)). (y′ > x)`.
+  | assign => 12
+  | seq => 13
 
 /-- The operators the document declares associative, so that an association
 `a ∧ b ∧ c` has three main operands rather than two. -/
 def assoc : BinOp → Bool
-  | and | or | add | mul => true
+  | and | or | add | mul | seq => true
   | _ => false
 
 /-- The operators the document declares symmetric — the ones its `symmetry`
@@ -185,6 +196,9 @@ def operandTy : BinOp → Option Ty
   -- a bunch of whatever type the domain is of, and whose right side is a bunch
   -- — which is a type the kernel does not have.
   | eq | ne | mem => none
+  -- The left of `:=` is a variable and the right whatever type it has.
+  | assign => none
+  | seq => some .boolean
 
 /-- The position of operand `i` (`0` left, `1` right).
 
@@ -202,6 +216,10 @@ def posOf : BinOp → Nat → Pos
   -- there is one the kernel calls both operands neutral, as it does `×`'s: always
   -- sound, and it merely loses some steps.
   | eq, _ | ne, _ | mul, _ | mem, _ => .neutral
+  -- Sequential composition is monotonic in both specifications; an assignment's
+  -- variable and expression are neither.
+  | seq, _ => .positive
+  | assign, _ => .neutral
 
 /-- Whether the operator can appear in the left margin of a proof, that is,
 whether it is one of the three directions of some type. `⧧` cannot: the three
@@ -215,7 +233,7 @@ def flip : BinOp → Option BinOp
   | eq => some eq | imp => some rimp | rimp => some imp
   | lt => some gt | gt => some lt | le => some ge | ge => some le
   | ne => some ne
-  | and | or | add | sub | mul | mem => none
+  | and | or | add | sub | mul | mem | assign | seq => none
 
 end BinOp
 
@@ -251,7 +269,7 @@ def renderAt : Nat → Expr → String
   | p, bin op l r =>
       -- `:` is written tight on its left, as the document writes `a: bool`;
       -- every other operator has a space on both sides.
-      let before := if op == .mem then "" else " "
+      let before := if op == .mem || op == .assign || op == .seq then "" else " "
       paren (op.prec > p)
         (renderAt op.prec l ++ before ++ op.symbol ++ " " ++ renderAt (op.prec - 1) r)
   -- `fi` is the closing bracket, so nothing inside needs parenthesizing and

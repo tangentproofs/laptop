@@ -31,7 +31,7 @@ A margin `⇒` between two lines becomes `Netty.Calc.Imp`, which is `→`, a `�
 becomes `Netty.Calc.Rimp`, the converse, and a boolean `=` becomes `↔`; number
 margins are Lean's own relations. Each link of the `calc` is proved by
 `netty_step`, which tries Lean's decision procedures (`grind`, then `simp` and
-`grind`, then `omega`). So *Lean re-proves every step on its own*: the law a
+`grind`, then `omega`, then the same under the binders both lines share). So *Lean re-proves every step on its own*: the law a
 hint names is what the Netty kernel checked, and the Lean proof does not trust
 it. A step whose hint names no law (`Proof.StepCheck.lean`) is checked by Lean
 alone, and the command says which ones those are.
@@ -67,11 +67,19 @@ instance : @Trans Int Int Int (· > ·) (· > ·) (· > ·) := ⟨fun h g => Int
 
 /-- Prove one link of a translated calculation. -/
 macro "netty_step" : tactic =>
-  `(tactic| (try simp only [Netty.Calc.Imp, Netty.Calc.Rimp]
+  `(tactic| ((try simp only [Netty.Calc.Imp, Netty.Calc.Rimp]) <;>
              first
                | grind
                | (simp <;> grind)
-               | omega))
+               | omega
+               -- The intermediate state of a sequential composition, pinned by
+               -- assignments: the one-point rule, which `grind` does not do.
+               | (simp only [and_assoc, exists_and_left, exists_and_right, exists_eq_left,
+                    exists_eq_right, exists_const] <;> first | grind | (simp <;> grind) | omega)
+               -- A step inside the body of quantifiers: go under the binders
+               -- both lines share, then prove the bodies equal.
+               | ((repeat' (first | apply exists_congr | apply forall_congr' | intro))
+                    <;> first | grind | (simp <;> grind) | omega)))
 
 end Netty.Calc
 
@@ -127,42 +135,81 @@ partial def infer (bound : List String) (expect : Option Ty) (env : Tys) : Expr 
 /-- The types of the identifiers of a theorem: inference run over the claim
 and every line until nothing changes, so that `x = y` learns `x` is a number
 from a later `x ≤ 3`. Whatever is still unsettled is boolean. -/
-def theoremTys (es : List Expr) : Tys := Id.run do
-  let mut env : Tys := []
+def theoremTys (init : Tys) (es : List Expr) : Tys := Id.run do
+  let mut env : Tys := init
   for _ in [0:6] do
     env := es.foldl (fun env e => infer [] (some .boolean) env e) env
   return env
 
-/-- A Lean identifier for an aPToP identifier. -/
-def ident (n : String) : Ident := mkIdent (Name.mkSimple n)
+/-- A Lean identifier for an aPToP identifier: primes become `'`. -/
+def ident (n : String) : Ident :=
+  mkIdent (Name.mkSimple ((n.replace "″" "''").replace "′" "'"))
+
+/-- What a translation knows: the types of the identifiers, the state and the
+named specifications, and the renaming of state variables that sequential
+composition has made on the way in (`x′` to an intermediate state, say). -/
+structure Scope where
+  /-- The identifiers' types. -/
+  env : Tys
+  /-- The state and the named specifications. -/
+  prog : Prog
+  /-- Names standing for other names. -/
+  ren : List (String × String) := []
+  /-- How many sequential compositions deep the translation is, for fresh names. -/
+  depth : Nat := 0
+
+/-- The Lean type of a domain's elements. -/
+def leanTy : Ty → CommandElabM Term
+  | .boolean => `(Prop)
+  | .number => `(Int)
+
+/-- The guard a domain puts on a variable of it: `0 ≤ x` for `nat`. -/
+def guard (d : Expr) (x : Term) : CommandElabM (Option Term) :=
+  match d with
+  | .var "nat" => do return some (← `(0 ≤ $x))
+  | _ => return none
+
+/-- The name an identifier stands for here. -/
+def Scope.name (sc : Scope) (n : String) : String := (sc.ren.lookup n).getD n
+
+mutual
 
 /-- Translate an expression of type `ty` into a Lean term. -/
-partial def term (env : Tys) (ty : Ty) : Expr → CommandElabM Term
-  | .var n => return ident n
+partial def term (sc : Scope) (ty : Ty) : Expr → CommandElabM Term
+  | .var n => do
+      if n == "ok" && !sc.prog.state.isEmpty then
+        return ← term sc .boolean sc.prog.okBody
+      if sc.prog.specs.any (·.1 == n) then
+        let args := sc.prog.params.map fun v => (ident (sc.name v) : Term)
+        return ← `($(ident n) $(args.toArray)*)
+      return ident (sc.name n)
   | .num n => `(($(quote n) : Int))
   | .top => `(True)
   | .bot => `(False)
-  | .neg a => do `(¬ $(← term env .boolean a))
+  | .neg a => do `(¬ $(← term sc .boolean a))
+  | .bin .assign (.var x) e => term sc .boolean (sc.prog.assignBody x e)
+  | .bin .seq a b => seqTerm sc a b
   | .bin o l r => do
+      let env := sc.env
       let lt := match o.operandTy with
         | some t => t
         | none => (tyIn env l).getD ((tyIn env r).getD .boolean)
       if o == .mem then
-        let x ← term env .number l
+        let x ← term sc .number l
         return ← match r with
           | .var "nat" => `(0 ≤ $x)
           | .var "int" => `(True)
           | d => throwError s!"Netty: no translation of the domain {d.render}"
-      let a ← term env lt l
-      let b ← term env lt r
+      let a ← term sc lt l
+      let b ← term sc lt r
       match o, lt with
       | .and, _ => `($a ∧ $b)
       | .or, _ => `($a ∨ $b)
       | .imp, _ => `($a → $b)
       | .rimp, _ => `($b → $a)
-      | .eq, .boolean => `(($a ↔ $b))
+      | .eq, .boolean => `(($a = $b))
       | .eq, .number => `($a = $b)
-      | .ne, .boolean => `(¬($a ↔ $b))
+      | .ne, .boolean => `(¬($a = $b))
       | .ne, .number => `($a ≠ $b)
       | .lt, _ => `($a < $b)
       | .gt, _ => `($a > $b)
@@ -171,12 +218,12 @@ partial def term (env : Tys) (ty : Ty) : Expr → CommandElabM Term
       | .add, _ => `($a + $b)
       | .sub, _ => `($a - $b)
       | .mul, _ => `($a * $b)
-      | .mem, _ => throwError "unreachable"
+      | o, _ => throwError s!"Netty: no translation of ‘{o.symbol}’ here"
   | .cond c x y => do
-      let c' ← term env .boolean c
-      let t := (tyIn env x).getD ((tyIn env y).getD ty)
-      let x' ← term env t x
-      let y' ← term env t y
+      let c' ← term sc .boolean c
+      let t := (tyIn sc.env x).getD ((tyIn sc.env y).getD ty)
+      let x' ← term sc t x
+      let y' ← term sc t y
       match t with
       | .boolean => `((($c' → $x') ∧ (¬$c' → $y')))
       | .number => `((if $c' then $x' else $y'))
@@ -184,20 +231,41 @@ partial def term (env : Tys) (ty : Ty) : Expr → CommandElabM Term
       let dt ← match domainTy d with
         | some t => pure t
         | none => throwError s!"Netty: no translation of the domain {d.render}"
-      let env' := ids.map (·, dt) ++ env
-      let body ← term env' .boolean b
-      let leanTy ← match dt with
-        | .boolean => `(Prop)
-        | .number => `(Int)
+      let sc' := { sc with env := ids.map (·, dt) ++ sc.env,
+                           ren := sc.ren.filter fun p => !ids.contains p.1 }
+      let body ← term sc' .boolean b
+      let lty ← leanTy dt
       ids.foldrM (fun n acc => do
         let x := ident n
-        let guard ← match d with
-          | .var "nat" => `(0 ≤ $x)
-          | _ => `(True)
-        match k with
-        | .all => `(∀ $x:ident : $leanTy, $guard → $acc)
-        | .ex => `(∃ $x:ident : $leanTy, $guard ∧ $acc)) body
+        match k, ← guard d x with
+        | .all, some g => `(∀ $x:ident : $lty, $g → $acc)
+        | .all, none => `(∀ $x:ident : $lty, $acc)
+        | .ex, some g => `(∃ $x:ident : $lty, $g ∧ $acc)
+        | .ex, none => `(∃ $x:ident : $lty, $acc)) body
   | .mvar n => throwError s!"Netty: a law variable ‘{n}’ is left in the proof"
+
+/-- `P. Q`: there is an intermediate state, which is `P`'s final state and
+`Q`'s initial one. Rather than substitute into `P` and `Q`, the translation
+renames: inside `P` the primed state variables stand for the intermediate
+ones, inside `Q` the unprimed ones do. So a named specification called in
+either is applied to the right state. -/
+partial def seqTerm (sc : Scope) (a b : Expr) : CommandElabM Term := do
+  let mids := sc.prog.state.map fun (v, d) => (v, d, s!"{v}_{sc.depth}")
+  let scA := { sc with depth := sc.depth + 1,
+                       ren := mids.map (fun (v, _, m) => (prime v, m)) ++ sc.ren,
+                       env := mids.map (fun (v, _, m) => (m, (sc.env.lookup v).getD .number)) ++ sc.env }
+  let scB := { scA with ren := mids.map (fun (v, _, m) => (v, m)) ++ sc.ren }
+  let a' ← term scA .boolean a
+  let b' ← term scB .boolean b
+  let body ← `($a' ∧ $b')
+  mids.foldrM (fun (v, d, m) acc => do
+    let lty ← leanTy ((sc.env.lookup v).getD .number)
+    let x := ident m
+    match ← guard d x with
+    | some g => `(∃ $x:ident : $lty, $g ∧ $acc)
+    | none => `(∃ $x:ident : $lty, $acc)) body
+
+end
 
 /-- The `calc` relation of a margin connective between two translated lines. -/
 def link (ty : Ty) (o : BinOp) (a b : Term) : CommandElabM Term :=
@@ -212,39 +280,73 @@ def link (ty : Ty) (o : BinOp) (a b : Term) : CommandElabM Term :=
   | .ge, _ => `($a ≥ $b)
   | o, _ => throwError s!"Netty: ‘{o.symbol}’ cannot stand in the margin"
 
+/-- The types the state gives its variables and their primes. -/
+def stateTys (p : Prog) : Tys :=
+  p.state.flatMap fun (v, d) =>
+    let t := (domainTy d).getD .number
+    [(v, t), (prime v, t)]
+
+/-- The Lean definition of a named specification: a proposition about the
+state variables and their primes. -/
+def specCmd (p : Prog) (name : String) (body : Expr) : CommandElabM Syntax := do
+  let env := theoremTys (stateTys p) [body]
+  let sc : Scope := { env := env, prog := { p with specs := p.specs.filter (·.1 != name) } }
+  let b ← term sc .boolean body
+  let binders ← p.params.mapM fun n => do
+    `(bracketedBinder| ($(ident n) : $(← leanTy ((env.lookup n).getD .number))))
+  let bs := binders.toArray
+  `(open Classical in def $(ident name):ident $bs* : Prop := $b)
+
 /-- The Lean command a checked calculation translates to. -/
 def theoremCmd (c : Checked) : CommandElabM Syntax := do
   let t := c.thm
-  let env := theoremTys (t.claim :: t.lines.map (·.expr))
-  let names := t.claim.vars ++ (t.lines.flatMap fun l => l.expr.vars)
-  let names := names.eraseDups
-  let lines ← t.lines.mapM fun l => term env c.ty l.expr
-  let claim ← term env .boolean t.claim
-  -- The links of the chain, each proved by `netty_step` and joined by `Trans`,
-  -- which is what a `calc` block elaborates to.
+  let p := t.cx.prog
+  let exprs := t.claim :: t.lines.map (·.expr)
+  let env := theoremTys (stateTys p) exprs
+  let sc : Scope := { env := env, prog := p }
+  -- The theorem is about its free identifiers, and — when any line is written in
+  -- programming notation — about the whole state before and after.
+  let plain := exprs.all p.isPlain
+  -- A domain is a name of a bunch, not an identifier of the theorem.
+  let free := (exprs.flatMap Expr.vars).filter fun n =>
+    n != "ok" && !p.specs.any (·.1 == n) && !["int", "nat", "bin", "bool"].contains n
+  let names := ((if plain then [] else p.params) ++ free).eraseDups
+  let lines ← t.lines.mapM fun l => term sc c.ty l.expr
+  let claim ← term sc .boolean t.claim
+  -- The named specifications are unfolded before each step is proved.
+  let unfold : Array Ident := (p.specs.map fun (n, _) => ident n).toArray
   let pairs := lines.zip (lines.drop 1)
   let conns := (t.lines.drop 1).map fun l => l.conn.getD .eq
+  let lemmas : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
+    unfold.mapM fun i => `(Lean.Parser.Tactic.simpLemma| $i:ident)
   let links ← (pairs.zip conns).mapM fun ((a, b), o) => do
     let rel ← link c.ty o a b
-    `((show $rel from by netty_step))
+    if unfold.isEmpty then `((show $rel from by netty_step))
+    else `((show $rel from by (try simp only [$lemmas,*] at *) <;> netty_step))
   let chain ← match links with
     | l :: ls => ls.foldlM (fun acc x => `(Trans.trans $acc $x)) l
     | [] => throwError "Netty: a calculation needs two lines"
   let bottom := (t.lines.getLast?.map (·.expr)).getD .top
-  let top := (t.lines.head?.map (·.expr)).getD .top
-  let whole := (Netty.Expr.bin c.rel top bottom).normAssoc == t.claim.normAssoc
-  let body ← if whole then pure chain else match c.rel, bottom with
+  let first := (t.lines.head?.map (·.expr)).getD .top
+  let whole := (Netty.Expr.bin c.rel first bottom).normAssoc == t.claim.normAssoc
+  let body ← if whole then
+      (if c.ty == .boolean && c.rel == .eq then `(propext $chain) else pure chain)
+    else match c.rel, bottom with
     | .eq, .top => if c.ty == .boolean then `(($chain).mpr trivial) else pure chain
     | .rimp, .top => `(($chain) trivial)
     | .eq, .bot => if c.ty == .boolean then `(fun h => ($chain).mp h) else pure chain
     | .imp, .bot => `(fun h => ($chain) h)
     | _, _ => pure chain
-  let binders ← names.mapM fun n => do
-    let ty ← match env.lookup n |>.getD .boolean with
-      | .boolean => `(Prop)
-      | .number => `(Int)
-    `(bracketedBinder| ($(ident n) : $ty))
-  let bs := binders.toArray
+  let mut binders : Array Syntax := #[]
+  for n in names do
+    let ty ← leanTy ((env.lookup n).getD .boolean)
+    binders := binders.push (← `(bracketedBinder| ($(ident n) : $ty)))
+    -- A natural state variable, or its prime, is at least zero.
+    let isNat := p.state.any fun (v, d) => (v == n || prime v == n) && d == .var "nat"
+    if isNat then
+      let h := mkIdent (Name.mkSimple ("h_" ++ (ident n).getId.toString))
+      binders := binders.push (← `(bracketedBinder| ($h : 0 ≤ $(ident n))))
+  let bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder) := binders.map (⟨·⟩)
   let declName := mkIdent (Name.mkSimple (t.name.map fun ch => if ch == ' ' then '_' else ch))
   `(open Classical in theorem $declName:ident $bs* : $claim := $body)
 
@@ -260,12 +362,31 @@ open _root_.Lean Elab Command in
   let dir := (System.FilePath.mk (← getFileName)).parent.getD (System.FilePath.mk ".")
   let path := dir / p
   let text ← IO.FS.readFile path
-  match Proof.checkFile text with
+  let _ := text
+  let f ← match ← (Proof.load path).toBaseIO with
+    | .ok f => pure f
+    | .error e => throwError s!"{e}"
+  match Proof.checkParsed f with
   | .error e => throwError s!"{path}: {e}"
   | .ok cs =>
+      -- The specifications this file names become Lean definitions, in the
+      -- order they were named; those of the files it extends are the Lean
+      -- definitions of those files' own modules, which the importing module
+      -- must have open.
+      let mut prog : Prog := { state := f.cx.prog.state }
+      let own := f.ownSpecs
+      for (n, body) in f.cx.prog.specs do
+        if own.contains n then
+          withRef stx (elabCommand (← specCmd prog n body))
+        prog := { prog with specs := prog.specs ++ [(n, body)] }
       for c in cs do
         let cmd ← theoremCmd c
+        let before := (← get).messages.toList.filter (·.severity == .error) |>.length
         withRef stx (elabCommand cmd)
-        logInfo m!"{c.summary}"
+        let after := (← get).messages.toList.filter (·.severity == .error) |>.length
+        if after > before then
+          logError m!"Lean could not prove a step of {c.thm.name} (line {c.thm.lineNo}); \
+            the statement it was proving:\n{cmd}"
+        else logInfo m!"{c.summary}"
 
 end Netty.ToLean

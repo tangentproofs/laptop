@@ -40,6 +40,8 @@ private def binOp : BinOp → Lean.Ident
   | .sub => Lean.mkCIdent ``BinOp.sub
   | .mul => Lean.mkCIdent ``BinOp.mul
   | .mem => Lean.mkCIdent ``BinOp.mem
+  | .assign => Lean.mkCIdent ``BinOp.assign
+  | .seq => Lean.mkCIdent ``BinOp.seq
 
 /-- Quote a `Quant` as a term. -/
 private def quant : Quant → Lean.Ident

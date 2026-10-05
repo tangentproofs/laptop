@@ -1385,9 +1385,12 @@ def main (args : List String) : IO UInt32 := do
     if !o.check.isEmpty then
       let mut ok := true
       for path in o.check do
-        match Proof.checkFile (← IO.FS.readFile path) with
-        | .ok cs => for c in cs do IO.println c.summary
-        | .error e => IO.eprintln s!"{path}: {e}"; ok := false
+        match ← (Proof.load path).toBaseIO with
+        | .error e => IO.eprintln s!"{e}"; ok := false
+        | .ok f =>
+            match Proof.checkParsed f with
+            | .ok cs => for c in cs do IO.println c.summary
+            | .error e => IO.eprintln s!"{path}: {e}"; ok := false
       return (if ok then 0 else 1)
     -- The laws in force: the built-in boolean list unless `--bare`, then each
     -- law file named on the command line.
