@@ -13,8 +13,10 @@
       <nav class="top" aria-label="Primary">
         <a href="./" aria-current="page">Home</a>
         <a href="/netty/">Netty</a>
-        <a class="soon" href="./interp/">Interpreter <span class="badge">soon</span></a>
+        <a href="./interp/">Interpreter</a>
         <a href="./examples/">Examples</a>
+        <a class="ext book" href="https://www.cs.toronto.edu/~hehner/aPToP/" target="_blank" rel="noopener">Book</a>
+        <a class="ext course" href="https://www.cs.utoronto.ca/~hehner/FMSD/" target="_blank" rel="noopener">Course</a>
       </nav>
     </header>
 
@@ -24,33 +26,46 @@
       the book’s calculational proofs and programming notation runnable.
     </p>
 
+    <div class="sources" role="navigation" aria-label="Book and course">
+      <a class="book" href="https://www.cs.toronto.edu/~hehner/aPToP/" target="_blank" rel="noopener">
+        📖 aPToP book (free)
+      </a>
+      <a class="book" href="https://www.cs.toronto.edu/~hehner/aPToP/aPToP.pdf" target="_blank" rel="noopener">
+        PDF
+      </a>
+      <a class="course" href="https://www.cs.utoronto.ca/~hehner/FMSD/" target="_blank" rel="noopener">
+        ▶ Video course (FMSD)
+      </a>
+      <span class="hint">Hehner’s book + Formal Methods of Software Design lectures — start here before the tools.</span>
+    </div>
+
     <div class="cards">
       <a class="card" href="/netty/">
         <div class="label">Netty</div>
-        <p class="muted">Three-pane assistant for calculational proofs: proof, context, suggestions — Lean kernel, no Mathlib.</p>
+        <p class="muted">Three-pane assistant for calculational proofs: proof, context, suggestions — Lean kernel, no Mathlib. Book exercises under Examples.</p>
       </a>
       <a class="card" href="./interp/">
-        <div class="label">Interpreter <span class="badge">soon</span></div>
-        <p class="muted">Run aPToP programming notation in the browser. CLI exists today; web runner is next. Preview the highlighter here.</p>
+        <div class="label">Interpreter</div>
+        <p class="muted">Run aPToP programming notation in the browser. Editable editor with <code>\xx</code> symbols; Run posts to a loopback runner.</p>
       </a>
       <a class="card" href="./examples/">
         <div class="label">Examples</div>
-        <p class="muted">Book-flavored snippets from the interpreter demos — static for now; CodeMirror on /interp later.</p>
+        <p class="muted">Interpreter demos with syntax highlighting — type <code>\=> \equiv \times \cdot \prime</code> for book glyphs.</p>
       </a>
     </div>
 
-    <h2>What ships in v1</h2>
+    <h2>What ships here</h2>
     <p>
-      This host serves the static home from the laptop repo’s
-      <code>deploy/aptop/site/</code>, and proxies <code>/netty/</code> to a
-      loopback Node process that keeps a Lean Netty kernel. The interpreter
-      link is a coming-soon page with a working syntax highlighter.
+      Static home from <code>deploy/aptop/site/</code>; <code>/netty/</code> proxies to
+      a loopback Node + Lean Netty kernel; <code>/interp/</code> is an editable
+      runner (binary may be stubbed if Mathlib build is unavailable on this box).
     </p>
     <p class="muted">
-      Deploy notes for the Linode host live in
-      <code>deploy/aptop/deploy.md</code> in the public
-      <a href="https://github.com/tangentproofs/laptop">tangentproofs/laptop</a>
-      repository.
+      Deploy notes: <code>deploy/aptop/deploy.md</code> in
+      <a href="https://github.com/tangentproofs/laptop">tangentproofs/laptop</a>.
+      Canonical book: <a href="https://hehner.ca/aPToP">hehner.ca/aPToP</a>
+      · course: <a href="https://hehner.ca/FMSD">hehner.ca/FMSD</a>
+      (U of T mirrors linked above).
     </p>
 
     <footer class="site">

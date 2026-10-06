@@ -29,8 +29,45 @@ let note = '';
 let noteIsError = false;
 /** Whether the panes are drawn as the command line prints them. */
 let asText = false;
+/** Book .calc example currently shown (from LaPToP/Exercises/calc). */
+let bookExample: { name: string; text: string } | null = null;
 /** What the direct-entry and start rows hold, kept across a redraw. */
 const typed = { start: '', direct: '', ty: 'boolean', startConn: '⇐', directConn: '' };
+
+/** Book calculation files shipped under public/examples/ (aPToP §10.4). */
+const BOOK_CALCS: { id: string; label: string; file: string }[] = [
+  { id: 'ex121', label: 'ex121 (ch4 · substitution)', file: 'examples/ch4.calc' },
+  { id: 'ex136', label: 'ex136 (ch4b · boolean assign)', file: 'examples/ch4b.calc' },
+  { id: 'ex137', label: 'ex137 (ch4c · swap / sum)', file: 'examples/ch4c.calc' },
+  { id: 'sum', label: 'sum (ex140 implementation)', file: 'examples/sum.calc' },
+  { id: 'ex139', label: 'ex139 (nat loop refine)', file: 'examples/ex139.calc' },
+];
+
+/** Interactive demos still in the kernel; portation first, UI gadgets last. */
+const UI_DEMOS = ['portation', 'discharge', 'minimize', 'segment', 'segfold', 'gap', 'fold', 'merge'];
+
+function examplesBase(): string {
+  const base = window.location.pathname.endsWith('/')
+    ? window.location.pathname
+    : window.location.pathname.replace(/\/[^/]*$/, '/');
+  return base;
+}
+
+async function loadBookCalc(file: string, label: string): Promise<void> {
+  try {
+    const res = await fetch(examplesBase() + file);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    bookExample = { name: label, text };
+    note = `book example: ${label} (read-only calc — use demonstration… for live portation)`;
+    noteIsError = false;
+    draw();
+  } catch (e) {
+    note = `book example: ${String(e)}`;
+    noteIsError = true;
+    draw();
+  }
+}
 
 /** Make an element. */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -474,12 +511,29 @@ function toolbar(s: StateView | null): HTMLElement {
     bar.append(b);
     return b;
   };
-  const demos = el('select', { class: 'demos', title: 'replay a demonstration of the document' });
+  const books = el('select', { class: 'demos', title: 'aPToP book calculations (LaPToP/Exercises/calc)' });
+  books.append(el('option', { value: '' }, 'book examples…'));
+  for (const b of BOOK_CALCS)
+    books.append(el('option', { value: b.file + '|' + b.label }, b.label));
+  books.addEventListener('change', () => {
+    if (books.value !== '') {
+      const [file, label] = books.value.split('|');
+      if (file && label) void loadBookCalc(file, label);
+    }
+    books.value = '';
+  });
+  bar.append(books);
+
+  const demos = el('select', { class: 'demos', title: 'replay a built-in demonstration (portation first; UI gadgets secondary)' });
   demos.append(el('option', { value: '' }, 'demonstration…'));
-  for (const d of ['portation', 'discharge', 'gap', 'minimize', 'segment', 'segfold', 'fold', 'merge'])
-    demos.append(el('option', { value: d }, d));
+  const live = el('optgroup', { label: 'live (kernel)' });
+  for (const d of UI_DEMOS) live.append(el('option', { value: d }, d));
+  demos.append(live);
   demos.addEventListener('change', () => {
-    if (demos.value !== '') void send('demo', demos.value);
+    if (demos.value !== '') {
+      bookExample = null;
+      void send('demo', demos.value);
+    }
     demos.value = '';
   });
   bar.append(demos);
@@ -508,17 +562,35 @@ function draw(): void {
   const root = document.getElementById('app');
   if (root === null) return;
   const s = state;
-  root.replaceChildren(
+  const kids: (Node | string)[] = [
     el('header', {},
       el('h1', {}, 'Netty'),
       el('span', { class: 'tagline' }, 'a prover’s assistant for calculational proofs'),
+      el('a', {
+        class: 'book-link',
+        href: 'https://www.cs.toronto.edu/~hehner/aPToP/',
+        target: '_blank',
+        rel: 'noopener',
+      }, 'aPToP book'),
+      el('a', {
+        class: 'book-link course',
+        href: 'https://www.cs.utoronto.ca/~hehner/FMSD/',
+        target: '_blank',
+        rel: 'noopener',
+      }, 'FMSD course'),
       toolbar(s)),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
-          'click a suggestion to take it — pointing at one lights up the part it rewrites; click a subexpression or a run of them to zoom in, a line number to move the focus')
+          'book examples… loads §10.4 .calc files — demonstration… replays portation (UI demos secondary); click a suggestion to take it')
       : el('div', { class: 'note-bar' + (noteIsError ? ' error' : '') }, note),
-    el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)),
-  );
+  ];
+  if (bookExample !== null) {
+    kids.push(el('details', { class: 'book-calc', open: 'open' },
+      el('summary', {}, `Book: ${bookExample.name}`),
+      el('pre', {}, bookExample.text)));
+  }
+  kids.push(el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)));
+  root.replaceChildren(...kids);
 }
 
 /** The keys the document's own description gives to the mouse. */

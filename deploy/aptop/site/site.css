@@ -142,3 +142,86 @@ footer.site {
 .cm-aptop-number { color: var(--num); }
 .cm-aptop-comment { color: var(--cmt); font-style: italic; }
 .cm-aptop-bool { color: var(--str); }
+
+/* Book + course — hard to miss */
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0 0 1.25rem;
+}
+.sources a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+}
+.sources a:hover {
+  border-color: var(--accent);
+  text-decoration: none;
+  background: #1e2833;
+}
+.sources a.book { border-color: var(--accent); color: var(--accent); }
+.sources a.course { border-color: var(--accent2); color: var(--accent2); }
+.sources .hint {
+  flex: 1 1 12rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  align-self: center;
+}
+
+nav.top a.ext {
+  color: var(--accent);
+  font-weight: 600;
+}
+nav.top a.ext.course { color: var(--accent2); }
+
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.75rem 0;
+}
+.toolbar-row button, .toolbar-row select {
+  font: inherit;
+  padding: 0.4rem 0.75rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+}
+.toolbar-row button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 650;
+}
+.toolbar-row button:disabled { opacity: 0.5; cursor: wait; }
+.toolbar-row .hint { color: var(--muted); font-size: 0.85rem; }
+.out {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  min-height: 4rem;
+  white-space: pre-wrap;
+  font: 0.85rem/1.45 ui-monospace, Menlo, Consolas, monospace;
+  color: var(--fg);
+  margin-top: 0.75rem;
+}
+.out.err { border-color: #e06c75; color: #e06c75; }
+.out.ok { border-color: var(--accent2); }
+.exp-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0.35rem 0 0;
+}

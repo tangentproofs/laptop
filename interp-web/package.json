@@ -1,0 +1,17 @@
+{
+  "name": "interp-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Loopback wrapper: POST program → .lake/build/bin/interp (mirror of netty-web).",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "serve": "npm run build && node dist/server.js",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.0"
+  }
+}
