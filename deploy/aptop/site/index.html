@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>aPToP / LaPToP — aptop.tangentcode.com</title>
+  <link rel="stylesheet" href="./site.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <a class="brand" href="./">aPToP <span>/ LaPToP</span></a>
+      <nav class="top" aria-label="Primary">
+        <a href="./" aria-current="page">Home</a>
+        <a href="/netty/">Netty</a>
+        <a class="soon" href="./interp/">Interpreter <span class="badge">soon</span></a>
+        <a href="./examples/">Examples</a>
+      </nav>
+    </header>
+
+    <h1>A Practical Theory of Programming</h1>
+    <p class="lead">
+      Lean formalization of Eric Hehner’s <em>aPToP</em>, plus tools that make
+      the book’s calculational proofs and programming notation runnable.
+    </p>
+
+    <div class="cards">
+      <a class="card" href="/netty/">
+        <div class="label">Netty</div>
+        <p class="muted">Three-pane assistant for calculational proofs: proof, context, suggestions — Lean kernel, no Mathlib.</p>
+      </a>
+      <a class="card" href="./interp/">
+        <div class="label">Interpreter <span class="badge">soon</span></div>
+        <p class="muted">Run aPToP programming notation in the browser. CLI exists today; web runner is next. Preview the highlighter here.</p>
+      </a>
+      <a class="card" href="./examples/">
+        <div class="label">Examples</div>
+        <p class="muted">Book-flavored snippets from the interpreter demos — static for now; CodeMirror on /interp later.</p>
+      </a>
+    </div>
+
+    <h2>What ships in v1</h2>
+    <p>
+      This host serves the static home from the laptop repo’s
+      <code>deploy/aptop/site/</code>, and proxies <code>/netty/</code> to a
+      loopback Node process that keeps a Lean Netty kernel. The interpreter
+      link is a coming-soon page with a working syntax highlighter.
+    </p>
+    <p class="muted">
+      Deploy notes for the Linode host live in
+      <code>deploy/aptop/deploy.md</code> in the public
+      <a href="https://github.com/tangentproofs/laptop">tangentproofs/laptop</a>
+      repository.
+    </p>
+
+    <footer class="site">
+      aptop.tangentcode.com · LaPToP / Netty · public repo tangentproofs/laptop
+    </footer>
+  </div>
+</body>
+</html>

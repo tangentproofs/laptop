@@ -1,0 +1,23 @@
+# STUB — do NOT install or enable.
+# The interpreter web wrapper is not ready. CLI remains `lake exe interp`.
+# When a Node (or other) wrapper exists, bind loopback only on :4712 and
+# mirror aptop-netty.service (User=michal, MemoryMax honest for Lean+runner).
+# Until then, /interp/ is a static coming-soon page under deploy/aptop/site/.
+
+[Unit]
+Description=aptop Interpreter web (NOT READY — stub)
+After=network.target
+
+[Service]
+Type=simple
+User=michal
+WorkingDirectory=/home/michal/ver/laptop
+Environment=PATH=/home/michal/.elan/bin:/usr/local/bin:/usr/bin:/bin
+Environment=INTERP_HOST=127.0.0.1
+Environment=INTERP_PORT=4712
+# Placeholder so a mistaken enable fails closed:
+ExecStart=/bin/false
+Restart=no
+
+[Install]
+WantedBy=default.target
