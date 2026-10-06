@@ -21,6 +21,10 @@
  */
 
 import type { LineView, Op, PartView, Response, StateView, SuggestionView } from './protocol.js';
+import {
+  BOOK_CALCS, UI_DEMOS, examplesBase, parseCalcTheorems, theoremToScript,
+  type CalcTheorem,
+} from './calc-load.js';
 
 /** The state the kernel last sent. */
 let state: StateView | null = null;
@@ -31,6 +35,12 @@ let noteIsError = false;
 let asText = false;
 /** What the direct-entry and start rows hold, kept across a redraw. */
 const typed = { start: '', direct: '', ty: 'boolean', startConn: '⇐', directConn: '' };
+/** Book .calc currently loaded (source kept for optional reference). */
+let bookExample: { name: string; text: string; theorem: string } | null = null;
+/** Theorems parsed from the last fetched .calc (for the theorem picker). */
+let bookTheorems: CalcTheorem[] = [];
+let bookFileLabel = '';
+
 
 /** Make an element. */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -82,6 +92,69 @@ async function send(op: Op, arg = ''): Promise<Response | null> {
 
 /** Run one line of the script language. */
 const cmd = (line: string) => send('cmd', line);
+
+/** Replay Netty script lines into the kernel (proof pane). */
+async function replayScript(lines: string[]): Promise<boolean> {
+  await send('reset');
+  for (const line of lines) {
+    const t = line.trim();
+    if (t === '' || t.startsWith('#')) continue;
+    const word = t.split(/\s+/)[0] ?? '';
+    if (word === 'proof' || word === 'suggest' || word === 'context') continue;
+    const a = await send('cmd', t);
+    if (a === null) return false;
+    if (!a.ok) {
+      // apply failed — fall back to direct so the line still lands in the pane
+      if (word === 'apply') {
+        const m = t.match(/^apply\s+.+?\s*:\s*([=≡⇒⇐≤≥⟹⟸])\s+(.+)$/);
+        if (m) {
+          const a2 = await send('cmd', `direct ${m[1]} ${m[2]}`);
+          if (a2 === null || !a2.ok) return false;
+          continue;
+        }
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Fetch a .calc and load its first (or named) theorem into the proof editor. */
+async function loadBookCalc(file: string, label: string, theoremIndex = 0): Promise<void> {
+  try {
+    const res = await fetch(examplesBase() + file);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    bookTheorems = parseCalcTheorems(text);
+    bookFileLabel = label;
+    if (bookTheorems.length === 0) {
+      bookExample = { name: label, text, theorem: '' };
+      note = `book example: ${label} — no theorem/refine blocks found to load`;
+      noteIsError = true;
+      draw();
+      return;
+    }
+    const idx = Math.max(0, Math.min(theoremIndex, bookTheorems.length - 1));
+    const th = bookTheorems[idx]!;
+    const script = theoremToScript(th);
+    bookExample = { name: label, text, theorem: th.name };
+    const ok = await replayScript(script);
+    if (ok) {
+      note = `loaded “${th.name}” into the proof pane (${idx + 1}/${bookTheorems.length} in ${label})`;
+      noteIsError = false;
+    } else {
+      note = `partial load of “${th.name}” — see note above; source kept under Book`;
+      // noteIsError already set by send() on failure; keep soft
+      noteIsError = false;
+    }
+    draw();
+  } catch (e) {
+    note = `book example: ${String(e)}`;
+    noteIsError = true;
+    draw();
+  }
+}
+
 
 /** The directions of a type, as the kernel writes them. */
 const DIRECTIONS: Record<string, string[]> = {
@@ -474,12 +547,60 @@ function toolbar(s: StateView | null): HTMLElement {
     bar.append(b);
     return b;
   };
-  const demos = el('select', { class: 'demos', title: 'replay a demonstration of the document' });
+  const books = el('select', { class: 'demos', title: 'aPToP book calculations — load into the proof pane' });
+  books.append(el('option', { value: '' }, 'book examples…'));
+  for (const b of BOOK_CALCS)
+    books.append(el('option', { value: `${b.file}|${b.label}` }, b.label));
+  books.addEventListener('change', () => {
+    if (books.value !== '') {
+      const [file, label] = books.value.split('|');
+      if (file && label) void loadBookCalc(file, label, 0);
+    }
+    books.value = '';
+  });
+  bar.append(books);
+
+  if (bookTheorems.length > 1) {
+    const ths = el('select', { class: 'demos', title: 'choose a theorem from the loaded .calc' });
+    ths.append(el('option', { value: '' }, `theorems (${bookTheorems.length})…`));
+    bookTheorems.forEach((th, i) => {
+      ths.append(el('option', { value: String(i) }, th.name || `theorem ${i + 1}`));
+    });
+    ths.addEventListener('change', () => {
+      if (ths.value !== '' && bookExample !== null) {
+        const idx = Number(ths.value);
+        const th = bookTheorems[idx];
+        if (th) {
+          void (async () => {
+            const script = theoremToScript(th);
+            bookExample = {
+              name: bookFileLabel || bookExample!.name,
+              text: bookExample!.text,
+              theorem: th.name,
+            };
+            const ok = await replayScript(script);
+            note = ok
+              ? `loaded “${th.name}” into the proof pane (${idx + 1}/${bookTheorems.length})`
+              : `partial load of “${th.name}”`;
+            noteIsError = false;
+            draw();
+          })();
+        }
+      }
+      ths.value = '';
+    });
+    bar.append(ths);
+  }
+
+  const demos = el('select', { class: 'demos', title: 'replay a built-in demonstration (portation first)' });
   demos.append(el('option', { value: '' }, 'demonstration…'));
-  for (const d of ['portation', 'discharge', 'gap', 'minimize', 'segment', 'segfold', 'fold', 'merge'])
-    demos.append(el('option', { value: d }, d));
+  for (const d of UI_DEMOS) demos.append(el('option', { value: d }, d));
   demos.addEventListener('change', () => {
-    if (demos.value !== '') void send('demo', demos.value);
+    if (demos.value !== '') {
+      bookExample = null;
+      bookTheorems = [];
+      void send('demo', demos.value);
+    }
     demos.value = '';
   });
   bar.append(demos);
@@ -508,17 +629,38 @@ function draw(): void {
   const root = document.getElementById('app');
   if (root === null) return;
   const s = state;
-  root.replaceChildren(
+  const kids: (Node | string)[] = [
     el('header', {},
       el('h1', {}, 'Netty'),
       el('span', { class: 'tagline' }, 'a prover’s assistant for calculational proofs'),
+      el('a', {
+        class: 'book-link',
+        href: 'https://www.cs.toronto.edu/~hehner/aPToP/',
+        target: '_blank',
+        rel: 'noopener',
+      }, 'aPToP book'),
+      el('a', {
+        class: 'book-link course',
+        href: 'https://www.cs.utoronto.ca/~hehner/FMSD/',
+        target: '_blank',
+        rel: 'noopener',
+      }, 'FMSD course'),
       toolbar(s)),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
-          'click a suggestion to take it — pointing at one lights up the part it rewrites; click a subexpression or a run of them to zoom in, a line number to move the focus')
+          'book examples… loads a §10.4 calculation into the proof pane; demonstration… replays a built-in proof; click a suggestion to take it')
       : el('div', { class: 'note-bar' + (noteIsError ? ' error' : '') }, note),
-    el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)),
-  );
+  ];
+  if (bookExample !== null) {
+    const summary = bookExample.theorem
+      ? `Book source: ${bookExample.name} · ${bookExample.theorem}`
+      : `Book source: ${bookExample.name}`;
+    kids.push(el('details', { class: 'book-calc' },
+      el('summary', {}, summary),
+      el('pre', {}, bookExample.text)));
+  }
+  kids.push(el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)));
+  root.replaceChildren(...kids);
 }
 
 /** The keys the document's own description gives to the mouse. */

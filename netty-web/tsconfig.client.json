@@ -16,5 +16,5 @@
     "sourceMap": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/client.ts", "src/protocol.ts"]
+  "include": ["src/client.ts", "src/protocol.ts", "src/calc-load.ts"]
 }

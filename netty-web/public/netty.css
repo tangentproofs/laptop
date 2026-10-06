@@ -257,3 +257,36 @@ button.operand.site, button.operand.segment.site {
 .holes input { font-family: var(--mono); font-size: 0.8rem; padding: 0.1rem 0.3rem;
   border: 1px solid var(--rule); border-radius: 3px; background: var(--pane); color: var(--ink); }
 .holes button { font-size: 0.75rem; padding: 0.1rem 0.5rem; }
+
+a.book-link {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--hot);
+  text-decoration: none;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.15rem 0.5rem;
+}
+a.book-link:hover { border-color: var(--hot); text-decoration: underline; }
+a.book-link.course { color: var(--good); }
+
+.book-calc {
+  margin: 0;
+  padding: 0.4rem 1rem 0.6rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--pane);
+  max-height: 28vh;
+  overflow: auto;
+}
+.book-calc summary {
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--hot);
+  margin-bottom: 0.35rem;
+}
+.book-calc pre {
+  margin: 0;
+  font: 0.8rem/1.4 var(--mono);
+  white-space: pre-wrap;
+  color: var(--ink);
+}
