@@ -3,81 +3,163 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Interpreter (coming soon) — aPToP / LaPToP</title>
+  <title>Interpreter — aPToP / LaPToP</title>
   <link rel="stylesheet" href="../site.css" />
 </head>
 <body>
   <div class="wrap">
     <header class="site">
       <a class="brand" href="../">aPToP <span>/ LaPToP</span></a>
-      <nav class="top" aria-label="Primary">
-        <a href="../">Home</a>
-        <a href="/netty/">Netty</a>
-        <a href="./" aria-current="page">Interpreter <span class="badge">soon</span></a>
-        <a href="../examples/">Examples</a>
+            <nav class="top" aria-label="Primary">
+        <span class="nav-local">
+          <a href="../">Home</a>
+          <a href="/netty/">Netty</a>
+          <a href="./" aria-current="page">Interpreter</a>
+          <a href="../examples/">Examples</a>
+        </span>
+        <span class="nav-hehner">
+          <a class="ext book" href="https://www.cs.toronto.edu/~hehner/aPToP/" target="_blank" rel="noopener">aPToP book (free)</a>
+          <a class="ext course" href="https://www.cs.utoronto.ca/~hehner/FMSD/" target="_blank" rel="noopener">Video Course</a>
+        </span>
       </nav>
     </header>
 
-    <h1>Interpreter <span class="badge">coming soon</span></h1>
+    <h1>Interpreter</h1>
     <p class="lead">
-      The aPToP programming notation runs today on the CLI
-      (<code>lake exe interp</code>). A browser runner is not wired up on this
-      host yet — until it is, here is a <strong>read-only CodeMirror</strong>
-      preview of the language highlighter (keywords from
-      <code>InterpreterLangSyntax.lean</code>).
+      Edit aPToP programming notation, then Run. Common symbols:
+      ∧ and · ∨ or · ⇒ implies · ⇐ implied by · ≡ equivalent ·
+      ⊤ true · ⊥ false · × times · · dot · ′ prime.
+      On a phone, tap <strong>Symbols</strong> to insert them.
     </p>
 
-    <div class="card">
-      <h2>Highlighter demo</h2>
-      <p class="muted">
-        Sample: Euclid’s algorithm as a recursive procedure
-        (<code>--demo=gcd</code>). Comments use <code>--</code>.
-      </p>
-      <div id="editor" class="editor" aria-label="Sample aPToP program"></div>
-      <p class="muted" style="margin-top:0.75rem;font-size:0.85rem">
-        Offline: <code>lake exe interp --demo=gcd x=12 y=18</code>
-        · more snippets on <a href="../examples/">Examples</a>
-      </p>
+    <div class="sources" role="navigation" aria-label="Book and course">
+      <a class="book" href="https://www.cs.toronto.edu/~hehner/aPToP/" target="_blank" rel="noopener">📖 aPToP book</a>
+      <a class="course" href="https://www.cs.utoronto.ca/~hehner/FMSD/" target="_blank" rel="noopener">▶ FMSD course</a>
     </div>
 
-    <h2>What’s deferred</h2>
-    <ul class="muted">
-      <li>Web wrapper posting programs to a loopback runner on <code>:4712</code></li>
-      <li>Building <code>interp</code> / Mathlib on this 4 GB box (prefer another host)</li>
-      <li>Editable run / step UI</li>
-    </ul>
+    <div class="card">
+      <h2>Program</h2>
+      <div class="toolbar-row">
+        <label>
+          Demo
+          <select id="demo">
+            <option value="gcd">gcd</option>
+            <option value="sumTo">sumTo</option>
+            <option value="forLoop">forLoop</option>
+            <option value="listSum">listSum</option>
+            <option value="swap">swap</option>
+            <option value="exitLoop">exitLoop</option>
+            <option value="">(custom)</option>
+          </select>
+        </label>
+        <input id="args" type="text" value="x=12 y=18" placeholder="n=10 or x=12 y=18"
+               style="flex:1;min-width:10rem;padding:0.4rem 0.6rem;border-radius:5px;border:1px solid var(--border);background:var(--code-bg);color:var(--fg);font:inherit" />
+        <button type="button" class="primary" id="run">Run</button>
+        <span class="hint" id="status"></span>
+      </div>
+      <div class="editor-tools"><div id="sym-host" class="sym-mount"></div></div>
+      <div id="editor" class="editor" aria-label="aPToP program"></div>
+      <div id="out" class="out muted" aria-live="polite">Output appears here.</div>
+    </div>
 
     <footer class="site">
-      Mode source: <code>deploy/aptop/site/js/aptop.js</code>
+      API: <code>POST /interp/api/run</code> → loopback <code>:4712</code>
+      · CLI: <code>lake exe interp</code>
     </footer>
   </div>
 
   <script type="module">
-    import { mountAptopEditor } from '../js/aptop-editor.js';
+    import { mountAptopEditor, mountSymbolSheet } from '../js/aptop-editor.js';
 
-    const sample = `-- Euclid (aPToP interpreter notation)
--- Keywords: if then else fi, ok, mod, …
+    const DEMOS = {
+      gcd: `-- Euclid (aPToP interpreter notation)
 Gcd(a, b) ⇐ if b = 0 then g:= a else Gcd(b, a mod b) fi
 Gcd(x, y)
+`,
+      sumTo: `i:= 0. s:= 0. while i ≠ n do i:= i+1. s:= s+i od`,
+      forLoop: `s:= 0. for i:= 1;..n+1 do s:= s + i od`,
+      listSum: `A ⇐ s:= 0. n:= 0. B
+B ⇐ if n = #L then ok else s:= s + L n. n:= n+1. B fi`,
+      swap: `x, y:= y, x`,
+      exitLoop: `do exit when n ≤ x. x:= x+1 od`,
+    };
 
--- sum 1..n
-i:= 0. s:= 0.
-while i ≠ n do
-  i:= i+1.
-  s:= s+i
-od
-
--- for-range uses ;..
-s:= 0. for i:= 1;..n+1 do s:= s + i od
-
--- simultaneous assignment and boolean ops
-x, y:= y, x.
-ensure x ≠ y \\/ true --> ok
-`;
+    const DEFAULT_ARGS = {
+      gcd: 'x=12 y=18',
+      sumTo: 'n=10',
+      forLoop: 'n=10',
+      listSum: 'L=[3;1;2]',
+      swap: 'x=1 y=2',
+      exitLoop: 'n=5 x=0',
+    };
 
     const host = document.getElementById('editor');
-    mountAptopEditor(host, sample, { readOnly: true }).catch((err) => {
-      host.innerHTML = '<pre>' + sample.replace(/</g, '&lt;') + '</pre>';
+    const out = document.getElementById('out');
+    const status = document.getElementById('status');
+    const demoSel = document.getElementById('demo');
+    const argsIn = document.getElementById('args');
+    let view = null;
+
+    mountSymbolSheet(document.getElementById('sym-host'), () => view);
+
+    function apiUrl() {
+      const base = window.location.pathname.endsWith('/')
+        ? window.location.pathname
+        : window.location.pathname.replace(/\/[^/]*$/, '/');
+      return new URL('api/run', window.location.origin + base).pathname;
+    }
+
+    async function setDoc(text) {
+      if (view) {
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: text },
+        });
+      } else {
+        view = await mountAptopEditor(host, text, { readOnly: false, maxHeight: '28rem' });
+      }
+    }
+
+    demoSel.addEventListener('change', () => {
+      const k = demoSel.value;
+      if (k && DEMOS[k]) {
+        void setDoc(DEMOS[k]);
+        argsIn.value = DEFAULT_ARGS[k] ?? '';
+      }
+    });
+
+    document.getElementById('run').addEventListener('click', async () => {
+      if (!view) return;
+      const program = view.state.doc.toString();
+      const args = argsIn.value.trim();
+      const demo = demoSel.value;
+      status.textContent = 'running…';
+      out.className = 'out';
+      out.textContent = '';
+      try {
+        const res = await fetch(apiUrl(), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ program, args, demo: demo || undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.ok === false) {
+          out.className = 'out err';
+          out.textContent = data.error || data.stderr || `HTTP ${res.status}`;
+          status.textContent = 'failed';
+        } else {
+          out.className = 'out ok';
+          out.textContent = (data.stdout || '') + (data.stderr ? '\n' + data.stderr : '');
+          status.textContent = data.stub ? 'stub (no interp binary)' : `exit ${data.code ?? 0}`;
+        }
+      } catch (e) {
+        out.className = 'out err';
+        out.textContent = String(e);
+        status.textContent = 'error';
+      }
+    });
+
+    setDoc(DEMOS.gcd).catch((err) => {
+      host.innerHTML = '<pre>' + DEMOS.gcd.replace(/</g, '&lt;') + '</pre>';
       console.error(err);
     });
   </script>

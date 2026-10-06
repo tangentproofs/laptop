@@ -20,8 +20,9 @@ Host: tangentcode Linode `45.79.174.182` (box ~4 GB RAM, disk tight).
 |------|------|
 | `/` | Static home (`deploy/aptop/site/`) |
 | `/netty/` | Netty three-pane UI (Node + Lean kernel) |
-| `/interp/` | Coming-soon placeholder + CodeMirror highlighter demo |
-| `/examples/` | Book-flavored snippets (static `<pre>` for now) |
+| `/interp/` | Editable CodeMirror runner + Symbols sheet (loopback `:4712` may be stubbed) |
+| `/examples/` | Highlighted editable demos + Symbols sheet |
+| `/netty/` book examples | `.calc` files under `netty-web/public/examples/` load into the proof pane |
 | `/docs/` | Optional later |
 
 ## Upstreams (loopback only)
@@ -153,7 +154,7 @@ Under `deploy/aptop/site/js/aptop.js`: CDN-based highlighter (no npm of
 CodeMirror into the Lean repo). Keywords from
 `LaPToP/ProgramTheory/InterpreterLangSyntax.lean` `keywords`; `--` line
 comments; operators `:=`, `==`, `-->`, `<--`, `=>`, `||`, `;..`, `/\`, `\/`,
-`⇐`, `⇒`, etc. Wired into `/interp/` (and optionally examples).
+`⇐`, `⇒`, etc. Wired into `/interp/` and `/examples/`. UI copy shows glyphs and plain names (Symbols sheet); no “backslash codes” jargon.
 
 ## Clone notes for cornerbot
 
@@ -172,7 +173,7 @@ lake build netty
 
 ## Deferred (v1)
 
-- Interpreter web runner / Node wrapper on `:4712`
+- Full interactive apply for program-theory `.calc` steps that need assignment/ok laws the session may not have (falls back to `direct` so the proof pane still fills)
 - Building `interp` / LaPToP+Mathlib on the aptop box
 - Optional Netty law/calc TextMate-style highlighter
 - `/docs/` Verso/blueprint site

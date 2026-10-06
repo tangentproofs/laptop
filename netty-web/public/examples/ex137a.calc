@@ -1,0 +1,12 @@
+# aPToP Exercise 137(a) solution — integer program (exact solution text).
+# State: integer variables a, b, and c.
+
+laws boolean
+state a, b, c: int
+
+theorem ex137a: (b:= a–b. b:= a–b) ≡ ok
+    b:= a–b. b:= a–b                             expand last assignment
+=   b:= a–b. a′=a ∧ b′ = a–b ∧ c′=c              Substitution Law
+=   a′=a ∧ b′ = a–(a–b) ∧ c′=c
+=   a′=a ∧ b′=b ∧ c′=c
+=   ok

@@ -1,0 +1,13 @@
+# aPToP Exercise 136(b) solution — swap via ⧧ (exact solution text).
+
+laws boolean
+state x, y: bin
+
+theorem ex136b: (x:= x⧧y. y:= x⧧y. x:= x⧧y) ≡ x′=y ∧ y′=x
+    x:= x⧧y. y:= x⧧y. x:= x⧧y                    rewrite last assignment
+=   x:= x⧧y. y:= x⧧y. x′ = (x⧧y) ∧ y′=y          Substitution Law
+=   x:= x⧧y. x′=(x⧧(x⧧y)) ∧ y′=(x⧧y)             Substitution Law
+=   x′=((x⧧y)⧧((x⧧y)⧧y)) ∧ y′=((x⧧y)⧧y)         Associativity and Symmetry of ⧧
+=   x′=(((x⧧x)⧧(y⧧y))⧧y) ∧ y′=(x⧧(y⧧y))
+=   x′=((⊥⧧⊥)⧧y) ∧ y′=(x⧧⊥)
+=   x′=y ∧ y′=x

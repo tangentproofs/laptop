@@ -1,0 +1,11 @@
+# aPToP §1.0.1 — the book's worked example, first Law of Portation
+# (exact calculation from the book; hints as printed).
+
+laws boolean
+
+theorem Law of Portation: a ∧ b ⇒ c ≡ a ⇒ (b ⇒ c)
+    a ∧ b ⇒ c                      Material Implication
+=   ¬(a ∧ b) ∨ c                   Duality
+=   ¬a ∨ ¬b ∨ c                    Material Implication
+=   a ⇒ ¬b ∨ c                     Material Implication
+=   a ⇒ (b ⇒ c)

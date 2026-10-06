@@ -1,0 +1,8 @@
+# aPToP Exercise 5(b) solution.
+# Hint matches Netty `excluded middle` (book: "law of excluded middle").
+
+laws boolean
+
+theorem ex5b: x ∨ ¬x ≡ ⊤
+    x ∨ ¬x                         excluded middle
+=   ⊤

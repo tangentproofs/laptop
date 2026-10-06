@@ -21,6 +21,11 @@
  */
 
 import type { LineView, Op, PartView, Response, StateView, SuggestionView } from './protocol.js';
+import {
+  PICKER_EXAMPLES, examplesBase, parseCalcTheorems, theoremToScript,
+  type CalcTheorem,
+} from './calc-load.js';
+import { appendHighlighted } from './highlight.js';
 
 /** The state the kernel last sent. */
 let state: StateView | null = null;
@@ -31,6 +36,11 @@ let noteIsError = false;
 let asText = false;
 /** What the direct-entry and start rows hold, kept across a redraw. */
 const typed = { start: '', direct: '', ty: 'boolean', startConn: '⇐', directConn: '' };
+/** Book .calc currently loaded (source kept for optional reference). */
+let bookExample: { name: string; text: string; theorem: string } | null = null;
+/** Theorems parsed from the last fetched .calc (for the theorem picker). */
+let bookTheorems: CalcTheorem[] = [];
+
 
 /** Make an element. */
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -82,6 +92,67 @@ async function send(op: Op, arg = ''): Promise<Response | null> {
 
 /** Run one line of the script language. */
 const cmd = (line: string) => send('cmd', line);
+
+/** Replay Netty script lines into the kernel (proof pane).
+ * Strict: every `apply` must succeed — no silent `direct` fallback. */
+async function replayScript(lines: string[]): Promise<boolean> {
+  await send('reset');
+  for (const line of lines) {
+    const t = line.trim();
+    if (t === '' || t.startsWith('#')) continue;
+    const word = t.split(/\s+/)[0] ?? '';
+    if (word === 'proof' || word === 'suggest' || word === 'context') continue;
+    const a = await send('cmd', t);
+    if (a === null) return false;
+    if (!a.ok) return false;
+  }
+  return true;
+}
+
+/** Fetch a .calc and load its first (or named) theorem into the proof editor. */
+async function loadBookCalc(file: string, label: string, theoremIndex = 0): Promise<void> {
+  try {
+    const res = await fetch(examplesBase() + file);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    bookTheorems = parseCalcTheorems(text);
+    if (bookTheorems.length === 0) {
+      bookExample = { name: label, text, theorem: '' };
+      note = `book example: ${label} — no theorem/refine blocks found to load`;
+      noteIsError = true;
+      draw();
+      return;
+    }
+    const idx = Math.max(0, Math.min(theoremIndex, bookTheorems.length - 1));
+    const th = bookTheorems[idx]!;
+    const script = theoremToScript(th, true);
+    bookExample = { name: label, text, theorem: th.name };
+    if (script === null) {
+      note = `“${th.name}” has hints Netty cannot apply yet — not loaded as a proof`;
+      noteIsError = true;
+      draw();
+      return;
+    }
+    const ok = await replayScript(script);
+    const gappy = state !== null && state.lines.some((l) => l.gap);
+    if (ok && !gappy) {
+      note = `loaded “${th.name}” — every step applied (${idx + 1}/${bookTheorems.length} in ${label})`;
+      noteIsError = false;
+    } else {
+      note = gappy
+        ? `“${th.name}” left a gap (!) — not a valid Netty session`
+        : `“${th.name}” failed to apply a step — not a valid Netty session`;
+      noteIsError = true;
+      await send('reset');
+    }
+    draw();
+  } catch (e) {
+    note = `book example: ${String(e)}`;
+    noteIsError = true;
+    draw();
+  }
+}
+
 
 /** The directions of a type, as the kernel writes them. */
 const DIRECTIONS: Record<string, string[]> = {
@@ -177,7 +248,9 @@ function zoomButton(z: PartView, extra = ''): HTMLElement {
 function formula(l: LineView): HTMLElement {
   const box = el('span', { class: 'formula' });
   if (l.parts.length === 0 || (!l.zoomable && l.parts.length < 2 && l.kind !== 'neg')) {
-    box.append(el('span', { class: 'atom' }, l.expr));
+    const atom = el('span', { class: 'atom' });
+    appendHighlighted(atom, l.expr);
+    box.append(atom);
     return box;
   }
   // The single-operand zoom targets, by which operand they are. A line that
@@ -189,7 +262,15 @@ function formula(l: LineView): HTMLElement {
   // knowing how the line was drawn.
   const piece = (text: string, i: number): HTMLElement => {
     const z = single.get(i);
-    const node = z === undefined ? el('span', { class: 'operand' }, text) : zoomButton(z);
+    let node: HTMLElement;
+    if (z === undefined) {
+      node = el('span', { class: 'operand' });
+      appendHighlighted(node, text);
+    } else {
+      node = zoomButton(z);
+      node.textContent = '';
+      appendHighlighted(node, z.text);
+    }
     node.setAttribute('data-operand', String(i));
     return node;
   };
@@ -200,9 +281,12 @@ function formula(l: LineView): HTMLElement {
   // A word or mark a form writes for itself. Where it stands before one of the
   // pieces it says so, as the operator between two operands does, so that
   // `showSite` can light up a piece by the mark that introduces it.
-  const word = (w: string, before?: number): HTMLElement =>
-    el('span', before === undefined ? { class: 'op' }
-      : { class: 'op', 'data-op-before': String(before) }, w);
+  const word = (w: string, before?: number): HTMLElement => {
+    const node = el('span', before === undefined ? { class: 'op' }
+      : { class: 'op', 'data-op-before': String(before) });
+    appendHighlighted(node, w);
+    return node;
+  };
   // `if … then … else … fi` writes its own four words around its three pieces:
   // the condition and the two branches, each a zoom target of its own.
   if (l.kind === 'cond') {
@@ -326,7 +410,7 @@ function proofPane(s: StateView | null): HTMLElement {
   } else if (asText) {
     body.append(el('pre', {}, s.proofPane));
   } else if (!s.started) {
-    body.append(el('p', { class: 'quiet' }, 'no proof yet: give the first line, or replay a demonstration.'));
+    body.append(el('p', { class: 'quiet' }, 'no proof yet: give the first line, or pick an example.'));
     body.append(startRow());
   } else {
     for (const l of s.lines) {
@@ -474,15 +558,27 @@ function toolbar(s: StateView | null): HTMLElement {
     bar.append(b);
     return b;
   };
-  const demos = el('select', { class: 'demos', title: 'replay a demonstration of the document' });
-  demos.append(el('option', { value: '' }, 'demonstration…'));
-  for (const d of ['portation', 'discharge', 'gap', 'minimize', 'segment', 'segfold', 'fold', 'merge'])
-    demos.append(el('option', { value: d }, d));
-  demos.addEventListener('change', () => {
-    if (demos.value !== '') void send('demo', demos.value);
-    demos.value = '';
+  // One Examples picker: book calcs + kernel demos, human-readable labels only.
+  const examples = el('select', { class: 'demos', title: 'load a working example into the proof pane' });
+  examples.append(el('option', { value: '' }, 'examples…'));
+  for (const ex of PICKER_EXAMPLES) {
+    const value = ex.kind === 'calc' ? `calc|${ex.file}|${ex.label}` : `demo|${ex.id}`;
+    examples.append(el('option', { value }, ex.label));
+  }
+  examples.addEventListener('change', () => {
+    const v = examples.value;
+    examples.value = '';
+    if (v === '') return;
+    const parts = v.split('|');
+    if (parts[0] === 'calc' && parts[1] && parts[2]) {
+      void loadBookCalc(parts[1], parts[2], 0);
+    } else if (parts[0] === 'demo' && parts[1]) {
+      bookExample = null;
+      bookTheorems = [];
+      void send('demo', parts[1]);
+    }
   });
-  bar.append(demos);
+  bar.append(examples);
   button('new', 'start again with the same laws', () => void send('reset'));
   button('undo (u)', 'undo one command', () => void cmd('undo'), s === null || !s.canUndo);
   button('zoom out (o)', 'zoom out of this subproof', () => void cmd('out'), s === null || !s.canZoomOut);
@@ -508,17 +604,48 @@ function draw(): void {
   const root = document.getElementById('app');
   if (root === null) return;
   const s = state;
-  root.replaceChildren(
+  const kids: (Node | string)[] = [
     el('header', {},
-      el('h1', {}, 'Netty'),
-      el('span', { class: 'tagline' }, 'a prover’s assistant for calculational proofs'),
-      toolbar(s)),
+      el('div', { class: 'site-bar' },
+        el('a', { class: 'brand', href: '/' }, 'aPToP ', el('span', {}, '/ LaPToP')),
+        el('nav', { class: 'site-nav', 'aria-label': 'Primary' },
+          el('span', { class: 'nav-local' },
+            el('a', { href: '/' }, 'Home'),
+            el('a', { href: '/netty/', 'aria-current': 'page' }, 'Netty'),
+            el('a', { href: '/interp/' }, 'Interpreter'),
+            el('a', { href: '/examples/' }, 'Examples')),
+          el('span', { class: 'nav-hehner' },
+            el('a', {
+              class: 'ext book',
+              href: 'https://www.cs.toronto.edu/~hehner/aPToP/',
+              target: '_blank',
+              rel: 'noopener',
+            }, 'aPToP book (free)'),
+            el('a', {
+              class: 'ext course',
+              href: 'https://www.cs.utoronto.ca/~hehner/FMSD/',
+              target: '_blank',
+              rel: 'noopener',
+            }, 'Video Course')))),
+      el('div', { class: 'netty-bar' },
+        el('h1', {}, 'Netty'),
+        el('span', { class: 'tagline' }, 'a prover’s assistant for calculational proofs'),
+        toolbar(s))),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
-          'click a suggestion to take it — pointing at one lights up the part it rewrites; click a subexpression or a run of them to zoom in, a line number to move the focus')
+          'examples… loads a working proof into the proof pane; click a suggestion to take it')
       : el('div', { class: 'note-bar' + (noteIsError ? ' error' : '') }, note),
-    el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)),
-  );
+  ];
+  if (bookExample !== null) {
+    const summary = bookExample.theorem
+      ? `Book source: ${bookExample.name} · ${bookExample.theorem}`
+      : `Book source: ${bookExample.name}`;
+    kids.push(el('details', { class: 'book-calc' },
+      el('summary', {}, summary),
+      el('pre', {}, bookExample.text)));
+  }
+  kids.push(el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)));
+  root.replaceChildren(...kids);
 }
 
 /** The keys the document's own description gives to the mouse. */

@@ -1,0 +1,8 @@
+# aPToP Exercise 6(a) solution — binary theory calculation.
+
+laws boolean
+
+theorem ex6a: a ∧ b ⇒ a ∨ b
+    a ∧ b                          specialization
+⇒   a                              generalization
+⇒   a ∨ b

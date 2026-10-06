@@ -1,0 +1,9 @@
+# aPToP Exercise 6(c) solution — uses portation.
+
+laws boolean
+
+theorem ex6c: ¬a ⇒ (a ⇒ b)
+    ¬a ⇒ (a ⇒ b)                   portation
+=   ¬a ∧ a ⇒ b                     noncontradiction
+=   ⊥ ⇒ b                          base
+=   ⊤

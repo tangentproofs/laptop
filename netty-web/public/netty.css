@@ -2,38 +2,28 @@
    margin and a formula, so that a subproof indents and the margin connectives
    line up as they do in the document. */
 
+/* Monokai chrome + token colors for proof formulas (matches /examples/ /interp/). */
 :root {
-  --ink: #16191d;
-  --dim: #6a727d;
-  --paper: #fbfaf7;
-  --pane: #ffffff;
-  --rule: #dcd8d0;
-  --focus: #fdf3d6;
-  --hot: #1c5d99;
-  --hot-soft: #e5eff8;
-  --bad: #9b2226;
-  --good: #22683f;
-  --site: #b06d1a;
-  --site-soft: #fbeed2;
+  --ink: #f8f8f2;
+  --dim: #75715e;
+  --paper: #1e1f1c;
+  --pane: #272822;
+  --rule: #3e3d32;
+  --focus: #49483e;
+  --hot: #66d9ef;
+  --hot-soft: #3e3d32;
+  --bad: #f92672;
+  --good: #a6e22e;
+  --site: #e6db74;
+  --site-soft: #3e3d32;
+  --kw: #f92672;
+  --op: #f92672;
+  --num: #ae81ff;
+  --str: #e6db74;
+  --cmt: #75715e;
+  --var: #a6e22e;
   --mono: ui-monospace, "DejaVu Sans Mono", "Fira Mono", Menlo, monospace;
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #e6e3dd;
-    --dim: #97a0ab;
-    --paper: #14171a;
-    --pane: #1b1f23;
-    --rule: #333a42;
-    --focus: #2c2a1c;
-    --hot: #7fb3e0;
-    --hot-soft: #22303c;
-    --bad: #e8817f;
-    --good: #85c8a1;
-    --site: #e0a95c;
-    --site-soft: #3a3020;
-  }
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -52,11 +42,60 @@ body {
 
 header {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.site-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 1.5rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--pane);
+}
+.site-bar .brand {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink);
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+.site-bar .brand span { color: var(--good); font-weight: 600; }
+.site-bar .brand:hover { text-decoration: none; }
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.85rem 1.25rem;
+  flex: 1;
+  justify-content: space-between;
+  font-size: 0.95rem;
+}
+.site-nav .nav-local,
+.site-nav .nav-hehner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: baseline;
+}
+.site-nav .nav-hehner { margin-left: auto; }
+.site-nav a { color: var(--hot); text-decoration: none; }
+.site-nav a:hover { text-decoration: underline; }
+.site-nav a[aria-current="page"] { color: var(--good); font-weight: 600; }
+.site-nav a.ext { font-weight: 600; }
+.site-nav a.ext.book { color: var(--hot); }
+.site-nav a.ext.course { color: var(--good); }
+
+.netty-bar {
+  display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.6rem 1rem;
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--rule);
+  padding: 0.55rem 1rem;
 }
 
 h1 { font-size: 1.1rem; margin: 0; letter-spacing: 0.02em; }
@@ -154,7 +193,31 @@ pre { margin: 0.2rem 0.6rem; font-family: var(--mono); font-size: 0.85rem; white
 .margin.direction { color: var(--ink); }
 
 .formula { white-space: pre; }
-.op { color: var(--dim); }
+.op { color: var(--op); }
+/* Token classes from highlight.ts — same as site.css .cm-aptop-* */
+.cm-aptop-keyword { color: var(--kw); font-weight: 600; }
+.cm-aptop-operator { color: var(--op); }
+.cm-aptop-number { color: var(--num); }
+.cm-aptop-comment { color: var(--cmt); font-style: italic; }
+.cm-aptop-bool { color: var(--num); }
+.cm-aptop-string { color: var(--str); }
+.cm-aptop-variable { color: var(--var); }
+/* Hehner hint marks: \/ (∨) much bigger/bolder; /\ (∧) lighter — high contrast */
+.cm-aptop-or {
+  color: #f8f8f2;
+  font-weight: 800;
+  font-size: 1.35em;
+  line-height: 1;
+  vertical-align: -0.08em;
+  text-shadow: 0 0 0.5px #f8f8f2;
+}
+.cm-aptop-and {
+  color: #75715e;
+  font-weight: 500;
+  font-size: 1em;
+}
+.formula .atom { color: var(--ink); }
+
 
 .operand { padding: 0 0.05rem; }
 button.operand {
@@ -257,3 +320,26 @@ button.operand.site, button.operand.segment.site {
 .holes input { font-family: var(--mono); font-size: 0.8rem; padding: 0.1rem 0.3rem;
   border: 1px solid var(--rule); border-radius: 3px; background: var(--pane); color: var(--ink); }
 .holes button { font-size: 0.75rem; padding: 0.1rem 0.5rem; }
+
+/* book/course links live in .site-nav .nav-hehner */
+
+.book-calc {
+  margin: 0;
+  padding: 0.4rem 1rem 0.6rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--pane);
+  max-height: 28vh;
+  overflow: auto;
+}
+.book-calc summary {
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--hot);
+  margin-bottom: 0.35rem;
+}
+.book-calc pre {
+  margin: 0;
+  font: 0.8rem/1.4 var(--mono);
+  white-space: pre-wrap;
+  color: var(--ink);
+}

@@ -1,0 +1,9 @@
+# aPToP Exercise 121(g) — x:= 1. y:= 2 (as in the book).
+
+laws boolean
+state x, y: int
+
+theorem ex121g: (x:= 1. y:= 2) ≡ x′ = 1 ∧ y′ = 2
+    x:= 1. y:= 2                   assignment
+=   x:= 1. x′ = x ∧ y′ = 2         Substitution Law
+=   x′ = 1 ∧ y′ = 2

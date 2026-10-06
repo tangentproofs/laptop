@@ -1,0 +1,11 @@
+# aPToP Exercise 137(b) solution — integer swap (exact solution text).
+
+laws boolean
+state a, b, c: int
+
+theorem ex137b: (a:= a+b. b:= a–b. a:= a–b) ≡ a′=b ∧ b′=a ∧ c′=c
+    a:= a+b. b:= a–b. a:= a–b                    expand last assignment
+=   a:= a+b. b:= a–b. a′ = a–b ∧ b′=b ∧ c′=c     Substitution Law
+=   a:= a+b. a′ = a–(a–b) ∧ b′ = a–b ∧ c′=c      Substitution Law
+=   a′=b ∧ b′ = (a+b)–b ∧ c′=c                   subtract
+=   a′=b ∧ b′=a ∧ c′=c

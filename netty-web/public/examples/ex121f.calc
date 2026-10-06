@@ -1,0 +1,9 @@
+# aPToP Exercise 121(f) — x:= 1. ok (as in the book).
+
+laws boolean
+state x, y: int
+
+theorem ex121f: (x:= 1. ok) ≡ x′ = 1 ∧ y′ = y
+    x:= 1. ok                      ok
+=   x:= 1. x′ = x ∧ y′ = y         Substitution Law
+=   x′ = 1 ∧ y′ = y
