@@ -35,8 +35,11 @@ lean_lib «LaPToPBlueprint» where
 
 -- Netty: the calculational proof assistant's kernel. It is deliberately free of
 -- Mathlib and of LaPToP, so `lake build Netty` is fast and the kernel's own
--- soundness checks are self-contained.
+-- soundness checks are self-contained. Precompiled, so the `netty_proof` command
+-- that checks calculations while LaPToP builds runs as native code rather than in
+-- the interpreter.
 lean_lib «Netty» where
+  precompileModules := true
 
 -- The headless Netty command line (`lake exe netty`).
 lean_exe «netty» where

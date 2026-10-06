@@ -16,7 +16,8 @@ This module drives the kernel through it and proves, by evaluation in Lean's
 kernel, that the session ends with no gaps, fully zoomed out, and proving
 exactly `a ⇒ (b ⇒ a)`. Nothing here is a test in the usual sense: `Doc.step`,
 `Doc.suggestions` and `Doc.outcome` are total functions on first-order data and
-`Netty.Laws.boolean` is a literal, so `decide` settles the whole replay.
+`Netty.Laws.boolean` is a literal, so `decide +kernel` settles the whole
+replay: the kernel evaluates it, and the elaborator never does.
 
 More replays are checked the same way: one that zooms in to a subexpression and
 uses the context that zooming in supplies, one that reaches an outer line by a
@@ -48,10 +49,10 @@ open Expr (var mvar num bin neg)
 "positive position and any old direction makes the same new direction; negative
 position and old direction ≤ makes new direction ≥ …" -/
 
-example : Dir.zoom .down .positive = .down := by decide
-example : Dir.zoom .up .positive = .up := by decide
-example : Dir.zoom .down .negative = .up := by decide
-example : Dir.zoom .up .negative = .down := by decide
+example : Dir.zoom .down .positive = .down := by decide +kernel
+example : Dir.zoom .up .positive = .up := by decide +kernel
+example : Dir.zoom .down .negative = .up := by decide +kernel
+example : Dir.zoom .up .negative = .down := by decide +kernel
 example (p : Pos) : Dir.zoom .same p = .same := by cases p <;> decide
 example (d : Dir) : Dir.zoom d .neutral = .same := by cases d <;> decide
 
@@ -83,7 +84,7 @@ def lines (cs : List Cmd) : Option (List (Option BinOp × Expr)) :=
 set_option maxRecDepth 100000
 
 /-- The document's example proves `a ⇒ (b ⇒ a)`. -/
-theorem portation_proves : proved portation = some goal := by decide
+theorem portation_proves : proved portation = some goal := by decide +kernel
 
 /-- Its proof pane is the document's three lines: the goal, `a ∧ b ⇒ a`, `⊤`,
 joined by `=`. -/
@@ -91,12 +92,12 @@ theorem portation_lines :
     lines portation =
       some [(none, goal),
             (some .eq, bin .imp (bin .and (var "a") (var "b")) (var "a")),
-            (some .eq, .top)] := by decide
+            (some .eq, .top)] := by decide +kernel
 
 /-- It leaves no gap, and ends at the outermost level. -/
 theorem portation_complete :
     ((session.steps portation).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-! ### Zooming in, and the context a zoom in supplies -/
 
@@ -118,11 +119,11 @@ def discharge : List Cmd :=
     .applyNamed "base" (some (.eq, .top)) ]
 
 /-- It proves `(a ⇒ b) ⇒ (a ⇒ a ∧ b)`, with no gap and fully zoomed out. -/
-theorem discharge_proves : proved discharge = some dischargeGoal := by decide
+theorem discharge_proves : proved discharge = some dischargeGoal := by decide +kernel
 
 theorem discharge_complete :
     ((session.steps discharge).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-! ### The focus lands anywhere: recomputing the zoom stack
 
@@ -149,29 +150,29 @@ the zoom out wrote is line 4. -/
 theorem anywhere_closes_the_stack :
     ((session.steps (anywhere.take 5)).toOption.map fun d =>
       (d.focus, d.stack.length, d.contextLaws.length, d.lines.size))
-      = some (0, 1, 0, 5) := by decide
+      = some (0, 1, 0, 5) := by decide +kernel
 
 /-- Every line is focusable: the two of the outermost level because they are
 open, and the three of the closed subproof because the zoom out that closed it
 is the last line of this level and can be taken back. -/
 theorem anywhere_leaves_every_line_open_to_a_click :
     ((session.steps (anywhere.take 5)).toOption.map fun d =>
-      (List.range d.lines.size).filter (d.canFocus ·)) = some [0, 1, 2, 3, 4] := by decide
+      (List.range d.lines.size).filter (d.canFocus ·)) = some [0, 1, 2, 3, 4] := by decide +kernel
 
 /-- Three of them re-open the subproof; the two of the open level do not. -/
 theorem anywhere_says_which_clicks_reopen :
     ((session.steps (anywhere.take 5)).toOption.map fun d =>
-      (List.range d.lines.size).filter (d.reopensOn ·)) = some [1, 2, 3] := by decide
+      (List.range d.lines.size).filter (d.reopensOn ·)) = some [1, 2, 3] := by decide +kernel
 
 /-- Carrying on from there proves what `discharge` proves … -/
-theorem anywhere_proves : proved anywhere = some dischargeGoal := by decide
+theorem anywhere_proves : proved anywhere = some dischargeGoal := by decide +kernel
 
 set_option maxHeartbeats 1000000 in
 /-- … and in fact writes the very same document: clicking an outer line did
 what `Cmd.zoomOut` does. -/
 theorem anywhere_is_discharge :
     ((session.steps anywhere).toOption.map fun d => d.lines.toList)
-      = ((session.steps discharge).toOption.map fun d => d.lines.toList) := by decide
+      = ((session.steps discharge).toOption.map fun d => d.lines.toList) := by decide +kernel
 
 /-- Two levels deep, one click closes both. Here the inner subproof rewrites
 `a ∧ b` to `b ∧ a`, and focusing line 0 writes the two lines the two zoom-outs
@@ -186,14 +187,14 @@ def nested : List Cmd :=
 theorem nested_closes_both_levels :
     ((session.steps nested).toOption.map fun d =>
       (d.focus, d.stack.length, d.contextLaws.length, d.lines.size))
-      = some (0, 1, 0, 6) := by decide
+      = some (0, 1, 0, 6) := by decide +kernel
 
 /-- The bottom line is the goal with `a ∧ b` turned around, which is what the
 two zoom-outs put back. -/
 theorem nested_puts_the_subproofs_back :
     ((session.steps nested).toOption.bind fun d => d.lines[5]?.map Line.expr)
       = some (bin .imp (bin .imp (var "a") (var "b"))
-                (bin .imp (var "a") (bin .and (var "b") (var "a")))) := by decide
+                (bin .imp (var "a") (bin .and (var "b") (var "a")))) := by decide +kernel
 
 /-! ### Going back into a closed subproof
 
@@ -209,21 +210,21 @@ and the context the zoom in supplied in force again. -/
 theorem click_reopens_the_subproof :
     ((session.steps (anywhere.take 5 ++ [.setFocus 2])).toOption.map fun d =>
       (d.focus, d.depth, d.lines.size, d.contextLaws.length))
-      = some (2, 1, 4, 1) := by decide
+      = some (2, 1, 4, 1) := by decide +kernel
 
 /-- And it writes back the very state the zoom out was taken from: lines, stack,
 focus and all. Re-opening is the inverse of zooming out, not an approximation
 of it. -/
 theorem reopen_undoes_the_zoom_out :
     (session.steps (discharge.take 4 ++ [.zoomOut, .setFocus 3])).toOption
-      = (session.steps (discharge.take 4)).toOption := by decide
+      = (session.steps (discharge.take 4)).toOption := by decide +kernel
 
 /-- A subproof closed *before* later work stays closed: `discharge` takes a step
 at the outer level after zooming out, and the three lines of the subproof are
 refused where the three of the open level are not. -/
 theorem work_after_keeps_the_subproof_closed :
     ((session.steps discharge).toOption.map fun d =>
-      (List.range d.lines.size).filter (d.canFocus ·)) = some [0, 4, 5] := by decide
+      (List.range d.lines.size).filter (d.canFocus ·)) = some [0, 4, 5] := by decide +kernel
 
 /-- A new level open at the same depth is no obstacle: zoom in, step, zoom out,
 zoom in again, and every line is still reachable. -/
@@ -237,7 +238,7 @@ def reopen : List Cmd :=
 theorem reopen_reaches_the_first_subproof :
     ((session.steps reopen).toOption.map fun d =>
       (d.depth, (List.range d.lines.size).filter (d.canFocus ·)))
-      = some (1, [0, 1, 2, 3, 4]) := by decide
+      = some (1, [0, 1, 2, 3, 4]) := by decide +kernel
 
 /-- Clicking into it closes the new level first — a level of one line, so closing
 it is the undo the document says it is — and then takes the zoom out back: three
@@ -245,7 +246,7 @@ lines left, the first subproof innermost again, the focus where the click
 landed. -/
 theorem reopen_closes_the_new_level_first :
     ((session.steps (reopen ++ [.setFocus 1])).toOption.map fun d =>
-      (d.focus, d.depth, d.lines.size)) = some (1, 1, 3) := by decide
+      (d.focus, d.depth, d.lines.size)) = some (1, 1, 3) := by decide +kernel
 
 /-- Two levels deep, two clicks go all the way back in: `nested` closes both
 levels with one click on line 0, and clicking the innermost line re-opens both,
@@ -253,7 +254,7 @@ one `Doc.reopenStep` each. -/
 theorem nested_reopens_both_levels :
     ((session.steps (nested ++ [.setFocus 3])).toOption.map fun d =>
       (d.focus, d.depth, d.lines.size, d.contextLaws.length))
-      = some (3, 2, 4, 2) := by decide
+      = some (3, 2, 4, 2) := by decide +kernel
 
 /-! ### Conditional laws at the number level
 
@@ -271,17 +272,17 @@ def conditionalSession : Doc := { laws := Laws.boolean ++ Laws.number }
 /-- The context discharges a premise: a `context` law is exactly the premise. -/
 theorem context_settles_the_premise :
     Law.settles [Law.context (bin .le (num 0) (var "m"))] (bin .le (num 0) (var "m"))
-      = true := by decide
+      = true := by decide +kernel
 
 /-- So does a law of the list, when the premise is an instance of one side it
 equates with `⊤`: `0 ≤ 0` is settled by `x ≤ x`. -/
 theorem a_law_settles_a_ground_premise :
-    Law.settles Laws.number (bin .le (num 0) (num 0)) = true := by decide
+    Law.settles Laws.number (bin .le (num 0) (num 0)) = true := by decide +kernel
 
 /-- And `0 ≤ m` is settled by neither: nothing in the list says it, so a step
 that needs it is a step with a gap. -/
 theorem nothing_settles_zero_le_m :
-    Law.settles Laws.number (bin .le (num 0) (var "m")) = false := by decide
+    Law.settles Laws.number (bin .le (num 0) (var "m")) = false := by decide +kernel
 
 /-- `0 ≤ m ⇒ n ≤ n + m`. -/
 def boundGoal : Expr :=
@@ -303,11 +304,11 @@ def bound : List Cmd :=
 
 /-- It proves `0 ≤ m ⇒ n ≤ n + m`, with no gap and fully zoomed out: the premise
 was discharged, so nothing is left over. -/
-theorem bound_proves : provedIn conditionalSession bound = some boundGoal := by decide
+theorem bound_proves : provedIn conditionalSession bound = some boundGoal := by decide +kernel
 
 theorem bound_complete :
     ((conditionalSession.steps bound).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- At that number level the law is offered twice, `+` being symmetric, and the
 two differ in exactly the way the document says they should: writing `n` needs
@@ -316,7 +317,7 @@ two differ in exactly the way the document says they should: writing `n` needs
 theorem bound_offers_discharged_and_gapped :
     ((conditionalSession.steps (bound.take 3)).toOption.map fun d =>
       (d.suggestions.filter (·.law == "upper bound")).map fun s => (s.op, s.result, s.premise))
-      = some [(.ge, var "n", none), (.ge, var "m", some (bin .le (num 0) (var "n")))] := by decide
+      = some [(.ge, var "n", none), (.ge, var "m", some (bin .le (num 0) (var "n")))] := by decide +kernel
 
 /-- The conditional reading puts a *number* direction in the margin, so the
 boolean line cannot take it as a step of its own — but the line's main operands
@@ -348,18 +349,18 @@ taken from, with the premise recorded there as what would close it. -/
 theorem gapped_leaves_the_premise_as_a_gap :
     ((conditionalSession.steps gapped).toOption.map fun d =>
       (d.gaps, d.note 0, d.lines[0]?.bind Line.premise))
-      = some ([0], "!", some (bin .le (num 0) (var "m"))) := by decide
+      = some ([0], "!", some (bin .le (num 0) (var "m"))) := by decide +kernel
 
 /-- And the proof claims nothing, exactly as a gap left by direct entry makes it
 claim nothing: the premise is a hole in the calculation, not a footnote to it. -/
-theorem gapped_proves_nothing : provedIn conditionalSession gapped = none := by decide
+theorem gapped_proves_nothing : provedIn conditionalSession gapped = none := by decide +kernel
 
 /-- The line it wrote is the one the law licenses, and it carries the law's name:
 the step is not refused, it is recorded as conditional. -/
 theorem gapped_writes_the_law_s_line :
     ((conditionalSession.steps gapped).toOption.bind fun d =>
       d.lines[1]?.map fun l => (l.conn, l.expr, l.why))
-      = some (some .ge, var "n", "upper bound") := by decide
+      = some (some .ge, var "n", "upper bound") := by decide +kernel
 
 /-! ### The conditional reading at the boolean level
 
@@ -384,7 +385,7 @@ is what makes the dedup keep the reading that needs nothing. -/
 theorem conditional_variants_come_last :
     (Laws.boolean ++ Laws.number).all (fun l =>
       l.variants == l.variants.filter (·.premise.isNone)
-        ++ l.variants.filter (·.premise.isSome)) = true := by decide
+        ++ l.variants.filter (·.premise.isSome)) = true := by decide +kernel
 
 /-- Whether a document offers any conditional reading, and whether every one it
 offers is greyed. -/
@@ -402,7 +403,7 @@ needs telling says so. Saying it is the dialog box below (`Replay.dialog`). -/
 theorem shipped_boolean_conditional_readings_are_all_greyed :
     ((session.steps
         [.start .boolean .down (bin .and (var "x") (bin .and (var "y") (var "z")))]).toOption.map
-      conditionalRows) = some (true, true) := by decide
+      conditionalRows) = some (true, true) := by decide +kernel
 
 /-- `a ⇒ ((a ⇒ (b ⇒ c)) ⇒ (b ⇒ c))`: modus ponens, with the implication and its
 antecedent both to be supplied by the context. -/
@@ -434,11 +435,11 @@ def ponens : List Cmd :=
 
 /-- It proves the goal, with no gap and fully zoomed out: the premise was
 discharged, so nothing is left over. -/
-theorem ponens_proves : provedIn ponensSession ponens = some ponensGoal := by decide
+theorem ponens_proves : provedIn ponensSession ponens = some ponensGoal := by decide +kernel
 
 theorem ponens_complete :
     ((ponensSession.steps ponens).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- The three readings of the context that can be taken there: the fact itself,
 written on the whole line, and the conditional reading at each operand of
@@ -450,7 +451,7 @@ theorem ponens_offers_discharged_boolean_steps :
       = some
         [(Part.whole, .rimp, var "a", none),
          (Part.operand 0, .rimp, bin .imp (var "c") (var "c"), none),
-         (Part.operand 1, .rimp, bin .imp (var "b") (var "b"), none)] := by decide
+         (Part.operand 1, .rimp, bin .imp (var "b") (var "b"), none)] := by decide +kernel
 
 /-- The same law with nothing in force to settle its premise: drop the outer
 `a ⇒ …`, and the goal is no longer a theorem. -/
@@ -469,7 +470,7 @@ theorem ponensGappy_offers_them_with_the_premise :
         fun s => (s.part, s.result, s.premise))
       = some
         [(Part.operand 0, bin .imp (var "c") (var "c"), some (var "a")),
-         (Part.operand 1, bin .imp (var "b") (var "b"), some (var "a"))] := by decide
+         (Part.operand 1, bin .imp (var "b") (var "b"), some (var "a"))] := by decide +kernel
 
 /-- Taking one writes the line and leaves the document's warning sign on the line
 the step was taken from, with the premise recorded there as what would close
@@ -477,12 +478,12 @@ it. -/
 theorem ponensGappy_leaves_the_premise_as_a_gap :
     ((ponensSession.steps ponensGappy).toOption.map fun d =>
       (d.gaps, d.note 1, d.lines[1]?.bind Line.premise))
-      = some ([1], "!", some (var "a")) := by decide
+      = some ([1], "!", some (var "a")) := by decide +kernel
 
 /-- And the proof claims nothing — which is right, because without `a` the goal is
 not a theorem. The gap is not a formality: it is the difference between this and
 `ponens`. -/
-theorem ponensGappy_proves_nothing : provedIn ponensSession ponensGappy = none := by decide
+theorem ponensGappy_proves_nothing : provedIn ponensSession ponensGappy = none := by decide +kernel
 
 /-! ### Supplying a law variable by hand
 
@@ -537,15 +538,15 @@ theorem dialog_rows_are_greyed_until_bound :
         [(["b"], bin .imp (bin .and (mvar "b") (var "z")) (bin .and (var "y") (var "z")),
           some (bin .imp (var "x") (mvar "b"))),
          (["b"], bin .imp (bin .and (mvar "b") (var "x")) (bin .and (var "y") (var "z")),
-          some (bin .imp (var "z") (mvar "b")))] := by decide
+          some (bin .imp (var "z") (mvar "b")))] := by decide +kernel
 
 /-- With the binding the proof goes through: the greyed row became a step, and the
 premise it needed was settled by the context, so there is no gap. -/
-theorem dialog_proves : provedIn dialogSession dialog = some monoGoal := by decide
+theorem dialog_proves : provedIn dialogSession dialog = some monoGoal := by decide +kernel
 
 theorem dialog_complete :
     ((dialogSession.steps dialog).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- Without the binding the very same command finds nothing: a suggestion that
 leaves a variable free is not one `apply` will take, which is what it was before
@@ -554,7 +555,7 @@ theorem dialog_needs_the_binding :
     ((dialogSession.steps (dialog.take 2 ++
       [.applyNamed "monotonic"
         (some (.rimp, bin .imp (bin .and (var "y") (var "z")) (bin .and (var "y") (var "z"))))
-        []])).toOption).isSome = false := by decide
+        []])).toOption).isSome = false := by decide +kernel
 
 /-- A binding for a variable the suggestion has not got is refused too, rather
 than quietly ignored: it is a typo, not a step. -/
@@ -562,7 +563,7 @@ theorem dialog_refuses_a_stray_binding :
     ((dialogSession.steps (dialog.take 2)).toOption.bind fun d =>
       (d.suggestions.filter fun s => s.law == "monotonic" && !s.holes.isEmpty).head?.map
         fun s => (d.applySuggestion s [("q", var "y")]).toOption.isSome)
-      = some false := by decide
+      = some false := by decide +kernel
 
 /-- The premise path is unchanged. On a bare line, with nothing in force to settle
 it, the same law and the same binding still write the line the law licenses and
@@ -575,9 +576,9 @@ def dialogGappy : List Cmd :=
 theorem dialogGappy_leaves_the_premise_as_a_gap :
     ((dialogSession.steps dialogGappy).toOption.map fun d =>
       (d.gaps, d.note 0, d.lines[0]?.bind Line.premise))
-      = some ([0], "!", some (bin .imp (var "x") (var "y"))) := by decide
+      = some ([0], "!", some (bin .imp (var "x") (var "y"))) := by decide +kernel
 
-theorem dialogGappy_proves_nothing : provedIn dialogSession dialogGappy = none := by decide
+theorem dialogGappy_proves_nothing : provedIn dialogSession dialogGappy = none := by decide +kernel
 
 /-! ### `if … then … else … fi`
 
@@ -602,18 +603,18 @@ not a conditional whose else-branch is `y ∧ z` — is checked by `netty --self
 rather than here: the parser is a `partial def`, which the kernel cannot reduce,
 which is why script parsing has always been checked at run time. -/
 theorem cond_renders :
-    (Expr.cond (var "b") (var "x") (var "y")).render = "if b then x else y fi" := by decide
+    (Expr.cond (var "b") (var "x") (var "y")).render = "if b then x else y fi" := by decide +kernel
 
 /-- Its type is its branches': a number in one of them makes the whole a number,
 and two identifiers settle nothing. The condition says nothing about it. -/
 theorem cond_ty :
     ((Expr.cond (var "b") (num 1) (var "y")).tyOf?, (Expr.cond (var "b") (var "x") (var "y")).tyOf?)
-      = (some .number, none) := by decide
+      = (some .number, none) := by decide +kernel
 
 /-- The condition is neutral and the branches are positive. -/
 theorem cond_positions :
     ((List.range 3).map fun i => (Expr.cond (var "b") (var "x") (var "y")).operandPos i)
-      = [.neutral, .positive, .positive] := by decide
+      = [.neutral, .positive, .positive] := by decide +kernel
 
 /-- The five Case laws, and nothing else: what is witnessed below is the form and
 the laws about it, and a short list says so and keeps the replays cheap. -/
@@ -629,7 +630,7 @@ def condBase : List Cmd :=
 
 theorem condBase_proves :
     provedIn condSession condBase
-      = some (bin .eq (Expr.cond .top (var "x") (var "y")) (var "x")) := by decide
+      = some (bin .eq (Expr.cond .top (var "x") (var "y")) (var "x")) := by decide +kernel
 
 /-- And a proof that works *inside* one: `if b then b else ⊤ fi`, by zooming in to
 the then-branch — where `b` becomes context — using it there, and folding the two
@@ -646,14 +647,14 @@ alone: the branch is in positive position. -/
 theorem condBranch_gains_the_condition :
     ((condSession.steps (condBranch.take 2)).toOption.map fun d =>
       (d.contextLaws.map Law.stmt, d.frame?.map Frame.dir))
-      = some ([var "b"], some .up) := by decide
+      = some ([var "b"], some .up) := by decide +kernel
 
 theorem condBranch_proves :
-    provedIn condSession condBranch = some (Expr.cond (var "b") (var "b") .top) := by decide
+    provedIn condSession condBranch = some (Expr.cond (var "b") (var "b") .top) := by decide +kernel
 
 theorem condBranch_complete :
     ((condSession.steps condBranch).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- The eval hooks go through the form, so it leaves no hole in the law checks.
 `boolean_isTautology` covers the five `case` laws the boolean list gained, which
@@ -664,7 +665,7 @@ def absNonneg : Law :=
     stmt := bin .le (num 0)
       (Expr.cond (bin .le (num 0) (mvar "x")) (mvar "x") (bin .sub (num 0) (mvar "x"))) }
 
-theorem absNonneg_holdsOnInts : Law.holdsOnInts [-2, -1, 0, 1, 2] absNonneg = true := by decide
+theorem absNonneg_holdsOnInts : Law.holdsOnInts [-2, -1, 0, 1, 2] absNonneg = true := by decide +kernel
 
 /-! ### `∀ids: d· b` and `∃ids: d· b`
 
@@ -705,12 +706,12 @@ def bounded : Expr := Expr.quant .all ["i"] (var "nat") (bin .ge (var "i") (num 
 the body runs to the end, so `∀i: nat· i ≥ 0 ∧ p` quantifies the conjunction — is
 checked by `netty --selftest`, the parser being a `partial def` the kernel cannot
 reduce. -/
-theorem quant_renders : bounded.render = "∀i: nat· i ≥ 0" := by decide
+theorem quant_renders : bounded.render = "∀i: nat· i ≥ 0" := by decide +kernel
 
 /-- Nothing closes the body, so the form brackets itself as soon as anything
 surrounds it. This is the difference from `if … fi`, which `fi` closes. -/
 theorem quant_brackets_itself :
-    (bin .and bounded (var "p")).render = "(∀i: nat· i ≥ 0) ∧ p" := by decide
+    (bin .and bounded (var "p")).render = "(∀i: nat· i ≥ 0) ∧ p" := by decide +kernel
 
 /-- It is boolean — `Σ` and `Π`, the quantifiers that would give a number, are not
 in the grammar — and so is its body. -/
@@ -720,13 +721,13 @@ theorem quant_ty : (bounded.tyOf?, bounded.operandTy 1 .boolean) = (some .boolea
 /-- The domain is neutral and the body is positive, so zooming in to a domain
 admits only `=` and zooming in to a body leaves the direction alone. -/
 theorem quant_positions :
-    ((List.range 2).map bounded.operandPos) = [.neutral, .positive] := by decide
+    ((List.range 2).map bounded.operandPos) = [.neutral, .positive] := by decide +kernel
 
 /-- Two clickable pieces, the domain and the body, and what the form opens with:
 the quantifier and the names it binds. Those names are not a piece — a display
 writes them, and a click on them is not a zoom. -/
 theorem quant_draws_as_two_pieces :
-    (bounded.mainOp, bounded.operandTexts) = ("∀i", ["nat", "i ≥ 0"]) := by decide
+    (bounded.mainOp, bounded.operandTexts) = ("∀i", ["nat", "i ≥ 0"]) := by decide +kernel
 
 /-- The one *free* identifier of `∀i: nat· i ≥ 0` is `nat`: what the quantifier
 binds is not an identifier of the expression, so generalizing a law file line —
@@ -735,7 +736,7 @@ leaves the bound `i` exactly where it was. Without this a law about `∀x: d· b
 would quantify the `x` it binds and mean nothing at all. -/
 theorem quant_binds_what_generalizing_must_leave_alone :
     (bounded.vars, bounded.generalize ["nat", "i"])
-      = (["nat"], Expr.quant .all ["i"] (mvar "nat") (bin .ge (var "i") (num 0))) := by decide
+      = (["nat"], Expr.quant .all ["i"] (mvar "nat") (bin .ge (var "i") (num 0))) := by decide +kernel
 
 /-- "For the body, we gain the context `v:d`" — one context law per identifier the
 quantifier binds, and that is what `:` is here for. The domain gains nothing: it
@@ -743,17 +744,17 @@ is outside the scope of what is bound, and the document says it "cannot mention
 `v`" — which `Netty.Parser` refuses to read. -/
 theorem quant_body_gains_the_membership :
     (Expr.contextOf bounded 1, Expr.contextOf bounded 0)
-      = ([bin .mem (var "i") (var "nat")], []) := by decide
+      = ([bin .mem (var "i") (var "nat")], []) := by decide +kernel
 
 /-- And `:` is written as the document writes it, tight on its left. -/
-theorem mem_renders : (bin .mem (var "i") (var "nat")).render = "i: nat" := by decide
+theorem mem_renders : (bin .mem (var "i") (var "nat")).render = "i: nat" := by decide +kernel
 
 /-- The boolean evaluator cannot decide a quantifier, and says so rather than
 guessing: what `∀i: nat· i ≥ 0` claims depends on the bunch `nat`, which is not a
 boolean. This is why the quantifier law list is trusted as transcribed
 (`Netty.quantifier_isBeyondTheBooleanEvaluator`) where the boolean one is checked
 (`Netty.boolean_isTautology`). -/
-theorem quant_is_beyond_the_boolean_evaluator : bounded.evalBool [] = none := by decide
+theorem quant_is_beyond_the_boolean_evaluator : bounded.evalBool [] = none := by decide +kernel
 
 /-- Nor can the number evaluators, for the same reason: an assignment of integers
 to names says nothing about what bunch a domain is. `Σ` and `Π`, the quantifiers
@@ -763,7 +764,7 @@ Like every theorem here that touches `Int` — `absNonneg_holdsOnInts` and
 `Netty.number_holdsOnInts` among them — this one carries `Classical.choice` and
 `Quot.sound` out of core's integer instances as well as `propext`. -/
 theorem quant_is_beyond_the_number_evaluators :
-    (bounded.evalProp [], bounded.evalInt []) = (none, none) := by decide
+    (bounded.evalProp [], bounded.evalInt []) = (none, none) := by decide +kernel
 
 /-- The shipped quantifier laws, and the one boolean law the proof inside a body
 uses: seven lines, so that these replays compute a suggestion list of a few rows
@@ -777,7 +778,7 @@ what happens when a line spells it differently. -/
 theorem duality_is_the_law_file_line :
     (Laws.quantifier.find? fun l => l.name == "generalized duality").map Law.stmt
       = some (bin .eq (neg (Expr.quant .all ["x"] (mvar "d") (mvar "b")))
-                      (Expr.quant .ex ["x"] (mvar "d") (neg (mvar "b")))) := by decide
+                      (Expr.quant .ex ["x"] (mvar "d") (neg (mvar "b")))) := by decide +kernel
 
 /-- Matching is modulo the binder name: the law's `x` matches the line's `i` once
 and once only, and the law's *other* side comes back written in the line's own
@@ -786,7 +787,7 @@ names there are. -/
 theorem quant_matches_modulo_the_binder_name :
     ((Expr.matchAll (neg (Expr.quant .all ["x"] (mvar "d") (mvar "b"))) (neg bounded) []).map
       fun σ => (Expr.quant .ex ["x"] (mvar "d") (neg (mvar "b"))).instantiate σ)
-      = [Expr.quant .ex ["i"] (var "nat") (neg (bin .ge (var "i") (num 0)))] := by decide
+      = [Expr.quant .ex ["i"] (var "nat") (neg (bin .ge (var "i") (num 0)))] := by decide +kernel
 
 /-- A law that writes the same binder twice means the same variable twice, and
 refuses a line that binds two different ones: `(∀x: d· b) ∧ (∀x: d· c)` — the way
@@ -798,7 +799,7 @@ theorem quant_binder_names_must_agree :
       (bin .and (Expr.quant .all ["x"] (mvar "d") (mvar "b"))
                 (Expr.quant .all ["x"] (mvar "d") (mvar "c")))
       (bin .and (Expr.quant .all ["i"] (var "nat") (var "p"))
-                (Expr.quant .all ["j"] (var "nat") (var "q"))) [] = [] := by decide
+                (Expr.quant .all ["j"] (var "nat") (var "q"))) [] = [] := by decide +kernel
 
 /-- A shipped law rewriting a quantified line: `¬(∀i: nat· i ≥ 0)` is
 `∃i: nat· ¬(i ≥ 0)` by `generalized duality`, with the law's `x` written as the
@@ -811,7 +812,7 @@ def quantDuality : List Cmd :=
 theorem quantDuality_proves :
     provedIn quantSession quantDuality
       = some (bin .eq (neg bounded)
-          (Expr.quant .ex ["i"] (var "nat") (neg (bin .ge (var "i") (num 0))))) := by decide
+          (Expr.quant .ex ["i"] (var "nat") (neg (bin .ge (var "i") (num 0))))) := by decide +kernel
 
 /-- And a proof that works *inside* a body: `∀i: nat· ¬¬(i ≥ 0)`, by zooming in to
 the body — where `i: nat` becomes context — folding the double negation there, and
@@ -828,17 +829,17 @@ is in positive position. -/
 theorem quantBody_gains_the_membership :
     ((quantSession.steps (quantBody.take 2)).toOption.map fun d =>
       (d.contextLaws.map Law.stmt, d.frame?.map Frame.dir))
-      = some ([bin .mem (var "i") (var "nat")], some .same) := by decide
+      = some ([bin .mem (var "i") (var "nat")], some .same) := by decide +kernel
 
 theorem quantBody_proves :
     provedIn quantSession quantBody
       = some (bin .eq
           (Expr.quant .all ["i"] (var "nat") (neg (neg (bin .ge (var "i") (num 0)))))
-          bounded) := by decide
+          bounded) := by decide +kernel
 
 theorem quantBody_complete :
     ((quantSession.steps quantBody).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- `∀i: nat· i ≥ 0 ∧ i ≤ 9`, which `generalized distribution` takes apart into
 two quantifications of the same variable. -/
@@ -858,7 +859,7 @@ theorem quantDistribution_proves :
     provedIn quantSession quantDistribution
       = some (bin .eq distributionLine
           (bin .and (Expr.quant .all ["i"] (var "nat") (bin .ge (var "i") (num 0)))
-                    (Expr.quant .all ["i"] (var "nat") (bin .le (var "i") (num 9))))) := by decide
+                    (Expr.quant .all ["i"] (var "nat") (bin .le (var "i") (num 9))))) := by decide +kernel
 
 /-- The hole this form leaves, pinned down rather than left to be discovered.
 
@@ -875,7 +876,7 @@ theorem quant_domain_is_offered_boolean_laws :
       d.suggestions.any fun s =>
         s.result == Expr.quant .all ["i"] (neg (neg (var "nat")))
           (bin .and (bin .ge (var "i") (num 0)) (bin .le (var "i") (num 9))))
-      = some true := by decide
+      = some true := by decide +kernel
 
 /-! ### A gap, and closing it -/
 
@@ -890,14 +891,14 @@ def gap : List Cmd :=
 
 /-- Direct entry really does leave a gap … -/
 theorem gap_is_open :
-    ((session.steps (gap.take 2)).toOption.map Doc.gaps) = some [0] := by decide
+    ((session.steps (gap.take 2)).toOption.map Doc.gaps) = some [0] := by decide +kernel
 
 /-- … and taking the suggestion closes it, leaving a proof of `¬¬a = a`. -/
 theorem gap_is_closed :
-    ((session.steps gap).toOption.map Doc.gaps) = some [] := by decide
+    ((session.steps gap).toOption.map Doc.gaps) = some [] := by decide +kernel
 
 theorem gap_proves :
-    proved gap = some (bin .eq (neg (neg (var "a"))) (var "a")) := by decide
+    proved gap = some (bin .eq (neg (neg (var "a"))) (var "a")) := by decide +kernel
 
 /-! ### Matching modulo associativity, symmetry and the identity
 
@@ -930,7 +931,7 @@ theorem specialization_reads_every_way :
       = [(.imp, var "x"), (.imp, var "z"), (.imp, var "y"),
          (.imp, bin .and (var "x") (var "y")),
          (.imp, bin .and (var "y") (var "z")),
-         (.imp, bin .and (var "x") (var "z"))] := by decide
+         (.imp, bin .and (var "x") (var "z"))] := by decide +kernel
 
 /-- Symmetry rearranges the three operands every way but the one it started
 with, which the identity-rewrite gate drops. Every one writes a line of the same
@@ -947,7 +948,7 @@ theorem symmetry_reads_every_way :
          (.eq, bin .and (var "y") (bin .and (var "x") (var "z"))),
          (.eq, bin .and (bin .and (var "x") (var "z")) (var "y")),
          (.eq, bin .and (bin .and (var "y") (var "x")) (var "z")),
-         (.eq, bin .and (var "x") (bin .and (var "z") (var "y")))] := by decide
+         (.eq, bin .and (var "x") (bin .and (var "z") (var "y")))] := by decide +kernel
 
 /-! ### The order the suggestions come in
 
@@ -980,7 +981,7 @@ go backwards, and ranking the ranked list is the ranked list. -/
 theorem suggestions_are_ranked :
     ((session.steps [.start .boolean .down conjunction]).toOption.map fun d =>
       (ranked (d.suggestions.map key), Doc.rank d.suggestions == d.suggestions))
-      = some (true, true) := by decide
+      = some (true, true) := by decide +kernel
 
 /-- A proof that the reading associativity adds really can be taken: one step
 from `x ∧ y ∧ z` to `x`, where before it took an associative law first. -/
@@ -988,11 +989,11 @@ def assoc : List Cmd :=
   [ .start .boolean .down conjunction,
     .applyNamed "specialization" (some (.imp, var "x")) ]
 
-theorem assoc_proves : proved assoc = some (bin .imp conjunction (var "x")) := by decide
+theorem assoc_proves : proved assoc = some (bin .imp conjunction (var "x")) := by decide +kernel
 
 theorem assoc_complete :
     ((session.steps assoc).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- And one that symmetry adds: `x ∧ y ⇒ y`, in one step. No cut of `x ∧ y`
 into contiguous segments gives `a := y`, so before this the proof needed the
@@ -1002,11 +1003,11 @@ def swap : List Cmd :=
     .applyNamed "specialization" (some (.imp, var "y")) ]
 
 theorem swap_proves :
-    proved swap = some (bin .imp (bin .and (var "x") (var "y")) (var "y")) := by decide
+    proved swap = some (bin .imp (bin .and (var "x") (var "y")) (var "y")) := by decide +kernel
 
 theorem swap_complete :
     ((session.steps swap).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- A pattern operand that is not a law variable takes one operand and no
 more: `a ∧ (b ∨ c)` cannot read `x ∧ y ∧ z`, because no part of it is a
@@ -1027,30 +1028,30 @@ binary law would match every line. -/
 round are the two matches, the one that needs no rearrangement first. -/
 theorem symmetry_matches_a_swap :
     Expr.matchAll (bin .and (mvar "a") (mvar "b")) (bin .and (var "y") (var "x")) []
-      = [[("b", var "x"), ("a", var "y")], [("b", var "y"), ("a", var "x")]] := by decide
+      = [[("b", var "x"), ("a", var "y")], [("b", var "y"), ("a", var "x")]] := by decide +kernel
 
 /-- A law written with a unit reads a line that left it out: `a ∧ ⊤` matches
 the bare line `y`. -/
 theorem identity_is_elided :
-    Expr.matchAll (bin .and (mvar "a") .top) (var "y") [] = [[("a", var "y")]] := by decide
+    Expr.matchAll (bin .and (mvar "a") .top) (var "y") [] = [[("a", var "y")]] := by decide +kernel
 
 /-- A unit the line writes is struck out of it: `a ∧ a` matches `x ∧ ⊤ ∧ x`,
 which it cannot do while the `⊤` is still there to be shared out. -/
 theorem identity_is_struck_out :
     Expr.matchAll (bin .and (mvar "a") (mvar "a"))
-      (bin .and (bin .and (var "x") .top) (var "x")) [] = [[("a", var "x")]] := by decide
+      (bin .and (bin .and (var "x") .top) (var "x")) [] = [[("a", var "x")]] := by decide +kernel
 
 /-- But a law variable never takes the unit the line does not mention, so
 `a ∧ b` still does not match a line that is not a conjunction at all. That is
 what keeps the identity from making every binary law apply everywhere. -/
 theorem a_variable_does_not_take_the_unit :
-    Expr.matchAll (bin .and (mvar "a") (mvar "b")) (var "y") [] = [] := by decide
+    Expr.matchAll (bin .and (mvar "a") (mvar "b")) (var "y") [] = [] := by decide +kernel
 
 /-- `=` is symmetric without being an association, so it is matched by trying
 its two operands both ways round. -/
 theorem equality_is_symmetric :
     Expr.matchAll (bin .eq (mvar "a") (var "y")) (bin .eq (var "y") (var "x")) []
-      = [[("a", var "x")]] := by decide
+      = [[("a", var "x")]] := by decide +kernel
 
 /-! ### A law applied to a part of a line
 
@@ -1066,7 +1067,7 @@ def part : Expr := bin .and (var "x") (bin .or (var "y") (var "y"))
 /-- Idempotence does not match `x ∧ (y ∨ y)` at all: its main operator is `∧`,
 not `∨`. So the step below is not a whole-line match under any reading. -/
 theorem idempotence_misses_the_whole_line :
-    Expr.matchAll (bin .or (mvar "a") (mvar "a")) part [] = [] := by decide
+    Expr.matchAll (bin .or (mvar "a") (mvar "a")) part [] = [] := by decide +kernel
 
 /-- It does match the second main operand, and the suggestion rewrites that
 part in place, leaving `x` alone. -/
@@ -1075,11 +1076,11 @@ def minimize : List Cmd :=
     .applyNamed "idempotent" (some (.eq, bin .and (var "x") (var "y"))) ]
 
 theorem minimize_proves :
-    proved minimize = some (bin .eq part (bin .and (var "x") (var "y"))) := by decide
+    proved minimize = some (bin .eq part (bin .and (var "x") (var "y"))) := by decide +kernel
 
 theorem minimize_complete :
     ((session.steps minimize).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-! ### A law applied to a contiguous segment of an association
 
@@ -1098,22 +1099,22 @@ def segmentLine : Expr :=
 three of its operands. A run of one is a main operand and the run of all four is
 the line, so neither is listed. -/
 theorem segmentLine_segments :
-    segmentLine.segments = [(0, 2), (0, 3), (1, 2), (1, 3), (2, 2)] := by decide
+    segmentLine.segments = [(0, 2), (0, 3), (1, 2), (1, 3), (2, 2)] := by decide +kernel
 
 /-- A two-operand association has no segments at all: `x ∧ (y ∨ y)` has the two
 main operands `minimize` already reaches, and nothing between them. -/
-theorem a_pair_has_no_segments : part.segments = [] := by decide
+theorem a_pair_has_no_segments : part.segments = [] := by decide +kernel
 
 /-- Idempotence matches neither the whole line — no sharing out of
 `x ∧ y ∧ y ∧ z` makes its two halves equal … -/
 theorem idempotence_misses_the_whole_association :
-    Expr.matchAll (bin .and (mvar "a") (mvar "a")) segmentLine [] = [] := by decide
+    Expr.matchAll (bin .and (mvar "a") (mvar "a")) segmentLine [] = [] := by decide +kernel
 
 /-- … nor any single main operand, which are the bare identifiers `x`, `y`, `y`,
 `z`. So neither site the kernel had before this can fold the repetition. -/
 theorem idempotence_misses_every_operand :
     segmentLine.operands.all
-      (fun o => Expr.matchAll (bin .and (mvar "a") (mvar "a")) o [] == []) = true := by decide
+      (fun o => Expr.matchAll (bin .and (mvar "a") (mvar "a")) o [] == []) = true := by decide +kernel
 
 /-- The two shipped laws the segment scripts below name, and nothing else.
 
@@ -1142,7 +1143,7 @@ theorem segmentFold_proves :
 
 theorem segmentFold_complete :
     ((segmentSession.steps segmentFold).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- And it is the only way idempotence reaches `x ∧ y ∧ z` from that line: one
 suggestion, from the one segment that matches. -/
@@ -1150,7 +1151,7 @@ theorem segmentFold_is_the_only_fold :
     ((segmentSession.steps [.start .boolean .same segmentLine]).toOption.map fun d =>
       (d.suggestions.filter fun s =>
         s.law == "idempotent" && s.result == bin .and (bin .and (var "x") (var "y")) (var "z")).length)
-      = some 1 := by decide
+      = some 1 := by decide +kernel
 
 /-- And the suggestion is *credited to the run it rewrites*: `Suggestion.part`
 carries the site, which is what ranks a step by how specific its place is and
@@ -1166,7 +1167,7 @@ theorem segmentFold_is_credited_to_the_run :
        (d.suggestions.filter fun s =>
           s.law == "double negation" && s.result == neg (neg segmentLine)).map
         Suggestion.part))
-      = some ([.segment 1 2], [.whole]) := by decide
+      = some ([.segment 1 2], [.whole]) := by decide +kernel
 
 /-- `×` is associative, so it has segments, and its operands are neutral — the
 document's position table leaves `×` out, since a factor is monotonic only when
@@ -1179,7 +1180,7 @@ theorem times_segments_are_neutral :
       (fun s => match s.part with
         | .segment start len => some (start, len, s.pos, s.dir)
         | _ => none)
-      = [(0, 2, .neutral, .same), (1, 2, .neutral, .same)] := by decide
+      = [(0, 2, .neutral, .same), (1, 2, .neutral, .same)] := by decide +kernel
 
 /-! ### Numbers: the directions are `≤ = ≥`, and a negative position turns them
 
@@ -1212,14 +1213,14 @@ def number : List Cmd :=
 `≥` where the proof's was `≤`. -/
 theorem number_direction_turns :
     ((numberSession.steps (number.take 2)).toOption.bind
-      fun d => d.frame?.map Frame.dir) = some .up := by decide
+      fun d => d.frame?.map Frame.dir) = some .up := by decide +kernel
 
 /-- The subproof proves an equality, so zooming out writes `=`, and the whole
 calculation proves `n - m = n - (m + 0)`. -/
 theorem number_proves :
     provedIn numberSession number
       = some (bin .eq (bin .sub (var "n") (var "m"))
-                      (bin .sub (var "n") (bin .add (var "m") (num 0)))) := by decide
+                      (bin .sub (var "n") (bin .add (var "m") (num 0)))) := by decide +kernel
 
 /-! ### A unit the line never writes
 
@@ -1242,7 +1243,7 @@ make. -/
 theorem numberUnit_elides_the_zero :
     ((unitSession.steps [.start .number .down (var "n")]).toOption.map fun d =>
       d.suggestions.map fun s => (s.op, s.result))
-      = some [(.le, bin .add (var "n") (num 1))] := by decide
+      = some [(.le, bin .add (var "n") (num 1))] := by decide +kernel
 
 /-- And the step can be taken: `n ≤ n + 1`, with the unit never written. -/
 def numberUnitProof : List Cmd :=
@@ -1251,7 +1252,7 @@ def numberUnitProof : List Cmd :=
 
 theorem numberUnit_proves :
     provedIn unitSession numberUnitProof
-      = some (bin .le (var "n") (bin .add (var "n") (num 1))) := by decide
+      = some (bin .le (var "n") (bin .add (var "n") (num 1))) := by decide +kernel
 
 /-! ### A part in a negative position, without zooming
 
@@ -1270,7 +1271,7 @@ def numberMinimize : List Cmd :=
 theorem numberMinimize_proves :
     provedIn numberSession numberMinimize
       = some (bin .ge (bin .sub (var "n") (var "m"))
-                      (bin .sub (var "n") (bin .add (var "m") (num 1)))) := by decide
+                      (bin .sub (var "n") (bin .add (var "m") (num 1)))) := by decide +kernel
 
 /-- The turning is the only thing the position can do here: at the whole line,
 whose direction is `≥`, `successor`'s `≤` is not allowed in the margin at all,
@@ -1278,7 +1279,7 @@ so the only suggestion it makes is the one on the part. -/
 theorem numberMinimize_is_the_only_successor_step :
     ((numberSession.steps [.start .number .up (bin .sub (var "n") (var "m"))]).toOption.map
       fun d => (d.suggestions.filter (·.law == "successor")).map fun s => (s.op, s.result))
-      = some [(.ge, bin .sub (var "n") (bin .add (var "m") (num 1)))] := by decide
+      = some [(.ge, bin .sub (var "n") (bin .add (var "m") (num 1)))] := by decide +kernel
 
 /-! ### The display collapses
 
@@ -1308,11 +1309,11 @@ def fold : List Cmd :=
     .zoomOut ]
 
 theorem fold_proves :
-    proved fold = some (bin .eq part (bin .and (var "x") (var "y"))) := by decide
+    proved fold = some (bin .eq part (bin .and (var "x") (var "y"))) := by decide +kernel
 
 /-- The document keeps all four lines … -/
 theorem fold_keeps_its_four_lines :
-    ((session.steps fold).toOption.map fun d => d.lines.size) = some 4 := by decide
+    ((session.steps fold).toOption.map fun d => d.lines.size) = some 4 := by decide +kernel
 
 /-- … and the display draws two: the subproof was a single law application, so
 it folds into the line it was zoomed in from and `idempotent` moves up onto
@@ -1320,11 +1321,11 @@ that line. Lines 1 and 2 are not drawn; line 3 still answers to `focus 3`. -/
 theorem fold_collapses :
     ((session.steps fold).toOption.map Doc.shownLines)
       = some [{ index := 0, depth := 0, note := "idempotent" },
-              { index := 3, depth := 0, note := "" }] := by decide
+              { index := 3, depth := 0, note := "" }] := by decide +kernel
 
 /-- And what is drawn is, line for line, what `minimize` draws: the long way
 round and the short way round look the same, which is the point of the fold. -/
-theorem fold_shows_what_minimize_shows : shown fold = shown minimize := by decide
+theorem fold_shows_what_minimize_shows : shown fold = shown minimize := by decide +kernel
 
 /-- `x ∧ (y ∨ (¬¬z ∧ ¬¬z))`: two levels down there is a two-step subproof, so
 the merge of two zooms has something to leave behind. -/
@@ -1345,11 +1346,11 @@ def merge : List Cmd :=
 theorem merge_proves :
     proved merge
       = some (bin .eq nest
-                (bin .and (var "x") (bin .or (var "y") (var "z")))) := by decide
+                (bin .and (var "x") (bin .or (var "y") (var "z")))) := by decide +kernel
 
 /-- Seven lines in the document … -/
 theorem merge_keeps_its_seven_lines :
-    ((session.steps merge).toOption.map fun d => d.lines.size) = some 7 := by decide
+    ((session.steps merge).toOption.map fun d => d.lines.size) = some 7 := by decide +kernel
 
 /-- … five drawn, at one level of nesting rather than two. The middle level —
 line 1, which the first zoom in wrote, and line 5, which the first zoom out
@@ -1362,7 +1363,7 @@ theorem merge_collapses :
               { index := 2, depth := 1, note := "idempotent" },
               { index := 3, depth := 1, note := "double negation" },
               { index := 4, depth := 1, note := "" },
-              { index := 6, depth := 0, note := "" }] := by decide
+              { index := 6, depth := 0, note := "" }] := by decide +kernel
 
 /-- A merge can expose a fold: the same two zooms with a *one*-step subproof
 inside collapse all the way to two lines, the law's name on the first of them.
@@ -1379,14 +1380,14 @@ def mergeThenFold : List Cmd :=
 theorem mergeThenFold_collapses :
     ((session.steps mergeThenFold).toOption.map Doc.shownLines)
       = some [{ index := 0, depth := 0, note := "idempotent" },
-              { index := 5, depth := 0, note := "" }] := by decide
+              { index := 5, depth := 0, note := "" }] := by decide +kernel
 
 /-- Nothing is collapsed while the level is still open: after the inner zoom
 out of `merge`, the middle level is where the user is working, and all six
 lines written so far are drawn. A collapse waits for the matching zoom out. -/
 theorem merge_waits_for_the_zoom_out :
     ((session.steps (merge.take 6)).toOption.map fun d =>
-      (d.lines.size, d.shownLines.length)) = some (6, 6) := by decide
+      (d.lines.size, d.shownLines.length)) = some (6, 6) := by decide +kernel
 
 /-- A gap is never collapsed away: the same fold, but with the subproof's one
 step typed in directly instead of taken from a law, keeps all four lines and
@@ -1404,7 +1405,7 @@ step is not a law's. -/
 theorem gapInside_is_not_collapsed :
     ((session.steps gapInside).toOption.map fun d =>
       (d.shownLines.length, d.shownLines.map Shown.note))
-      = some (4, ["!", "!", "", ""]) := by decide
+      = some (4, ["!", "!", "", ""]) := by decide +kernel
 
 /-! ### A gap carried out of the subproof that holds it
 
@@ -1418,18 +1419,18 @@ line 1 carries inside the subproof. Before this, line 0 carried none and the
 outer step showed neither a law name nor a warning sign. -/
 theorem gapInside_gaps_the_line_before_the_splice :
     ((session.steps gapInside).toOption.map fun d => (d.gaps, d.note 0))
-      = some ([0, 1], "!") := by decide
+      = some ([0, 1], "!") := by decide +kernel
 
 /-- And the proof does not claim anything: the outer level has a gap in it, so
 `Doc.outcome` refuses even though the subproof has been closed. -/
-theorem gapInside_proves_nothing : proved gapInside = none := by decide
+theorem gapInside_proves_nothing : proved gapInside = none := by decide +kernel
 
 /-- Re-opening takes the carried gap back with the line that carried it out: a
 click on the subproof's bottom line leaves the gap the direct entry made inside
 the level, and nothing on the line above it. -/
 theorem reopen_takes_the_carried_gap_back :
     ((session.steps (gapInside ++ [.setFocus 2])).toOption.map fun d =>
-      (d.depth, d.lines.size, d.gaps)) = some (1, 3, [1]) := by decide
+      (d.depth, d.lines.size, d.gaps)) = some (1, 3, [1]) := by decide +kernel
 
 /-- And zooming out again carries it out again, writing the very document the
 first zoom out wrote: the splice and the warning sign on the line before it come
@@ -1437,21 +1438,21 @@ back as they were. Going back in and out of a subproof that holds a gap changes
 nothing. -/
 theorem reopen_then_zoom_out_is_the_same_document :
     (session.steps (gapInside ++ [.setFocus 2, .zoomOut])).toOption
-      = (session.steps gapInside).toOption := by decide
+      = (session.steps gapInside).toOption := by decide +kernel
 
 /-- A justified subproof splices as it always did. `fold`'s subproof is a single
 law application: no gap is carried out, line 0 keeps the law's name — lifted by
 the fold — and the proof stands. -/
 theorem fold_splices_without_a_gap :
     ((session.steps fold).toOption.map fun d => (d.gaps, d.note 0))
-      = some ([], "") := by decide
+      = some ([], "") := by decide +kernel
 
 /-- Neither does a *longer* justified subproof: `merge`'s inner level is two law
 steps, and the outer line before the splice is left unannotated, its
 justification being the lines inside. -/
 theorem merge_splices_without_a_gap :
     ((session.steps merge).toOption.map fun d => (d.gaps, d.note 0))
-      = some ([], "") := by decide
+      = some ([], "") := by decide +kernel
 
 /-- Two levels down, the gap is carried out twice: the direct entry gaps line 2
 inside the innermost level, the first zoom out gaps line 1, and the second gaps
@@ -1467,7 +1468,7 @@ def gapCarries : List Cmd :=
 
 theorem gapCarries_carries_it_all_the_way_out :
     ((session.steps gapCarries).toOption.map fun d => (d.gaps, d.note 0))
-      = some ([0, 1, 2], "!") := by decide
+      = some ([0, 1, 2], "!") := by decide +kernel
 
 /-- The merge would have drawn those six lines as four, and it does not: a
 collapse never hides a line a warning sign hangs on, and now there is one at
@@ -1475,14 +1476,14 @@ each level. -/
 theorem gapCarries_is_not_collapsed :
     ((session.steps gapCarries).toOption.map fun d =>
       (d.shownLines.length, d.shownLines.map Shown.note))
-      = some (6, ["!", "!", "!", "", "", ""]) := by decide
+      = some (6, ["!", "!", "!", "", "", ""]) := by decide +kernel
 
 /-- A click that abandons a gappy subproof carries the gap out too, because
 `Doc.closeToDepth` closes the levels by running `Doc.zoomOut`: `focus 0` in
 place of the two zoom-outs writes the very same document. -/
 theorem gapCarries_is_the_same_by_clicking :
     (session.steps (gapCarries.take 4 ++ [.setFocus 0])).toOption.map (fun d => d.lines.toList)
-      = (session.steps gapCarries).toOption.map (fun d => d.lines.toList) := by decide
+      = (session.steps gapCarries).toOption.map (fun d => d.lines.toList) := by decide +kernel
 
 /-! ### A segment as a level: zooming in to a run of operands
 
@@ -1507,7 +1508,7 @@ left-associated as `Expr.segmentExpr` builds it. -/
 theorem segmentZoom_opens_the_segment :
     ((session.steps (segmentZoom.take 2)).toOption.map fun d =>
       d.lines.toList.map fun l => (l.depth, l.expr))
-      = some [(0, segmentLine), (1, bin .and (var "y") (var "y"))] := by decide
+      = some [(0, segmentLine), (1, bin .and (var "y") (var "y"))] := by decide +kernel
 
 /-- And the frame remembers which run it was, with the type, direction and
 position the segment *site* carries — which is what lets the zoom out splice the
@@ -1515,14 +1516,14 @@ subproof back where it came from. -/
 theorem segmentZoom_remembers_the_run :
     ((session.steps (segmentZoom.take 2)).toOption.bind fun d =>
       d.frame?.map fun f => (f.ty, f.dir, f.pos, f.part))
-      = some (.boolean, .same, .positive, .segment 1 2) := by decide
+      = some (.boolean, .same, .positive, .segment 1 2) := by decide +kernel
 
 /-- Zooming in to a segment of a conjunction gains the operands *outside* the
 run as context, exactly as zooming in to one operand gains the other three:
 here `x` and `z`. -/
 theorem segmentZoom_gains_the_others :
     ((session.steps (segmentZoom.take 2)).toOption.map fun d =>
-      d.contextLaws.map Law.stmt) = some [var "x", var "z"] := by decide
+      d.contextLaws.map Law.stmt) = some [var "x", var "z"] := by decide +kernel
 
 /-- A segment of `×` is neutral — the document's position table leaves `×` out,
 since a factor is monotonic only for a nonnegative other — so zooming in to one
@@ -1532,12 +1533,12 @@ theorem times_segment_zoom_is_neutral :
     ((session.steps
         [ .start .number .down (bin .mul (bin .mul (var "n") (var "m")) (var "k")),
           .zoomIn (.segment 0 2) ]).toOption.bind fun d =>
-      d.frame?.map fun f => (f.ty, f.dir, f.pos)) = some (.number, .same, .neutral) := by decide
+      d.frame?.map fun f => (f.ty, f.dir, f.pos)) = some (.number, .same, .neutral) := by decide +kernel
 
 /-- The whole line is not a level of its own, so `Part.whole` is refused: it is
 the level one is already on. -/
 theorem the_whole_line_is_not_a_zoom_target :
-    (session.steps [.start .boolean .same segmentLine, .zoomIn .whole]).isOk = false := by decide
+    (session.steps [.start .boolean .same segmentLine, .zoomIn .whole]).isOk = false := by decide +kernel
 
 /-- It proves what the one-step segment rewrite proves. -/
 theorem segmentZoom_proves :
@@ -1547,7 +1548,7 @@ theorem segmentZoom_proves :
 
 theorem segmentZoom_complete :
     ((segmentSession.steps segmentZoom).toOption.map fun d => (d.gaps, d.stack.length))
-      = some ([], 1) := by decide
+      = some ([], 1) := by decide +kernel
 
 /-- And the line the zoom out splices is, connective and formula, the line
 `segmentFold` writes in one step: the long way round and the short way round
@@ -1556,7 +1557,7 @@ theorem segmentZoom_splices_what_the_site_writes :
     ((segmentSession.steps segmentZoom).toOption.bind fun d =>
         d.lines.toList.getLast?.map fun l => (l.conn, l.expr))
       = ((segmentSession.steps segmentFold).toOption.bind fun d =>
-        d.lines.toList.getLast?.map fun l => (l.conn, l.expr)) := by decide
+        d.lines.toList.getLast?.map fun l => (l.conn, l.expr)) := by decide +kernel
 
 /-- The document keeps all four lines, and the display draws two: the subproof is
 a single law application, so it folds into the line it was zoomed in from with
@@ -1565,10 +1566,10 @@ needed nothing added for segment zooms. -/
 theorem segmentZoom_collapses :
     ((segmentSession.steps segmentZoom).toOption.map fun d => (d.lines.size, d.shownLines))
       = some (4, [{ index := 0, depth := 0, note := "idempotent" },
-                  { index := 3, depth := 0, note := "" }]) := by decide
+                  { index := 3, depth := 0, note := "" }]) := by decide +kernel
 
 theorem segmentZoom_shows_what_segmentFold_shows :
-    shownIn segmentSession segmentZoom = shownIn segmentSession segmentFold := by decide
+    shownIn segmentSession segmentZoom = shownIn segmentSession segmentFold := by decide +kernel
 
 /-- The scripts `lake exe netty --demo=…` runs, paired with the command lists
 checked above; `netty --selftest` compares them. -/
