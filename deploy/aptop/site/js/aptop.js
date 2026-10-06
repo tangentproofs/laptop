@@ -63,9 +63,13 @@ export function aptopToken(stream) {
     return 'string';
   }
 
-  // Multi-char operators
+  // Multi-char operators (Hehner \/ = or, /\ = and)
   for (const op of OPS) {
-    if (stream.match(op)) return 'operator';
+    if (stream.match(op)) {
+      if (op === '∨' || op === '\\/') return 'or';
+      if (op === '∧' || op === '/\\') return 'and';
+      return 'operator';
+    }
   }
 
   // Single-char punctuation / ops
@@ -104,6 +108,8 @@ export const TOKEN_CLASS = {
   bool: 'cm-aptop-bool',
   variable: 'cm-aptop-variable',
   string: 'cm-aptop-string',
+  or: 'cm-aptop-or',
+  and: 'cm-aptop-and',
 };
 
 /**

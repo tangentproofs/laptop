@@ -1,10 +1,13 @@
 # aPToP Exercise 6(j) solution.
+# Rewritten with one Netty law per step (book: "inclusion, twice" then symmetry…).
 
 laws boolean
 
 theorem ex6j: (a ⇒ b) ∨ (b ⇒ a)
-    (a ⇒ b) ∨ (b ⇒ a)              inclusion, twice
-=   ¬a ∨ b ∨ ¬b ∨ a                symmetry of ∨
-=   a ∨ ¬a ∨ b ∨ ¬b                excluded middle, twice
-=   ⊤ ∨ ⊤                          idempotence of ∨, or base law
+    (a ⇒ b) ∨ (b ⇒ a)              inclusion
+=   (¬a ∨ b) ∨ (b ⇒ a)             inclusion
+=   (¬a ∨ b) ∨ (¬b ∨ a)            symmetry
+=   a ∨ ¬a ∨ b ∨ ¬b                excluded middle
+=   ⊤ ∨ b ∨ ¬b                     excluded middle
+=   ⊤ ∨ ⊤                          idempotent
 =   ⊤

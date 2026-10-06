@@ -333,19 +333,19 @@ export async function mountAptopEditor(parent, doc, opts = {}) {
   ]);
 
   const dark = EditorView.theme({
-    '&': { backgroundColor: '#121820', color: '#e7ecf1', maxHeight },
+    '&': { backgroundColor: '#272822', color: '#f8f8f2', maxHeight },
     '.cm-content': {
-      caretColor: '#e7ecf1',
+      caretColor: '#f8f8f2',
       fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
       fontSize: '0.9rem',
     },
-    '&.cm-focused .cm-cursor': { borderLeftColor: '#6cb6ff' },
+    '&.cm-focused .cm-cursor': { borderLeftColor: '#f8f8f2' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
-      backgroundColor: '#2a3542 !important',
+      backgroundColor: '#49483e !important',
     },
-    '.cm-gutters': { backgroundColor: '#0f1419', color: '#697098', border: 'none' },
-    '.cm-activeLine': { backgroundColor: '#1a222c' },
-    '.cm-activeLineGutter': { backgroundColor: '#1a222c' },
+    '.cm-gutters': { backgroundColor: '#272822', color: '#75715e', border: 'none' },
+    '.cm-activeLine': { backgroundColor: '#3e3d32' },
+    '.cm-activeLineGutter': { backgroundColor: '#3e3d32' },
   }, { dark: true });
 
   const extensions = [

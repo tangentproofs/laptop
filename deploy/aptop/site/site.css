@@ -1,19 +1,21 @@
 :root {
-  --bg: #0f1419;
-  --fg: #e7ecf1;
-  --muted: #9aa7b5;
-  --accent: #6cb6ff;
-  --accent2: #7fd99a;
-  --card: #1a222c;
-  --border: #2a3542;
-  --code-bg: #121820;
-  --kw: #c792ea;
-  --op: #89ddff;
-  --num: #f78c6c;
-  --str: #c3e88d;
-  --cmt: #697098;
-  --id: #e7ecf1;
-  --var: #82aaff;
+  /* Monokai — examples, interpreter, shared token classes */
+  --bg: #1e1f1c;
+  --fg: #f8f8f2;
+  --muted: #75715e;
+  --accent: #66d9ef;
+  --accent2: #a6e22e;
+  --card: #272822;
+  --border: #3e3d32;
+  --code-bg: #272822;
+  --kw: #f92672;
+  --op: #f92672;
+  --num: #ae81ff;
+  --str: #e6db74;
+  --cmt: #75715e;
+  --id: #f8f8f2;
+  --var: #a6e22e;
+  --fn: #a6e22e;
 }
 
 * { box-sizing: border-box; }
@@ -159,6 +161,19 @@ footer.site {
 .cm-aptop-bool { color: var(--str); }
 .cm-aptop-string { color: var(--str); }
 .cm-aptop-variable { color: var(--var); }
+/* Hehner \/ (∨) vs /\ (∧) — high contrast (∨ bigger/bolder) */
+.cm-aptop-or {
+  color: #f8f8f2;
+  font-weight: 800;
+  font-size: 1.35em;
+  line-height: 1;
+  vertical-align: -0.08em;
+}
+.cm-aptop-and {
+  color: #75715e;
+  font-weight: 500;
+  font-size: 1em;
+}
 
 /* Book + course — hard to miss */
 .sources {
@@ -183,7 +198,7 @@ footer.site {
 .sources a:hover {
   border-color: var(--accent);
   text-decoration: none;
-  background: #1e2833;
+  background: #3e3d32;
 }
 .sources a.book { border-color: var(--accent); color: var(--accent); }
 .sources a.course { border-color: var(--accent2); color: var(--accent2); }
@@ -266,7 +281,7 @@ nav.top a.ext.course { color: var(--accent2); }
 }
 .sym-sheet-btn:hover, .sym-sheet-btn[aria-expanded="true"] {
   border-color: var(--accent2);
-  background: #1e2833;
+  background: #3e3d32;
 }
 .sym-sheet {
   position: absolute;
