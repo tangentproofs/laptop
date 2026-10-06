@@ -47,12 +47,21 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/** API path relative to the page URL so a subpath deploy (e.g. /netty/)
+ * POSTs to /netty/api, not /api. Nginx strips /netty/ before proxying. */
+function apiUrl(): string {
+  const base = window.location.pathname.endsWith('/')
+    ? window.location.pathname
+    : window.location.pathname.replace(/\/[^/]*$/, '/');
+  return new URL('api', window.location.origin + base).pathname;
+}
+
 /** Ask the kernel, then redraw. A refused request leaves the state alone and
  * says why, which is what the kernel's answer already carries. */
 async function send(op: Op, arg = ''): Promise<Response | null> {
   let answer: Response;
   try {
-    const res = await fetch('/api', {
+    const res = await fetch(apiUrl(), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ op, arg }),
