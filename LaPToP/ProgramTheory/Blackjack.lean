@@ -1,6 +1,5 @@
 import LaPToP.ProgramTheory.RandomNumbers
 import Mathlib.Algebra.BigOperators.Ring.Finset
-import Mathlib.Tactic.IntervalCases
 import Mathlib.Algebra.BigOperators.Field
 
 /-!
@@ -174,9 +173,6 @@ theorem isDistribution_game7 : IsDistribution game7 :=
 noncomputable def dist7 (x' : ℤ) : ℝ :=
   (ind (2 ≤ x' ∧ x' < 7) * (x' - 1) + ind (7 ≤ x' ∧ x' < 14) * 19 + ind (14 ≤ x' ∧ x' < 20) * (20 - x')) / 169
 
-theorem Ico_one_fourteen : Finset.Ico (1 : ℤ) 14 = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13} := by
-  ext; simp; omega
-
 /-- `Σx′′· (x′′: 1,..14)/13 × ((x′′<7)×(x′: x′′+1,..x′′+14)/13 + (x′′≥7)×(x′=x′′))`. -/
 theorem game7_eq_sum (x x' : ℤ) :
     game7 x x' = ∑ x'' ∈ card, (1 / 13 : ℝ) * (ind (x'' < 7) * (ind (x'' + 1 ≤ x' ∧ x' < x'' + 14) / 13)
@@ -196,22 +192,44 @@ theorem game7_eq_sum (x x' : ℤ) :
   simp only [deal, under7Body, pcond, secondCard, pok]
   rw [ind_true hx'']
 
+/-! The sum is a table of integers over 169: each summand is `tbl7 x′′ x′ / 169`
+and `dist7 x′` is `num7 x′ / 169`, so the kernel computes the table
+(`tbl7_sum`) and no case of it is simplified over the reals. -/
+
+/-- `game7_eq_sum`'s summand, times 169: an integer. -/
+def tbl7 (x'' x' : ℤ) : ℤ :=
+  if x'' < 7 then (if x'' + 1 ≤ x' ∧ x' < x'' + 14 then 1 else 0) else (if x' = x'' then 13 else 0)
+
+/-- `dist7`, times 169. -/
+def num7 (x' : ℤ) : ℤ :=
+  if 2 ≤ x' ∧ x' < 7 then x' - 1 else if 7 ≤ x' ∧ x' < 14 then 19
+  else if 14 ≤ x' ∧ x' < 20 then 20 - x' else 0
+
+theorem tbl7_eq (x'' x' : ℤ) : (1 / 13 : ℝ) * (ind (x'' < 7) * (ind (x'' + 1 ≤ x' ∧ x' < x'' + 14) / 13)
+    + (1 - ind (x'' < 7)) * ind (x' = x'')) = (tbl7 x'' x' : ℝ) / 169 := by
+  unfold tbl7 ind
+  split_ifs <;> push_cast <;> ring
+
+theorem num7_eq (x' : ℤ) : dist7 x' = (num7 x' : ℝ) / 169 := by
+  unfold dist7 num7 ind
+  split_ifs <;> first | (exfalso; omega) | (push_cast; ring)
+
+/-- The table where it is not zero, computed by the kernel. -/
+theorem tbl7_sum_range : ∀ x' ∈ Ico (2 : ℤ) 20, ∑ x'' ∈ Ico (1 : ℤ) 14, tbl7 x'' x' = num7 x' := by
+  decide +kernel
+
+theorem tbl7_sum (x' : ℤ) : ∑ x'' ∈ card, tbl7 x'' x' = num7 x' := by
+  by_cases hx : 2 ≤ x' ∧ x' < 20
+  · exact tbl7_sum_range x' (mem_Ico.mpr hx)
+  · rw [sum_eq_zero fun x'' h => ?_]
+    · unfold num7; split_ifs <;> omega
+    · have := mem_Ico.mp h; unfold tbl7; split_ifs <;> omega
+
 /-- "`= ((2≤x′<7)×(x′–1) + (7≤x′<14)×19 + (14≤x′<20)×(20–x′)) / 169`. That is the distribution of
 `x′` if we use the “under 7” strategy." -/
 theorem game7_eq (x x' : ℤ) : game7 x x' = dist7 x' := by
-  rw [game7_eq_sum]
-  by_cases hx : 2 ≤ x' ∧ x' < 20
-  · obtain ⟨h1, h2⟩ := hx
-    rw [card, Ico_one_fourteen]
-    interval_cases x' <;> norm_num [dist7, ind, Finset.sum_insert]
-  · have hz : ∀ x'' ∈ card, (1 / 13 : ℝ) * (ind (x'' < 7) * (ind (x'' + 1 ≤ x' ∧ x' < x'' + 14) / 13)
-        + (1 - ind (x'' < 7)) * ind (x' = x'')) = 0 := fun x'' hx'' => by
-      simp only [card, Finset.mem_Ico] at hx''
-      unfold ind
-      split_ifs <;> first | (exfalso; omega) | norm_num
-    rw [Finset.sum_eq_zero hz]
-    unfold dist7 ind
-    split_ifs <;> first | (exfalso; omega) | norm_num
+  rw [game7_eq_sum, num7_eq, sum_congr rfl fun x'' _ => tbl7_eq x'' x', ← sum_div, ← Int.cast_sum,
+    tbl7_sum]
 
 /-! ### Two players: "under n" against "under n+1" -/
 
