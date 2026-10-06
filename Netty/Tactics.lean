@@ -119,11 +119,11 @@ macro "netty_ac" : tactic =>
   `(tactic| first
     | rfl
     | exact Iff.rfl
+    | ac_rfl
     | (simp (config := { maxSteps := 4000 }) only [and_assoc, and_comm, and_left_comm, or_assoc, or_comm, or_left_comm,
         and_true, true_and, or_false, false_or, eq_comm, ne_comm, Int.add_assoc, Int.add_comm, Int.add_left_comm,
         Int.mul_assoc, Int.mul_comm, Int.mul_left_comm, Int.add_zero, Int.zero_add,
-        Int.mul_one, Int.one_mul]; done)
-    | ac_rfl)
+        Int.mul_one, Int.one_mul]; done))
 
 /-- Prove a rule's step: eliminate the intermediate states the step pins, by the
 one-point rule, and the ones nothing mentions. -/

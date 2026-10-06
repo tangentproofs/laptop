@@ -93,7 +93,7 @@ lets it take as it is. -/
 def NotIo (s : State) : Prop := s.mem.get! (getIP s) ≠ 0xFD
 
 theorem notIo_of_hop {s : State} {op : UInt8} (hlo : 256 ≤ getIP s) (hop : high s (getIP s) = op)
-    (hne : op ≠ 0xFD := by decide) : NotIo s := by
+    (hne : op ≠ 0xFD := by decide +kernel) : NotIo s := by
   unfold NotIo; rw [get!_ip s hlo, hop]; exact hne
 
 /-- The machine goes from `s` to `s'`, running all the way, and never at an `io`. -/
@@ -710,7 +710,7 @@ theorem exp_runs (L : Layout) (hL : L.Ok) (st : St) : ∀ e : Exp, ERuns L st e 
         ⟨h₂.run, notIo_of_hop h₂.lo hop, rfl⟩, w₃, ?_, ?_,
         sm₁.trans (sm₂.trans sm₃)⟩
       · rw [i₃, i₂, i₁]; simp; omega
-      · rw [d₃]; congr 2; simp only [Exp.eval]; rw [ea, enc_int]; exact enc_neg ra
+      · rw [d₃]; refine congrArg (fun v => _ ++ [v]) ?_; simp only [Exp.eval]; rw [ea, enc_int]; exact enc_neg ra
     · obtain ⟨fa, b, eb⟩ := hf
       simp only [ecode, depth] at h ⊢
       obtain ⟨s₁, r₁, w₁, i₁, d₁, sm₁⟩ := iha s fa (h.left le_rfl)

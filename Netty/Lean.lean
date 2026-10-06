@@ -53,7 +53,8 @@ algebra step case by case on its identifiers. A step by a fact of the context
 (`context`) is carried by congruence lemmas that gain the same facts the kernel
 gained on the way in (`ctxEq`).
 
-Each such proof is tried on its own first (`accepts`). A step with no
+Each such proof is elaborated once, as a lemma of its own (`NAME.stepK`,
+by `defineStep`), and the theorem chains those lemmas. A step with no
 certificate — a hint that names nothing the kernel knows — or whose
 certificate's proof Lean does not accept is proved by Lean's automation
 (`netty_step`) instead, and the command reports, for every theorem, how many
@@ -929,30 +930,34 @@ def certLink (env : Tys) (p : Prog) (ty : Ty) (a b : Expr) (c : Cert) :
           ((show $CT' → $CS' from $core) (Eq.mpr (show $CT' = $B' by netty_ac) h))))
       return (pf, how)
 
-/-- Whether Lean accepts `pf` as a proof of `rel` under the theorem's binders:
-elaborated on its own, synchronously, with whatever it reports taken back out of
-the message log. `none` when it does; otherwise the first error. -/
-def accepts (bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder)) (rel pf : Term) :
-    CommandElabM (Option String) := do
-  let saved := (← get).messages
+/-- State one step as a lemma of its own, `name`, over the theorem's binders,
+proved by `pf`; elaborated once, synchronously. `none` when Lean accepts it, and
+the lemma is then in the environment for the theorem to cite; otherwise the
+first error, with the environment and the message log as they were. -/
+def defineStep (name : Ident) (bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder))
+    (rel pf : Term) : CommandElabM (Option String) := do
+  let saved ← get
   let cmd ← `(command|
-    open Classical in set_option Elab.async false in example $bs* : $rel := $pf)
+    open Classical in set_option Elab.async false in theorem $name:ident $bs* : $rel := $pf)
   elabCommand cmd
   let errs := (← get).messages.toList.filter (·.severity == .error)
-  let before := saved.toList.filter (·.severity == .error) |>.length
-  modify fun st => { st with messages := saved }
+  let before := saved.messages.toList.filter (·.severity == .error) |>.length
   if errs.length > before then
+    let msg ← (errs.drop before).head!.data.toString
     if (← IO.getEnv "NETTY_DEBUG").isSome then
-      _root_.Lean.logInfo m!"certificate proof failed:\n{cmd}\n{← (errs.drop before).head!.data.toString}"
-    return some (((← (errs.drop before).head!.data.toString).splitOn "\n").headD "")
+      _root_.Lean.logInfo m!"certificate proof failed:\n{cmd}\n{msg}"
+    set saved
+    return some ((msg.splitOn "\n").headD "")
   else return none
 
 /-- The proof of one step, from `a` to `b` with the connective `o`: from the
 certificates when the kernel checked the step by laws or rules, and by
 automation otherwise. -/
-def stepProof (bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder)) (env : Tys) (p : Prog)
+def stepProof (name : Ident) (args : Array Ident)
+    (bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder)) (env : Tys) (p : Prog)
     (ty : Ty) (unfold : Array Ident) (a b : Expr)
     (o : BinOp) (sc : StepCheck) : CommandElabM (Term × How) := do
+  let use ← `(($name $args*))
   let scope : Scope := { env := env, prog := p }
   let A' ← term scope ty a
   let B' ← term scope ty b
@@ -962,7 +967,9 @@ def stepProof (bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder)) (env : Ty
       unfold.mapM fun i => `(Lean.Parser.Tactic.simpLemma| $i:ident)
     let pf ← if unfold.isEmpty then `((show $rel from by netty_step))
       else `((show $rel from by (try simp only [$lemmas,*] at *) <;> netty_step))
-    return (pf, How.auto why)
+    -- Automation's own failure is a real error, and is left to be reported.
+    let _ ← defineStep name bs rel pf
+    return (use, How.auto why)
   let certs := match sc with
     | .law _ cs => cs
     | .lawIf _ _ cs => cs
@@ -998,8 +1005,8 @@ def stepProof (bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder)) (env : Ty
           | exact Int.le_of_lt $chain))
       let how := if hows.all (· == How.twin) then How.twin
         else if hows.any (· == How.rule) then How.rule else How.twin
-      match ← accepts bs rel pf with
-      | none => return (pf, how)
+      match ← defineStep name bs rel pf with
+      | none => return (use, how)
       | some err => auto s!"the certificate's proof failed: {err}"
     catch e => auto s!"{← e.toMessageData.toString}"
 
@@ -1020,18 +1027,25 @@ def theoremCmd (c : Checked) : CommandElabM (Syntax × List How) := do
   let unfold : Array Ident := (p.specs.map fun (n, _) => ident n).toArray
   let _ := lines
   let mut binders : Array Syntax := #[]
+  let mut args : Array Ident := #[]
   for n in names do
     let ty ← leanTy ((env.lookup n).getD .boolean)
     binders := binders.push (← `(bracketedBinder| ($(ident n) : $ty)))
+    args := args.push (ident n)
     -- A natural state variable, or its prime, is at least zero.
     let isNat := p.state.any fun (v, d) => (v == n || prime v == n) && d == .var "nat"
     if isNat then
       let h := mkIdent (Name.mkSimple ("h_" ++ (ident n).getId.toString))
       binders := binders.push (← `(bracketedBinder| ($h : 0 ≤ $(ident n))))
+      args := args.push h
   let bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder) := binders.map (⟨·⟩)
   let pairs := t.lines.zip (t.lines.drop 1)
-  let proofs ← (pairs.zip c.steps).mapM fun ((la, lb), st) =>
-    stepProof bs env p c.ty unfold la.expr lb.expr (lb.conn.getD .eq) st
+  -- Each step is a lemma of its own, `NAME.stepK`, elaborated once; the
+  -- theorem chains them.
+  let base := Proof.twinName t.name
+  let proofs ← ((pairs.zip c.steps).zipIdx).mapM fun (((la, lb), st), k) =>
+    stepProof (mkIdent (Name.mkStr (Name.mkSimple base) s!"step{k + 1}")) args bs env p c.ty
+      unfold la.expr lb.expr (lb.conn.getD .eq) st
   let links := proofs.map (·.1)
   let chain ← match links with
     | l :: ls => ls.foldlM (fun acc x => `(Trans.trans $acc $x)) l
@@ -1048,11 +1062,7 @@ def theoremCmd (c : Checked) : CommandElabM (Syntax × List How) := do
     | .imp, .bot => `(fun h => ($chain) h)
     | _, _ => pure chain
   let declName := mkIdent (Name.mkSimple (Proof.twinName t.name))
-  -- Each step was already checked on its own; the theorem gets the time of all
-  -- of them.
-  let beats : TSyntax `num := Syntax.mkNumLit (toString (200000 * (t.lines.length + 1)))
-  let cmd ← `(open Classical in set_option maxHeartbeats $beats in
-    theorem $declName:ident $bs* : $claim := $body)
+  let cmd ← `(open Classical in theorem $declName:ident $bs* : $claim := $body)
   return (cmd, proofs.map (·.2))
 
 /-- `netty_proofs "file"` checks every calculation of a calculation file with the

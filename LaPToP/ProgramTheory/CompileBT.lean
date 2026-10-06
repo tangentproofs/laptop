@@ -186,7 +186,7 @@ theorem fits_recAt {L : Layout} {ms : List ℤ} {σ : St} {k : ℕ} (hl : ms.len
     Fits L.rt (MS ms σ) (RT.recAt L.W) := by
   have hcw : L.W + 5 ≤ L.cap := by unfold Layout.cap; omega
   have hkw : k * (L.W + 1) ≤ L.cap := by
-    unfold Layout.cap; nlinarith
+    unfold Layout.cap; have := Nat.mul_le_mul_right (L.W + 1) hkc; omega
   have hP1 : (k : ℤ) * ((L.W : ℤ) + 1) ≤ L.cap := by exact_mod_cast hkw
   have hP0 : 0 ≤ (k : ℤ) * ((L.W : ℤ) + 1) := by positivity
   have hkcap : k ≤ L.cap := le_trans (Nat.le_mul_of_pos_right _ (by omega)) hkw
@@ -207,10 +207,10 @@ theorem save_runs {L : Layout} {d : ℕ} {σ : St} (hcap : L.cap < 2 ^ 20) {ms :
         j ≠ L.W + 2 → j ≠ L.W + 3 → rd ms' j = rd ms j) := by
   have hcw : L.W + 5 ≤ L.cap := by unfold Layout.cap; omega
   have hR : recIdx L k + L.W + 1 ≤ L.cap := by
-    unfold recIdx Layout.cap
     have : (k + 1) * (L.W + 1) ≤ L.choices * (L.W + 1) := Nat.mul_le_mul_right _ hkc
-    have h2 : ((k : ℤ) + 1) * ((L.W : ℤ) + 1) ≤ (L.choices : ℤ) * ((L.W : ℤ) + 1) := by exact_mod_cast this
-    push_cast; nlinarith
+    rw [Nat.succ_mul] at this
+    have hn : L.W + 5 + k * (L.W + 1) + L.W + 1 ≤ L.cap := by unfold Layout.cap; omega
+    unfold recIdx; exact_mod_cast hn
   have hch : L.choices ≤ L.cap :=
     le_trans (Nat.le_mul_of_pos_right L.choices (by omega : 0 < L.W + 1)) (by unfold Layout.cap; omega)
   have hR0 : (L.W : ℤ) + 5 ≤ recIdx L k := by
@@ -286,10 +286,10 @@ theorem pop_runs {L : Layout} {d : ℕ} {σ : St} (hcap : L.cap < 2 ^ 20) {ms : 
   have hch : L.choices ≤ L.cap :=
     le_trans (Nat.le_mul_of_pos_right L.choices (by omega : 0 < L.W + 1)) (by unfold Layout.cap; omega)
   have hR : recIdx L k + L.W + 1 ≤ L.cap := by
-    unfold recIdx Layout.cap
     have : (k + 1) * (L.W + 1) ≤ L.choices * (L.W + 1) := Nat.mul_le_mul_right _ hkc
-    have h2 : ((k : ℤ) + 1) * ((L.W : ℤ) + 1) ≤ (L.choices : ℤ) * ((L.W : ℤ) + 1) := by exact_mod_cast this
-    push_cast; nlinarith
+    rw [Nat.succ_mul] at this
+    have hn : L.W + 5 + k * (L.W + 1) + L.W + 1 ≤ L.cap := by unfold Layout.cap; omega
+    unfold recIdx; exact_mod_cast hn
   have hR0 : (L.W : ℤ) + 5 ≤ recIdx L k := by
     unfold recIdx; have : (0 : ℤ) ≤ k * (L.W + 1) := by positivity
     omega
@@ -733,7 +733,8 @@ theorem sim_choice {L : Layout} (hB : BTOk L) {ks : List Stmt} {st : PSt ℕ Val
   rw [← haltdef] at hQ hJ hS
   have hcw : L.W + 5 ≤ L.cap := by unfold Layout.cap; omega
   have hkc : k < L.cap := by
-    have := recN_end L hlen; unfold recN at this; nlinarith
+    have := recN_end L hlen; unfold recN at this
+    have : k ≤ k * (L.W + 1) := Nat.le_mul_of_pos_right k (Nat.succ_pos L.W); omega
   have hcnt0 := hr₁.cnt
   rw [hkdef] at hcnt0
   have hcnt : rd (words L (high s₁)) L.W = k := by
