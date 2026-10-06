@@ -1,0 +1,20 @@
+[Unit]
+Description=aptop Netty (three-pane + Lean kernel)
+After=network.target
+
+[Service]
+Type=simple
+User=michal
+WorkingDirectory=/home/michal/ver/laptop/netty-web
+Environment=PATH=/home/michal/.elan/bin:/usr/local/bin:/usr/bin:/bin
+Environment=NETTY_HOST=127.0.0.1
+Environment=NETTY_PORT=4711
+Environment=NETTY_CWD=/home/michal/ver/laptop
+Environment=NETTY_CMD=/home/michal/ver/laptop/.lake/build/bin/netty --serve
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=3
+MemoryMax=768M
+
+[Install]
+WantedBy=default.target
