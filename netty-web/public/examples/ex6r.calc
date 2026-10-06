@@ -1,0 +1,9 @@
+# aPToP Exercise 6(r) solution — a ⇒ (b ⇒ a) via portation.
+# (This is the exercise; the book's worked Law of Portation is a different theorem.)
+
+laws boolean
+
+theorem ex6r: a ⇒ (b ⇒ a)
+    a ⇒ (b ⇒ a)                    portation
+=   a ∧ b ⇒ a                      specialization
+=   ⊤

@@ -10,14 +10,28 @@
 
 export type BookCalc = { id: string; label: string; file: string };
 
-/** Book calculation files shipped under public/examples/ (aPToP §10.4 + demo). */
+/** Exact aPToP book / solution calculations under public/examples/. */
 export const BOOK_CALCS: BookCalc[] = [
-  { id: 'portation', label: 'portation (demo.calc)', file: 'examples/demo.calc' },
-  { id: 'ex121', label: 'ex121 (ch4 · substitution)', file: 'examples/ch4.calc' },
-  { id: 'ex136', label: 'ex136 (ch4b · boolean assign)', file: 'examples/ch4b.calc' },
-  { id: 'ex137', label: 'ex137 (ch4c · swap / sum)', file: 'examples/ch4c.calc' },
-  { id: 'sum', label: 'sum (ex140 implementation)', file: 'examples/sum.calc' },
+  { id: 'portation', label: 'Law of Portation (§1.0.1 worked)', file: 'examples/portation.calc' },
+  { id: 'portation-top', label: 'Law of Portation → ⊤ (§1.0.1)', file: 'examples/portation-top.calc' },
+  { id: 'ex5b', label: 'ex5b (excluded middle)', file: 'examples/ex5b.calc' },
+  { id: 'ex6a', label: 'ex6a (specialization)', file: 'examples/ex6a.calc' },
+  { id: 'ex6c', label: 'ex6c (portation)', file: 'examples/ex6c.calc' },
+  { id: 'ex6i', label: 'ex6i (noncontradiction)', file: 'examples/ex6i.calc' },
+  { id: 'ex6j', label: 'ex6j (inclusion)', file: 'examples/ex6j.calc' },
+  { id: 'ex6r', label: 'ex6r (a⇒(b⇒a))', file: 'examples/ex6r.calc' },
+  { id: 'ex7a', label: 'ex7a (if-then-else)', file: 'examples/ex7a.calc' },
+  { id: 'ex12ab', label: 'ex12 (drink/drive)', file: 'examples/ex12ab.calc' },
+  { id: 'ex121a', label: 'ex121a (substitution)', file: 'examples/ex121a.calc' },
+  { id: 'ex121b', label: 'ex121b (substitution)', file: 'examples/ex121b.calc' },
+  { id: 'ex121f', label: 'ex121f (x:=1. ok)', file: 'examples/ex121f.calc' },
+  { id: 'ex121g', label: 'ex121g (x:=1. y:=2)', file: 'examples/ex121g.calc' },
+  { id: 'ex136a', label: 'ex136a (binary := → ok)', file: 'examples/ex136a.calc' },
+  { id: 'ex136b', label: 'ex136b (binary swap)', file: 'examples/ex136b.calc' },
+  { id: 'ex137a', label: 'ex137a (int := → ok)', file: 'examples/ex137a.calc' },
+  { id: 'ex137b', label: 'ex137b (int swap)', file: 'examples/ex137b.calc' },
   { id: 'ex139', label: 'ex139 (nat loop refine)', file: 'examples/ex139.calc' },
+  { id: 'ex140-R', label: 'ex140 R refinement', file: 'examples/ex140-R.calc' },
 ];
 
 /** Interactive demos still in the kernel; portation first, UI gadgets last. */

@@ -1,0 +1,10 @@
+# aPToP Exercise 6(j) solution.
+
+laws boolean
+
+theorem ex6j: (a ⇒ b) ∨ (b ⇒ a)
+    (a ⇒ b) ∨ (b ⇒ a)              inclusion, twice
+=   ¬a ∨ b ∨ ¬b ∨ a                symmetry of ∨
+=   a ∨ ¬a ∨ b ∨ ¬b                excluded middle, twice
+=   ⊤ ∨ ⊤                          idempotence of ∨, or base law
+=   ⊤

@@ -1,0 +1,7 @@
+# aPToP Exercise 5(b) solution.
+
+laws boolean
+
+theorem ex5b: x ∨ ¬x ≡ ⊤
+    x ∨ ¬x                         law of excluded middle
+=   ⊤

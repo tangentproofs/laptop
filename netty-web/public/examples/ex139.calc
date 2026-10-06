@@ -1,45 +1,19 @@
-# Exercise 139 of aPToP §10.4: in natural variables n and m, prove
-#     P ⇐ n:= n+1. if n=10 then ok else m:= m–1. P fi
-# where P = m:= m+n–9. n:= 10.
-#
-# Over nat the substitution law keeps what an assignment needs to have a final
-# state: m:= m–1 needs m–1: nat, and m:= m+n–9 needs m+n–9: nat.
+# aPToP Exercise 139 solution — natural loop refinement (exact solution).
+# P = m:= m+n–9. n:= 10
 
 laws boolean
 state n, m: nat
 
 spec P = m:= m+n–9. n:= 10
 
-refine P ⟸ n:= n+1. if n = 10 then ok else m:= m–1. P fi
-    P ⇐ (n:= n + 1. if n = 10 then ok else m:= m - 1. P fi)    definition of P
-=   P ⇐ (n:= n + 1. if n = 10 then ok else m:= m - 1. (m:= m + n - 9. n:= 10) fi)    assignment
-=   P ⇐ (n:= n + 1. if n = 10 then ok else m:= m - 1. m:= m + n - 9. n′ = 10 ∧ m′ = m fi)    substitution law
-=   P ⇐ (n:= n + 1. if n = 10 then ok else m:= m - 1. m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9) fi)    substitution law
-=   P ⇐ (n:= n + 1. if n = 10 then ok else m - 1: nat ∧ (m - 1 + n - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + n - 9)) fi)    ok
-=   P ⇐ (n:= n + 1. if n = 10 then n′ = n ∧ m′ = m else m - 1: nat ∧ (m - 1 + n - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + n - 9)) fi)    substitution law
-=   P ⇐ if n + 1 = 10 then n′ = n + 1 ∧ m′ = m else m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) fi    definition of P
-=   (m:= m + n - 9. n:= 10) ⇐ if n + 1 = 10 then n′ = n + 1 ∧ m′ = m else m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) fi    assignment
-=   (m:= m + n - 9. n′ = 10 ∧ m′ = m) ⇐ if n + 1 = 10 then n′ = n + 1 ∧ m′ = m else m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) fi    substitution law
-=   m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9) ⇐ if n + 1 = 10 then n′ = n + 1 ∧ m′ = m else m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) fi    case analysis
-=   m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9) ⇐ n + 1 = 10 ∧ (n′ = n + 1 ∧ m′ = m) ∨ ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9))    mirror
-=   n + 1 = 10 ∧ (n′ = n + 1 ∧ m′ = m) ∨ ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9)    antidistributive
-=   (n + 1 = 10 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    arithmetic
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    context
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ m + n - 9: nat ∧ (n + 1 = 10 ∧ m′ = m + n - 9)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    context
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ m + n - 9: nat ∧ (n + 1 = 10 ∧ m = m + n - 9)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    context
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ m + 9 - 9: nat ∧ (n + 1 = 10 ∧ m = m + n - 9)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    context
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ m + 9 - 9: nat ∧ (9 + 1 = 10 ∧ m = m + n - 9)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    context
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ m + 9 - 9: nat ∧ (9 + 1 = 10 ∧ m = m + 9 - 9)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    arithmetic
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ m: nat ∧ (⊤ ∧ ⊤)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    domain
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ ⊤ ∧ (⊤ ∧ ⊤)) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    identity
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ ⊤ ∧ ⊤) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    identity
-=   (n = 9 ∧ (n′ = n + 1 ∧ m′ = m) ⇒ ⊤) ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    base
-=   ⊤ ∧ (¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9))    identity
-=   ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (n′ = 10 ∧ m′ = m + n - 9)    context
-=   ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (10 = 10 ∧ m′ = m + n - 9)    context
-=   ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m + n - 9: nat ∧ (10 = 10 ∧ m - 1 + (n + 1) - 9 = m + n - 9)    arithmetic
-=   ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ m - 1 + (n + 1) - 9: nat ∧ (⊤ ∧ ⊤)    context
-=   ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ ⊤ ∧ (⊤ ∧ ⊤)    identity
-=   ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ ⊤ ∧ ⊤    identity
-=   ¬n + 1 = 10 ∧ m - 1: nat ∧ (m - 1 + (n + 1) - 9: nat ∧ (n′ = 10 ∧ m′ = m - 1 + (n + 1) - 9)) ⇒ ⊤    base
-=   ⊤
+theorem ex139: (n:= n+1. if n=10 then ok else m:= m–1. P fi) ≡ P
+    n:= n+1. if n=10 then ok else m:= m–1. P fi                         replace ok and P
+=   n:= n+1. if n=10 then m′=m ∧ n′=n else m:= m–1. m:= m+n–9. n:= 10   replace final assignment
+=   n:= n+1. if n=10 then m′=m ∧ n′=n else m:= m–1. m:= m+n–9. m′=m ∧ n′=10
+=   n:= n+1. if n=10 then m′=m ∧ n′=n else m′=m–1+n–9 ∧ n′=10           two substitutions
+=   if n+1=10 then m′=m ∧ n′=n+1 else m′=m–1+n+1–9 ∧ n′=10              substitution
+=   if n=9 then m′=m ∧ n′=n+1 else m′=m+n–9 ∧ n′=10                     arithmetic
+=   if n=9 then m′=m+n–9 ∧ n′=10 else m′=m+n–9 ∧ n′=10                  context
+=   m′=m+n–9 ∧ n′=10                                                    case idempotent
+=   m:= m+n–9. n:= 10                                                   definitions of assignment and sequential composition
+=   P

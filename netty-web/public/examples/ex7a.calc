@@ -1,0 +1,9 @@
+# aPToP Exercise 7(a) solution — if-then-else (case analysis form).
+
+laws boolean
+
+theorem ex7a: if a then a else ¬a fi ≡ ⊤
+    if a then a else ¬a fi         case analysis
+=   a ∧ a ∨ ¬a ∧ ¬a                idempotence twice
+=   a ∨ ¬a                         excluded middle
+=   ⊤

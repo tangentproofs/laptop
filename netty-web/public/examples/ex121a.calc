@@ -1,0 +1,9 @@
+# aPToP §4.0.1 / Exercise 121(a) — Substitution Law (as in the book).
+# State: integer variables x and y.
+
+laws boolean
+state x, y: int
+
+theorem ex121a: (x:= y+1. y′ > x′) ≡ y′ > x′
+    x:= y+1. y′ > x′               Substitution Law
+=   y′ > x′

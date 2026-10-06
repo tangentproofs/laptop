@@ -52,11 +52,60 @@ body {
 
 header {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.site-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 1.5rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--pane);
+}
+.site-bar .brand {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink);
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+.site-bar .brand span { color: var(--good); font-weight: 600; }
+.site-bar .brand:hover { text-decoration: none; }
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.85rem 1.25rem;
+  flex: 1;
+  justify-content: space-between;
+  font-size: 0.95rem;
+}
+.site-nav .nav-local,
+.site-nav .nav-hehner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: baseline;
+}
+.site-nav .nav-hehner { margin-left: auto; }
+.site-nav a { color: var(--hot); text-decoration: none; }
+.site-nav a:hover { text-decoration: underline; }
+.site-nav a[aria-current="page"] { color: var(--good); font-weight: 600; }
+.site-nav a.ext { font-weight: 600; }
+.site-nav a.ext.book { color: var(--hot); }
+.site-nav a.ext.course { color: var(--good); }
+
+.netty-bar {
+  display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.6rem 1rem;
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--rule);
+  padding: 0.55rem 1rem;
 }
 
 h1 { font-size: 1.1rem; margin: 0; letter-spacing: 0.02em; }
@@ -258,17 +307,7 @@ button.operand.site, button.operand.segment.site {
   border: 1px solid var(--rule); border-radius: 3px; background: var(--pane); color: var(--ink); }
 .holes button { font-size: 0.75rem; padding: 0.1rem 0.5rem; }
 
-a.book-link {
-  font-size: 0.85rem;
-  font-weight: 650;
-  color: var(--hot);
-  text-decoration: none;
-  border: 1px solid var(--rule);
-  border-radius: 5px;
-  padding: 0.15rem 0.5rem;
-}
-a.book-link:hover { border-color: var(--hot); text-decoration: underline; }
-a.book-link.course { color: var(--good); }
+/* book/course links live in .site-nav .nav-hehner */
 
 .book-calc {
   margin: 0;

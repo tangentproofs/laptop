@@ -1,0 +1,13 @@
+# aPToP Exercise 136(a) solution — binary program (exact solution text).
+# State: binary variables x and y.
+
+laws boolean
+state x, y: bin
+
+theorem ex136a: (x:= x=y. x:= x=y) ≡ ok
+    x:= x=y. x:= x=y                             rewrite last assignment
+=   x:= x=y. x′ = (x=y) ∧ y′=y                   Substitution Law
+=   x′=((x=y)=y) ∧ y′=y                          Associative Law for binary =
+=   x′=(x=(y=y)) ∧ y′=y                          Reflexive and Identity laws for =
+=   x′=x ∧ y′=y
+=   ok

@@ -631,21 +631,31 @@ function draw(): void {
   const s = state;
   const kids: (Node | string)[] = [
     el('header', {},
-      el('h1', {}, 'Netty'),
-      el('span', { class: 'tagline' }, 'a prover’s assistant for calculational proofs'),
-      el('a', {
-        class: 'book-link',
-        href: 'https://www.cs.toronto.edu/~hehner/aPToP/',
-        target: '_blank',
-        rel: 'noopener',
-      }, 'aPToP book'),
-      el('a', {
-        class: 'book-link course',
-        href: 'https://www.cs.utoronto.ca/~hehner/FMSD/',
-        target: '_blank',
-        rel: 'noopener',
-      }, 'FMSD course'),
-      toolbar(s)),
+      el('div', { class: 'site-bar' },
+        el('a', { class: 'brand', href: '/' }, 'aPToP ', el('span', {}, '/ LaPToP')),
+        el('nav', { class: 'site-nav', 'aria-label': 'Primary' },
+          el('span', { class: 'nav-local' },
+            el('a', { href: '/' }, 'Home'),
+            el('a', { href: '/netty/', 'aria-current': 'page' }, 'Netty'),
+            el('a', { href: '/interp/' }, 'Interpreter'),
+            el('a', { href: '/examples/' }, 'Examples')),
+          el('span', { class: 'nav-hehner' },
+            el('a', {
+              class: 'ext book',
+              href: 'https://www.cs.toronto.edu/~hehner/aPToP/',
+              target: '_blank',
+              rel: 'noopener',
+            }, 'aPToP book (free)'),
+            el('a', {
+              class: 'ext course',
+              href: 'https://www.cs.utoronto.ca/~hehner/FMSD/',
+              target: '_blank',
+              rel: 'noopener',
+            }, 'Video Course')))),
+      el('div', { class: 'netty-bar' },
+        el('h1', {}, 'Netty'),
+        el('span', { class: 'tagline' }, 'a prover’s assistant for calculational proofs'),
+        toolbar(s))),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
           'book examples… loads a §10.4 calculation into the proof pane; demonstration… replays a built-in proof; click a suggestion to take it')

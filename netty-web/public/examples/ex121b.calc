@@ -1,0 +1,8 @@
+# aPToP Exercise 121(b) — Substitution Law (as in the book).
+
+laws boolean
+state x, y: int
+
+theorem ex121b: (x:= x+1. y′ > x ∧ x′ > x) ≡ y′ > x+1 ∧ x′ > x+1
+    x:= x+1. y′ > x ∧ x′ > x       Substitution Law
+=   y′ > x+1 ∧ x′ > x+1

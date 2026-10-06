@@ -1,0 +1,8 @@
+# aPToP Exercise 6(i) solution.
+
+laws boolean
+
+theorem ex6i: a ∧ ¬a ⇒ b
+    a ∧ ¬a ⇒ b                     noncontradiction
+=   ⊥ ⇒ b                          base
+=   ⊤

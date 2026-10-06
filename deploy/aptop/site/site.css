@@ -13,6 +13,7 @@
   --str: #c3e88d;
   --cmt: #697098;
   --id: #e7ecf1;
+  --var: #82aaff;
 }
 
 * { box-sizing: border-box; }
@@ -51,9 +52,20 @@ header.site .brand span { color: var(--accent2); font-weight: 600; }
 nav.top {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.85rem;
+  align-items: baseline;
+  gap: 0.85rem 1.25rem;
   font-size: 0.95rem;
+  flex: 1;
+  justify-content: space-between;
 }
+nav.top .nav-local,
+nav.top .nav-hehner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: baseline;
+}
+nav.top .nav-hehner { margin-left: auto; }
 nav.top a.soon { color: var(--muted); }
 nav.top a[aria-current="page"] { color: var(--accent2); font-weight: 600; }
 
@@ -137,11 +149,16 @@ footer.site {
 }
 .editor .cm-editor { height: 100%; font-size: 0.9rem; }
 .editor .cm-scroller { font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; }
+/* Token colors — palette also applied via HighlightStyle in aptop-editor.js.
+   `.cm-aptop-*` covers the aptop() class-name path; CM6 StreamLanguage+HighlightStyle
+   paints via injected tag styles (not these class names). */
 .cm-aptop-keyword { color: var(--kw); font-weight: 600; }
 .cm-aptop-operator { color: var(--op); }
 .cm-aptop-number { color: var(--num); }
 .cm-aptop-comment { color: var(--cmt); font-style: italic; }
 .cm-aptop-bool { color: var(--str); }
+.cm-aptop-string { color: var(--str); }
+.cm-aptop-variable { color: var(--var); }
 
 /* Book + course — hard to miss */
 .sources {
@@ -181,6 +198,7 @@ nav.top a.ext {
   color: var(--accent);
   font-weight: 600;
 }
+nav.top a.ext.book { color: var(--accent); }
 nav.top a.ext.course { color: var(--accent2); }
 
 .toolbar-row {

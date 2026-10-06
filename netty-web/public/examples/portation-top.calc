@@ -1,0 +1,10 @@
+# aPToP §1.0.1 — Law of Portation again, simplified to ⊤
+# (exact second form from the book).
+
+laws boolean
+
+theorem Law of Portation to ⊤: (a ∧ b ⇒ c ≡ a ⇒ (b ⇒ c)) ≡ ⊤
+    (a ∧ b ⇒ c ≡ a ⇒ (b ⇒ c))                    Material Implication, 3 times
+=   (¬(a ∧ b) ∨ c ≡ ¬a ∨ (¬b ∨ c))               Duality
+=   (¬a ∨ ¬b ∨ c ≡ ¬a ∨ ¬b ∨ c)                  Reflexivity of =
+=   ⊤

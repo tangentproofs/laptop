@@ -1,0 +1,14 @@
+# aPToP Exercise 140 solution — proof of R refinement (exact solution).
+# R = s′ = Σ[0;..n] ; Q = s′ = s + Σ[0;..n]
+
+laws boolean
+state n, s: nat
+
+spec R = s′ = Σ[0;..n]
+spec Q = s′ = s + Σ[0;..n]
+
+theorem ex140 R: (s:= 0. Q) ≡ R
+    s:= 0. Q                       expand Q
+=   s:= 0. s′ = s + Σ[0;..n]       substitution law and simplify
+=   s′ = Σ[0;..n]
+=   R

@@ -1,11 +1,16 @@
 /**
  * CM6 mount helper for the aPToP highlighter (CDN only), optional
  * keyboard expansions, and a mobile-friendly symbol sheet.
+ *
+ * Highlighting: a ViewPlugin re-tokenizes visible lines with aptopToken and
+ * applies site.css classes (`.cm-aptop-keyword`, …). We do not rely on
+ * HighlightStyle + Lezer tags — esm.sh can load two copies of
+ * @lezer/highlight, so tag identity fails and tokens stay uncolored.
  */
-import { aptopToken, KEYWORDS } from './aptop.js';
+import { aptopToken, KEYWORDS, TOKEN_CLASS } from './aptop.js';
 import { expansions, expansionGroups } from './expansions.js';
 
-export { KEYWORDS, expansions, expansionGroups };
+export { KEYWORDS, expansions, expansionGroups, TOKEN_CLASS };
 
 /** Common aPToP symbols for the insert sheet — glyph + plain name only. */
 export const SYMBOL_SHEET = [
@@ -111,24 +116,118 @@ function expansionExtensions(isolateHistory, EditorView) {
   return [expansionInput, blockExpansionInput];
 }
 
-async function loadStreamLang() {
-  const { StreamLanguage } = await import(
-    'https://esm.sh/@codemirror/language@6?deps=@codemirror/state@6,@codemirror/view@6'
-  );
-  return StreamLanguage.define({
-    name: 'aptop',
-    token(stream) {
-      const t = aptopToken(stream);
-      if (t === 'comment') return 'comment';
-      if (t === 'operator') return 'operator';
-      if (t === 'number') return 'number';
-      if (t === 'keyword') return 'keyword';
-      if (t === 'bool') return 'atom';
-      if (t === 'variable') return 'variableName';
-      return null;
+/** Minimal StringStream for aptopToken (same surface CM StreamLanguage uses). */
+function stringStream(line) {
+  let pos = 0;
+  let start = 0;
+  return {
+    eol: () => pos >= line.length,
+    sol: () => pos === 0,
+    peek: () => line.charAt(pos) || undefined,
+    next: () => (pos < line.length ? line.charAt(pos++) : undefined),
+    eat: (match) => {
+      const ch = line.charAt(pos);
+      if (!ch) return undefined;
+      const ok = typeof match === 'string' ? ch === match
+        : match instanceof RegExp ? match.test(ch) : match(ch);
+      if (ok) { pos++; return ch; }
+      return undefined;
     },
-    languageData: { commentTokens: { line: '--' } },
-  });
+    eatWhile: (match) => {
+      const startPos = pos;
+      while (pos < line.length) {
+        const ch = line.charAt(pos);
+        const ok = typeof match === 'string' ? ch === match
+          : match instanceof RegExp ? match.test(ch) : match(ch);
+        if (!ok) break;
+        pos++;
+      }
+      return pos > startPos;
+    },
+    eatSpace: () => {
+      const m = /^[ \t\r\n]+/.exec(line.slice(pos));
+      if (!m) return false;
+      pos += m[0].length;
+      return true;
+    },
+    match: (pat, consume = true, caseInsensitive = false) => {
+      if (typeof pat === 'string') {
+        const slice = line.slice(pos, pos + pat.length);
+        const a = caseInsensitive ? slice.toLowerCase() : slice;
+        const b = caseInsensitive ? pat.toLowerCase() : pat;
+        if (a === b) {
+          if (consume !== false) pos += pat.length;
+          return true;
+        }
+        return null;
+      }
+      const flags = pat.flags.includes('g') ? pat.flags : pat.flags + 'g';
+      const re = new RegExp(pat.source, caseInsensitive && !flags.includes('i') ? flags + 'i' : flags);
+      re.lastIndex = 0;
+      const m = re.exec(line.slice(pos));
+      if (!m || m.index !== 0) return null;
+      if (consume !== false) pos += m[0].length;
+      return m;
+    },
+    current: () => line.slice(start, pos),
+    get pos() { return pos; },
+    set pos(v) { pos = v; },
+    get start() { return start; },
+    set start(v) { start = v; },
+  };
+}
+
+/**
+ * Build CM6 Decoration marks from aptopToken → site.css `.cm-aptop-*` classes.
+ */
+function aptopHighlightExtension(RangeSetBuilder, Decoration, ViewPlugin) {
+  const markCache = new Map();
+  function mark(cls) {
+    let m = markCache.get(cls);
+    if (!m) {
+      m = Decoration.mark({ class: cls });
+      markCache.set(cls, m);
+    }
+    return m;
+  }
+
+  function buildDecos(view) {
+    const builder = new RangeSetBuilder();
+    for (const { from, to } of view.visibleRanges) {
+      let pos = from;
+      while (pos < to) {
+        const line = view.state.doc.lineAt(pos);
+        const stream = stringStream(line.text);
+        while (!stream.eol()) {
+          stream.start = stream.pos;
+          const kind = aptopToken(stream);
+          // aptopToken may eat space and return null without advancing past non-space
+          if (stream.pos === stream.start) {
+            stream.next();
+            continue;
+          }
+          if (kind) {
+            const cls = TOKEN_CLASS[kind];
+            if (cls) {
+              builder.add(line.from + stream.start, line.from + stream.pos, mark(cls));
+            }
+          }
+        }
+        pos = line.to + 1;
+      }
+    }
+    return builder.finish();
+  }
+
+  return ViewPlugin.fromClass(class {
+    constructor(view) {
+      this.decorations = buildDecos(view);
+    }
+    update(update) {
+      if (update.docChanged || update.viewportChanged)
+        this.decorations = buildDecos(update.view);
+    }
+  }, { decorations: (v) => v.decorations });
 }
 
 /** Insert text at the cursor of a CM6 view (or replace the selection). */
@@ -184,7 +283,6 @@ export function mountSymbolSheet(host, getView) {
     cell.innerHTML = `<span class="glyph">${glyph}</span><span class="name">${name}</span>`;
     cell.addEventListener('click', () => {
       insertIntoEditor(getView(), glyph);
-      // Keep sheet open on desktop for multiple inserts; close on narrow screens.
       if (window.matchMedia('(max-width: 640px)').matches) setOpen(false);
     });
     grid.append(cell);
@@ -225,18 +323,14 @@ export async function mountAptopEditor(parent, doc, opts = {}) {
   const readOnly = opts.readOnly === true;
   const maxHeight = opts.maxHeight ?? '24rem';
   const [
-    { EditorState },
-    { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter },
+    { EditorState, RangeSetBuilder },
+    { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, Decoration, ViewPlugin },
     { defaultKeymap, history, historyKeymap, isolateHistory },
-    { syntaxHighlighting, defaultHighlightStyle },
   ] = await Promise.all([
     import('https://esm.sh/@codemirror/state@6'),
     import('https://esm.sh/@codemirror/view@6'),
     import('https://esm.sh/@codemirror/commands@6'),
-    import('https://esm.sh/@codemirror/language@6?deps=@codemirror/state@6,@codemirror/view@6'),
   ]);
-
-  const lang = await loadStreamLang();
 
   const dark = EditorView.theme({
     '&': { backgroundColor: '#121820', color: '#e7ecf1', maxHeight },
@@ -252,12 +346,6 @@ export async function mountAptopEditor(parent, doc, opts = {}) {
     '.cm-gutters': { backgroundColor: '#0f1419', color: '#697098', border: 'none' },
     '.cm-activeLine': { backgroundColor: '#1a222c' },
     '.cm-activeLineGutter': { backgroundColor: '#1a222c' },
-    '.cm-keyword': { color: '#c792ea', fontWeight: '600' },
-    '.cm-operator': { color: '#89ddff' },
-    '.cm-number': { color: '#f78c6c' },
-    '.cm-comment': { color: '#697098', fontStyle: 'italic' },
-    '.cm-atom': { color: '#c3e88d' },
-    '.cm-variableName': { color: '#e7ecf1' },
   }, { dark: true });
 
   const extensions = [
@@ -266,8 +354,7 @@ export async function mountAptopEditor(parent, doc, opts = {}) {
     highlightActiveLineGutter(),
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
-    lang,
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    aptopHighlightExtension(RangeSetBuilder, Decoration, ViewPlugin),
     dark,
     EditorView.lineWrapping,
     EditorView.editable.of(!readOnly),
