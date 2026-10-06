@@ -1,23 +1,27 @@
-# STUB — do NOT install or enable.
-# The interpreter web wrapper is not ready. CLI remains `lake exe interp`.
-# When a Node (or other) wrapper exists, bind loopback only on :4712 and
-# mirror aptop-netty.service (User=michal, MemoryMax honest for Lean+runner).
-# Until then, /interp/ is a static coming-soon page under deploy/aptop/site/.
+# aptop Interpreter web wrapper — loopback :4712
+# Install: sudo cp deploy/aptop/aptop-interp.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now aptop-interp
+# MemoryMax covers Node + Lean child. If .lake/build/bin/interp is missing,
+# the service still runs and /run answers with stub:true.
 
 [Unit]
-Description=aptop Interpreter web (NOT READY — stub)
+Description=aptop Interpreter web (loopback :4712)
 After=network.target
 
 [Service]
 Type=simple
 User=michal
-WorkingDirectory=/home/michal/ver/laptop
+WorkingDirectory=/home/michal/ver/laptop/interp-web
 Environment=PATH=/home/michal/.elan/bin:/usr/local/bin:/usr/bin:/bin
 Environment=INTERP_HOST=127.0.0.1
 Environment=INTERP_PORT=4712
-# Placeholder so a mistaken enable fails closed:
-ExecStart=/bin/false
-Restart=no
+Environment=INTERP_CWD=/home/michal/ver/laptop
+Environment=INTERP_BIN=/home/michal/ver/laptop/.lake/build/bin/interp
+Environment=INTERP_TIMEOUT_MS=15000
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=3
+MemoryMax=768M
 
 [Install]
 WantedBy=default.target

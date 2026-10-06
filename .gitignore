@@ -7,3 +7,7 @@ _out/
 netty-web/node_modules/
 netty-web/dist/
 netty-web/public/js/
+
+# interp-web: npm tree and TypeScript out
+interp-web/node_modules/
+interp-web/dist/
