@@ -7,10 +7,10 @@
   <link rel="stylesheet" href="../site.css" />
 </head>
 <body>
-  <div class="wrap">
+  <div class="wrap wrap-interp">
     <header class="site">
       <a class="brand" href="../">aPToP <span>/ LaPToP</span></a>
-            <nav class="top" aria-label="Primary">
+      <nav class="top" aria-label="Primary">
         <span class="nav-local">
           <a href="../">Home</a>
           <a href="/netty/">Netty</a>
@@ -26,40 +26,37 @@
 
     <h1>Interpreter</h1>
     <p class="lead">
-      Edit aPToP programming notation, then Run. Common symbols:
-      ∧ and · ∨ or · ⇒ implies · ⇐ implied by · ≡ equivalent ·
-      ⊤ true · ⊥ false · × times · · dot · ′ prime.
-      On a phone, tap <strong>Symbols</strong> to insert them.
+      Edit aPToP programming notation, then Run. Pick a demo, or write your own.
+      On a wide screen the <strong>Symbols</strong> panel stays on the right;
+      on a phone, one <strong>Symbols</strong> button opens the same set.
     </p>
 
-    <div class="sources" role="navigation" aria-label="Book and course">
-      <a class="book" href="https://www.cs.toronto.edu/~hehner/aPToP/" target="_blank" rel="noopener">📖 aPToP book</a>
-      <a class="course" href="https://www.cs.utoronto.ca/~hehner/FMSD/" target="_blank" rel="noopener">▶ FMSD course</a>
-    </div>
-
-    <div class="card">
-      <h2>Program</h2>
-      <div class="toolbar-row">
-        <label>
-          Demo
-          <select id="demo">
-            <option value="gcd">gcd</option>
-            <option value="sumTo">sumTo</option>
-            <option value="forLoop">forLoop</option>
-            <option value="listSum">listSum</option>
-            <option value="swap">swap</option>
-            <option value="exitLoop">exitLoop</option>
-            <option value="">(custom)</option>
-          </select>
-        </label>
-        <input id="args" type="text" value="x=12 y=18" placeholder="n=10 or x=12 y=18"
-               style="flex:1;min-width:10rem;padding:0.4rem 0.6rem;border-radius:5px;border:1px solid var(--border);background:var(--code-bg);color:var(--fg);font:inherit" />
-        <button type="button" class="primary" id="run">Run</button>
-        <span class="hint" id="status"></span>
+    <div class="interp-workspace">
+      <div class="card">
+        <h2>Program</h2>
+        <div class="toolbar-row">
+          <label>
+            Demo
+            <select id="demo">
+              <option value="gcd">gcd</option>
+              <option value="sumTo">sumTo</option>
+              <option value="forLoop">forLoop</option>
+              <option value="listSum">listSum</option>
+              <option value="swap">swap</option>
+              <option value="exitLoop">exitLoop</option>
+              <option value="">(custom)</option>
+            </select>
+          </label>
+          <input id="args" type="text" value="x=12 y=18" placeholder="n=10 or x=12 y=18"
+                 style="flex:1;min-width:10rem;padding:0.4rem 0.6rem;border-radius:5px;border:1px solid var(--border);background:var(--code-bg);color:var(--fg);font:inherit" />
+          <button type="button" class="primary" id="run">Run</button>
+          <span class="hint" id="status"></span>
+          <span id="sym-mobile-slot" class="editor-tools"></span>
+        </div>
+        <div id="editor" class="editor" aria-label="aPToP program"></div>
+        <div id="out" class="out muted" aria-live="polite">Output appears here.</div>
       </div>
-      <div class="editor-tools"><div id="sym-host" class="sym-mount"></div></div>
-      <div id="editor" class="editor" aria-label="aPToP program"></div>
-      <div id="out" class="out muted" aria-live="polite">Output appears here.</div>
+      <aside id="sym-dock" class="sym-dock" aria-label="Symbols"></aside>
     </div>
 
     <footer class="site">
@@ -93,14 +90,35 @@ B ⇐ if n = #L then ok else s:= s + L n. n:= n+1. B fi`,
       exitLoop: 'n=5 x=0',
     };
 
+    const NOTES = {
+      gcd: 'Euclid as a recursive procedure.',
+      sumTo: 'Sum 1..n with a while-loop.',
+      forLoop: 'Same sum with for i:= 1;..n+1.',
+      listSum: 'Refinements summing a list L.',
+      swap: 'Simultaneous assignment.',
+      exitLoop: 'do … exit when … od.',
+    };
+
     const host = document.getElementById('editor');
     const out = document.getElementById('out');
     const status = document.getElementById('status');
     const demoSel = document.getElementById('demo');
     const argsIn = document.getElementById('args');
+    const dock = document.getElementById('sym-dock');
+    const mobileSlot = document.getElementById('sym-mobile-slot');
     let view = null;
 
-    mountSymbolSheet(document.getElementById('sym-host'), () => view);
+    // One Symbols host: parent moves between dock column and toolbar on resize.
+    const symHost = document.createElement('div');
+    symHost.id = 'sym-host';
+    function placeSymHost() {
+      const wide = window.matchMedia('(min-width: 900px)').matches;
+      (wide ? dock : mobileSlot).appendChild(symHost);
+    }
+    placeSymHost();
+    window.addEventListener('resize', placeSymHost);
+    const sym = mountSymbolSheet(symHost, () => view, { mode: 'auto' });
+    window.addEventListener('resize', () => sym.applyLayout());
 
     function apiUrl() {
       const base = window.location.pathname.endsWith('/')

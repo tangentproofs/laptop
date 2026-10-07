@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Examples — aPToP / LaPToP</title>
   <link rel="stylesheet" href="../site.css" />
+  <meta http-equiv="refresh" content="0;url=../interp/" />
 </head>
 <body>
   <div class="wrap">
     <header class="site">
       <a class="brand" href="../">aPToP <span>/ LaPToP</span></a>
-            <nav class="top" aria-label="Primary">
+      <nav class="top" aria-label="Primary">
         <span class="nav-local">
           <a href="../">Home</a>
           <a href="/netty/">Netty</a>
@@ -26,96 +27,14 @@
 
     <h1>Examples</h1>
     <p class="lead">
-      Snippets from interpreter demos (<code>Lang.Demo</code>), highlighted and
-      editable. Use <strong>Symbols</strong> to insert ∧ ∨ ⇒ ≡ × · ′ and friends —
-      handy on a phone. Open in <a href="../interp/">Interpreter</a> to Run.
+      All interpreter demos live on the <a href="../interp/">Interpreter</a> page —
+      one editor, one Symbols panel. Taking you there…
     </p>
-
-    <div class="sources" role="navigation" aria-label="Book and course">
-      <a class="book" href="https://www.cs.toronto.edu/~hehner/aPToP/" target="_blank" rel="noopener">📖 aPToP book</a>
-      <a class="course" href="https://www.cs.utoronto.ca/~hehner/FMSD/" target="_blank" rel="noopener">▶ FMSD course</a>
-      <span class="hint">Netty book calcs: ex121 / sum / ex139 under <a href="/netty/">/netty/</a> — they load into the proof pane.</span>
-    </div>
-
-    <div class="example">
-      <h3>sumTo</h3>
-      <p class="note">Sum <code>1..n</code> with a while-loop. Sample: <code>n=10</code>.</p>
-      <div class="editor-tools"><div class="sym-mount" data-for="sumTo"></div></div>
-      <div class="editor" data-aptop id="ed-sumTo" data-readonly="false">i:= 0. s:= 0. while i ≠ n do i:= i+1. s:= s+i od</div>
-    </div>
-
-    <div class="example">
-      <h3>forLoop</h3>
-      <p class="note">Same sum with <code>for i:= 1;..n+1</code>.</p>
-      <div class="editor-tools"><div class="sym-mount" data-for="forLoop"></div></div>
-      <div class="editor" data-aptop id="ed-forLoop">s:= 0. for i:= 1;..n+1 do s:= s + i od</div>
-    </div>
-
-    <div class="example">
-      <h3>gcd</h3>
-      <p class="note">Euclid as a recursive procedure. Sample: <code>x=12, y=18</code>.</p>
-      <div class="editor-tools"><div class="sym-mount" data-for="gcd"></div></div>
-      <div class="editor" data-aptop id="ed-gcd">Gcd(a, b) ⇐ if b = 0 then g:= a else Gcd(b, a mod b) fi
-Gcd(x, y)</div>
-    </div>
-
-    <div class="example">
-      <h3>listSum</h3>
-      <p class="note">Refinements summing a list <code>L</code>.</p>
-      <div class="editor-tools"><div class="sym-mount" data-for="listSum"></div></div>
-      <div class="editor" data-aptop id="ed-listSum">A ⇐ s:= 0. n:= 0. B
-B ⇐ if n = #L then ok else s:= s + L n. n:= n+1. B fi</div>
-    </div>
-
-    <div class="example">
-      <h3>swap</h3>
-      <p class="note">Simultaneous assignment.</p>
-      <div class="editor-tools"><div class="sym-mount" data-for="swap"></div></div>
-      <div class="editor" data-aptop id="ed-swap">x, y:= y, x</div>
-    </div>
-
-    <div class="example">
-      <h3>exitLoop</h3>
-      <p class="note"><code>do … exit when … od</code>.</p>
-      <div class="editor-tools"><div class="sym-mount" data-for="exitLoop"></div></div>
-      <div class="editor" data-aptop id="ed-exitLoop">do exit when n ≤ x. x:= x+1 od</div>
-    </div>
+    <p><a class="card" href="../interp/" style="display:block;text-align:center;font-weight:650">Open Interpreter →</a></p>
 
     <footer class="site">
-      Sources: <code>InterpreterLangSyntax.lean</code>
-      · run: <a href="../interp/">/interp/</a> or <code>lake exe interp --demo=NAME</code>
+      Demos: gcd · sumTo · forLoop · listSum · swap · exitLoop
     </footer>
   </div>
-
-  <script type="module">
-    import { mountAptopEditor, mountSymbolSheet } from '../js/aptop-editor.js';
-
-    /** @type {Map<string, import('https://esm.sh/@codemirror/view@6').EditorView>} */
-    const views = new Map();
-    let lastFocused = null;
-
-    for (const el of document.querySelectorAll('[data-aptop]')) {
-      const doc = el.textContent.replace(/^\n/, '');
-      el.textContent = '';
-      const id = el.id.replace(/^ed-/, '');
-      mountAptopEditor(el, doc, { readOnly: false, maxHeight: '14rem' }).then((view) => {
-        views.set(id, view);
-        view.dom.addEventListener('focusin', () => { lastFocused = id; });
-        if (!lastFocused) lastFocused = id;
-      }).catch((err) => {
-        el.innerHTML = '<pre>' + doc.replace(/</g, '&lt;') + '</pre>';
-        console.error(err);
-      });
-    }
-
-    for (const mount of document.querySelectorAll('.sym-mount')) {
-      const forId = mount.getAttribute('data-for');
-      mountSymbolSheet(mount, () => {
-        const preferred = views.get(forId);
-        if (preferred) return preferred;
-        return views.get(lastFocused) ?? [...views.values()][0] ?? null;
-      });
-    }
-  </script>
 </body>
 </html>

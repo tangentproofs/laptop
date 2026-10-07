@@ -1,9 +1,11 @@
-# aPToP Exercise 6(c) solution — uses portation.
+# aPToP Exercise 6(c) — Netty-applicable steps.
 
 laws boolean
 
 theorem ex6c: ¬a ⇒ (a ⇒ b)
     ¬a ⇒ (a ⇒ b)                   portation
-=   ¬a ∧ a ⇒ b                     noncontradiction
-=   ⊥ ⇒ b                          base
+=   ¬a ∧ a ⇒ b                     symmetry
+=   a ∧ ¬a ⇒ b                     inclusion
+=   ¬(a ∧ ¬a) ∨ b                  noncontradiction
+=   ⊤ ∨ b                          base
 =   ⊤

@@ -336,6 +336,8 @@ def handle (s : Session) (r : Request) : Except String (Session × Option String
       | .undo => return (← s.undo, none)
       -- The answer carries all three panes and the outcome already.
       | .proof | .suggest | .context | .check _ => return (s, none)
+      | .state vs => return (← s.addState vs, none)
+      | .spec n e => return (← s.addSpec n e, none)
       | .laws _ | .load _ | .save _ =>
           throw "this service does not open files; load and save carry the \
             proof itself"

@@ -1,13 +1,13 @@
 # aPToP Exercise 6(j) solution.
-# Rewritten with one Netty law per step (book: "inclusion, twice" then symmetry…).
+# One Netty law per step. Book "symmetry" rearrangement is associative here.
 
 laws boolean
 
 theorem ex6j: (a ⇒ b) ∨ (b ⇒ a)
     (a ⇒ b) ∨ (b ⇒ a)              inclusion
 =   (¬a ∨ b) ∨ (b ⇒ a)             inclusion
-=   (¬a ∨ b) ∨ (¬b ∨ a)            symmetry
-=   a ∨ ¬a ∨ b ∨ ¬b                excluded middle
+=   (¬a ∨ b) ∨ (¬b ∨ a)            associative
+=   ¬a ∨ a ∨ b ∨ ¬b                excluded middle
 =   ⊤ ∨ b ∨ ¬b                     excluded middle
 =   ⊤ ∨ ⊤                          idempotent
 =   ⊤

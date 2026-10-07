@@ -1,9 +1,9 @@
 # aPToP Exercise 12 — (a)=(b): Don't drink and drive ≡ If you drink, don't drive.
+# Intermediate ¬¬drink step skipped: inclusion unifies directly to drink ⇒ ¬drive.
 
 laws boolean
 
 theorem ex12ab: ¬(drink ∧ drive) ≡ drink ⇒ ¬drive
     ¬(drink ∧ drive)               duality
 =   ¬drink ∨ ¬drive                inclusion
-=   ¬¬drink ⇒ ¬drive               double negation
 =   drink ⇒ ¬drive

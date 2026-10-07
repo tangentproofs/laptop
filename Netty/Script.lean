@@ -27,6 +27,8 @@ check [EXPRESSION]                           print what the proof proves, and
                                              fail unless it is EXPRESSION
 laws FILE                                    add a law file
 load FILE / save FILE                        read or write a proof file
+state NAMES: DOMAIN                          declare program state variables
+spec NAME = EXPRESSION                       name a specification
 ```
 
 `undo` is why a session is more than a document: `Session` keeps the documents
@@ -48,6 +50,9 @@ inductive ScriptCmd
   /-- Add the laws in a file. -/              | laws (path : String)
   /-- Read a proof file. -/                   | load (path : String)
   /-- Write a proof file. -/                  | save (path : String)
+  /-- Declare program state variables (`state x, y: int`). -/
+                                              | state (vars : List (String × Expr))
+  /-- Name a specification (`spec R = …`). -/ | spec (name : String) (body : Expr)
   deriving Repr, DecidableEq, Inhabited
 
 /-- A proof session: the document and enough history to undo. -/
@@ -70,6 +75,25 @@ def undo (s : Session) : Except String Session :=
   match s.history with
   | d :: rest => .ok { doc := d, history := rest }
   | [] => .error "there is nothing to undo"
+
+/-- Remember the current document and replace it. -/
+def remember (s : Session) (d : Doc) : Session :=
+  { doc := d, history := s.doc :: s.history }
+
+/-- Add state variables for the programming rules. -/
+def addState (s : Session) (vs : List (String × Expr)) : Except String Session := do
+  for (v, _) in vs do
+    if s.doc.prog.state.any (·.1 == v) then
+      throw s!"‘{v}’ is already a state variable"
+  let p := { s.doc.prog with state := s.doc.prog.state ++ vs }
+  return s.remember { s.doc with prog := p }
+
+/-- Add a named specification. -/
+def addSpec (s : Session) (name : String) (body : Expr) : Except String Session := do
+  if s.doc.prog.specs.any (·.1 == name) then
+    throw s!"‘{name}’ is already a specification"
+  let p := { s.doc.prog with specs := s.doc.prog.specs ++ [(name, body)] }
+  return s.remember { s.doc with prog := p }
 
 end Session
 
@@ -147,10 +171,11 @@ def scriptLine (line : String) : Except String (Option ScriptCmd) := do
       match body.splitOn ":" with
       | [name] =>
           if (trim name).isEmpty then throw "apply what?"
-          return some (.doc (.applyNamed (trim name) none bind))
+          -- Book hints are title-cased; kernel law/rule names are lowercase.
+          return some (.doc (.applyNamed (trim name).toLower none bind))
       | name :: expected =>
           let (o, ts) ← connective (← tokenize (String.intercalate ":" expected))
-          return some (.doc (.applyNamed (trim name) (some (o, ← exprOfToks ts)) bind))
+          return some (.doc (.applyNamed (trim name).toLower (some (o, ← exprOfToks ts)) bind))
       | [] => throw "apply what?"
   | "direct" => do
       let (o, ts) ← connective (← tokenize rest)
@@ -184,6 +209,21 @@ def scriptLine (line : String) : Except String (Option ScriptCmd) := do
   | "laws" => return some (.laws rest)
   | "load" => return some (.load rest)
   | "save" => return some (.save rest)
+  | "state" => do
+      match rest.splitOn ":" with
+      | [names, dom] =>
+          let d ← expr dom
+          let ns := ((names.splitOn ",").map trim).filter (!·.isEmpty)
+          if ns.isEmpty then throw "‘state’ wants variable names"
+          return some (.state (ns.map (·, d)))
+      | _ => throw "write ‘state x, y: int’"
+  | "spec" => do
+      let (name, body) := firstWord rest
+      let body := trim body
+      if name.isEmpty || !beginsWith body '=' then
+        throw "write ‘spec NAME = SPECIFICATION’"
+      let e ← expr (String.ofList (body.toList.drop 1))
+      return some (.spec name e)
   | w => throw s!"‘{w}’ is not a command"
 
 /-- Parse a whole script, keeping the line numbers for error messages. -/

@@ -242,12 +242,61 @@ export function insertIntoEditor(view, text) {
 }
 
 /**
- * Mobile-friendly symbol sheet. Clicking a glyph inserts into getView().
- * @param {HTMLElement} host  container for the button + popover
+ * One Symbols control for the whole editor.
+ *
+ * mode:
+ *   - "dock"  — always-visible side panel (desktop / Netty-suggestions style)
+ *   - "sheet" — one button + popover / bottom sheet (mobile)
+ *   - "auto"  — dock when viewport ≥ 900px, sheet otherwise (default)
+ *
+ * @param {HTMLElement} host
  * @param {() => import('@codemirror/view').EditorView | null} getView
+ * @param {{ mode?: 'dock'|'sheet'|'auto' }} [opts]
  */
-export function mountSymbolSheet(host, getView) {
-  host.classList.add('sym-sheet-host');
+export function mountSymbolSheet(host, getView, opts = {}) {
+  const modeOpt = opts.mode || 'auto';
+  host.classList.add('sym-host');
+  host.replaceChildren();
+
+  const panel = document.createElement('div');
+  panel.className = 'sym-panel';
+  panel.setAttribute('role', 'region');
+  panel.setAttribute('aria-label', 'Common aPToP symbols');
+
+  const head = document.createElement('div');
+  head.className = 'sym-panel-head';
+  head.innerHTML = '<span>Symbols</span>';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'sym-panel-close';
+  close.setAttribute('aria-label', 'Close symbols');
+  close.textContent = '×';
+  head.append(close);
+  panel.append(head);
+
+  const grid = document.createElement('div');
+  grid.className = 'sym-panel-grid';
+  for (const { glyph, name } of SYMBOL_SHEET) {
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.className = 'sym-panel-cell';
+    cell.title = name;
+    cell.innerHTML = `<span class="glyph">${glyph}</span><span class="name">${name}</span>`;
+    cell.addEventListener('click', () => {
+      insertIntoEditor(getView(), glyph);
+      if (host.classList.contains('is-sheet') && window.matchMedia('(max-width: 899px)').matches) {
+        setOpen(false);
+      }
+    });
+    grid.append(cell);
+  }
+  panel.append(grid);
+
+  const hint = document.createElement('p');
+  hint.className = 'sym-panel-hint';
+  hint.textContent = 'Click a symbol to insert it at the cursor.';
+  panel.append(hint);
+
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'sym-sheet-btn';
@@ -256,63 +305,60 @@ export function mountSymbolSheet(host, getView) {
   btn.textContent = 'Symbols';
   btn.title = 'Insert a common aPToP symbol';
 
-  const pop = document.createElement('div');
-  pop.className = 'sym-sheet';
-  pop.hidden = true;
-  pop.setAttribute('role', 'dialog');
-  pop.setAttribute('aria-label', 'Common aPToP symbols');
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sym-backdrop';
+  backdrop.hidden = true;
 
-  const head = document.createElement('div');
-  head.className = 'sym-sheet-head';
-  head.innerHTML = '<span>Insert a symbol</span>';
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'sym-sheet-close';
-  close.setAttribute('aria-label', 'Close');
-  close.textContent = '×';
-  head.append(close);
-  pop.append(head);
-
-  const grid = document.createElement('div');
-  grid.className = 'sym-sheet-grid';
-  for (const { glyph, name } of SYMBOL_SHEET) {
-    const cell = document.createElement('button');
-    cell.type = 'button';
-    cell.className = 'sym-sheet-cell';
-    cell.title = name;
-    cell.innerHTML = `<span class="glyph">${glyph}</span><span class="name">${name}</span>`;
-    cell.addEventListener('click', () => {
-      insertIntoEditor(getView(), glyph);
-      if (window.matchMedia('(max-width: 640px)').matches) setOpen(false);
-    });
-    grid.append(cell);
+  function isDockPreferred() {
+    if (modeOpt === 'dock') return true;
+    if (modeOpt === 'sheet') return false;
+    return window.matchMedia('(min-width: 900px)').matches;
   }
-  pop.append(grid);
 
-  const hint = document.createElement('p');
-  hint.className = 'sym-sheet-hint';
-  hint.textContent = 'Tap a symbol to drop it into the editor.';
-  pop.append(hint);
+  function applyLayout() {
+    const dock = isDockPreferred();
+    host.classList.toggle('is-dock', dock);
+    host.classList.toggle('is-sheet', !dock);
+    if (dock) {
+      panel.hidden = false;
+      backdrop.hidden = true;
+      btn.hidden = true;
+      btn.setAttribute('aria-expanded', 'false');
+    } else {
+      btn.hidden = false;
+      if (btn.getAttribute('aria-expanded') !== 'true') {
+        panel.hidden = true;
+        backdrop.hidden = true;
+      }
+    }
+  }
 
   function setOpen(open) {
-    pop.hidden = !open;
+    if (host.classList.contains('is-dock')) {
+      panel.hidden = false;
+      return;
+    }
+    panel.hidden = !open;
+    backdrop.hidden = !open;
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) pop.querySelector('.sym-sheet-cell')?.focus();
+    if (open) panel.querySelector('.sym-panel-cell')?.focus();
   }
 
-  btn.addEventListener('click', () => setOpen(pop.hidden));
+  btn.addEventListener('click', () => setOpen(panel.hidden));
   close.addEventListener('click', () => setOpen(false));
+  backdrop.addEventListener('click', () => setOpen(false));
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !pop.hidden) setOpen(false);
+    if (e.key === 'Escape' && host.classList.contains('is-sheet') && !panel.hidden) setOpen(false);
   });
-  document.addEventListener('pointerdown', (e) => {
-    if (pop.hidden) return;
-    if (!host.contains(e.target)) setOpen(false);
-  });
+  window.addEventListener('resize', applyLayout);
 
-  host.append(btn, pop);
-  return { button: btn, popover: pop, setOpen };
+  host.append(btn, backdrop, panel);
+  applyLayout();
+  return { button: btn, panel, setOpen, applyLayout };
 }
+
+/** @deprecated alias — use mountSymbolSheet */
+export const mountSymbolDock = mountSymbolSheet;
 
 /**
  * @param {HTMLElement} parent

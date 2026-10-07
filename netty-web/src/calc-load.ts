@@ -1,10 +1,11 @@
 /**
  * Load aPToP .calc book calculations into the Netty proof editor.
  *
- * Parses theorem/refine blocks into Netty script lines (`start` + `apply`) and
- * replays them through the kernel. Book hint phrases are mapped to Netty law
- * names via LAW_ALIASES so exact book text can still `apply`. There is no
- * silent `direct` fallback for book loads: every step must apply.
+ * Parses theorem/refine blocks into Netty script lines (`state` / `spec` /
+ * `start` + `apply`) and replays them through the kernel. Book hint phrases
+ * are mapped to Netty law names via LAW_ALIASES so exact book text can still
+ * `apply`. There is no silent `direct` fallback for book loads: every step
+ * must apply.
  */
 
 export type BookCalc = { id: string; label: string; file: string };
@@ -53,7 +54,18 @@ export const LAW_ALIASES: Record<string, string> = {
   'context': 'context',
   'discharge': 'discharge',
   'associative': 'associative',
+  'associativity': 'associative',
   'absorption': 'absorption',
+  'substitution law': 'substitution law',
+  'assignment': 'assignment',
+  'ok': 'ok',
+  'rewrite last assignment': 'assignment',
+  'expand last assignment': 'assignment',
+  'sequential composition': 'sequential composition',
+  'one point': 'one point',
+  'vacuous quantifier': 'vacuous quantifier',
+  'arithmetic': 'arithmetic',
+  'binary algebra': 'binary algebra',
 };
 
 /** Normalize a book hint to a Netty law name, or null if it cannot be applied as one step. */
@@ -66,8 +78,10 @@ export function resolveLawHint(raw: string): string | null {
     // "idempotence of ∨, or base law" → try first clause
     h = h.split(/,\s*or\b/i)[0]!.trim();
   }
+  // "definition of P" / "definition of assignment…" — keep as-is for kernel rules
   const key = h.toLowerCase();
   if (LAW_ALIASES[key]) return LAW_ALIASES[key]!;
+  if (/^definition of /i.test(h)) return h; // kernel: definition of <spec>
   // Already a Netty name (lowercase words)?
   if (/^[a-z][a-z0-9 ]*$/.test(key) && key.length < 40) return key;
   return null;
@@ -76,15 +90,22 @@ export function resolveLawHint(raw: string): string | null {
 /**
  * Working book calcs for the picker (every step must `apply` with aliases).
  * Exercise numbers / section cites live in the .calc files, not in labels.
- * Program-theory calcs (Substitution Law / ok / assignment) are omitted until
- * #55 — they cannot apply today.
+ * Updated after audit — only PASS entries.
  */
 export const BOOK_CALCS: BookCalc[] = [
-  // Audit-PASS only (see AUDIT-CALCS.md / DROPPED.md). Re-run audit after changes.
   { id: 'portation', label: 'Law of Portation', file: 'examples/portation.calc' },
   { id: 'ex6r', label: 'Portation proves a ⇒ (b ⇒ a)', file: 'examples/ex6r.calc' },
   { id: 'ex5b', label: 'Excluded middle', file: 'examples/ex5b.calc' },
+  { id: 'ex6a', label: 'Specialization then generalization', file: 'examples/ex6a.calc' },
+  { id: 'ex6c', label: 'Portation and noncontradiction', file: 'examples/ex6c.calc' },
+  { id: 'ex6i', label: 'Contradiction implies anything', file: 'examples/ex6i.calc' },
+  { id: 'ex6j', label: 'Either a ⇒ b or b ⇒ a', file: 'examples/ex6j.calc' },
   { id: 'ex7a', label: 'If-then-else by case analysis', file: 'examples/ex7a.calc' },
+  { id: 'ex12ab', label: 'Don\'t drink and drive', file: 'examples/ex12ab.calc' },
+  { id: 'ex121a', label: 'Substitution after x:= y+1', file: 'examples/ex121a.calc' },
+  { id: 'ex121b', label: 'Substitution into a conjunction', file: 'examples/ex121b.calc' },
+  { id: 'ex121f', label: 'Assignment then ok', file: 'examples/ex121f.calc' },
+  { id: 'ex121g', label: 'Two assignments', file: 'examples/ex121g.calc' },
 ];
 
 /** Kernel demos in the same picker (valid complete sessions). */
@@ -119,6 +140,10 @@ export type CalcTheorem = {
   name: string;
   claim: string;
   steps: CalcStep[];
+  /** Program state lines preceding the theorem (`state x, y: int`). */
+  state: string[];
+  /** Spec lines preceding the theorem (`spec R = …`). */
+  specs: string[];
 };
 
 const CONN = /^(=|≡|⇒|⇐|≤|≥|⟹|⟸)\s+/;
@@ -130,16 +155,27 @@ function splitExprLaw(body: string): { expr: string; law: string } {
   return { expr: body.trim(), law: '' };
 }
 
-/** Parse theorem / refine blocks out of a .calc file. */
+/** Parse theorem / refine blocks out of a .calc file (with preceding state/spec). */
 export function parseCalcTheorems(text: string): CalcTheorem[] {
   const lines = text.split(/\r?\n/);
   const out: CalcTheorem[] = [];
   let i = 0;
+  let state: string[] = [];
+  let specs: string[] = [];
   while (i < lines.length) {
     const raw = lines[i] ?? '';
     const t = raw.trim();
-    if (t.startsWith('#') || t === '' || t.startsWith('laws ') || t.startsWith('state ')
-        || t.startsWith('spec ') || t.startsWith('extends ')) {
+    if (t.startsWith('#') || t === '' || t.startsWith('laws ') || t.startsWith('extends ')) {
+      i++;
+      continue;
+    }
+    if (t.startsWith('state ')) {
+      state = [...state, t];
+      i++;
+      continue;
+    }
+    if (t.startsWith('spec ')) {
+      specs = [...specs, t];
       i++;
       continue;
     }
@@ -194,7 +230,9 @@ export function parseCalcTheorems(text: string): CalcTheorem[] {
       }
       i++;
     }
-    if (steps.length > 0) out.push({ kind, name, claim, steps });
+    if (steps.length > 0) {
+      out.push({ kind, name, claim, steps, state: [...state], specs: [...specs] });
+    }
   }
   return out;
 }
@@ -214,18 +252,27 @@ export function theoremToScript(th: CalcTheorem, strict = true): string[] | null
     conns.some((c) => c === '⇒' || c === '⟹') ? '⇒' :
     conns.some((c) => c === '⇐' || c === '⟸') ? '⇐' :
     '=';
-  const lines: string[] = [`start ${startDir} ${first.expr}`];
+  const lines: string[] = [
+    ...th.state,
+    ...th.specs,
+    `start ${startDir} ${first.expr}`,
+  ];
   for (let k = 1; k < th.steps.length; k++) {
     const s = th.steps[k]!;
     const conn = s.conn === '≡' ? '=' : (s.conn || '=');
     const rawLaw = th.steps[k - 1]?.law || '';
     const law = resolveLawHint(rawLaw);
     if (law) {
-      lines.push(`apply ${law} : ${conn} ${s.expr}`);
+      let withClause = '';
+      // generalization: a ⇒ a ∨ b leaves hole b — pin it from the target line.
+      if (law === 'generalization') {
+        const m = s.expr.match(/^(.+)\s*∨\s*(.+)$/);
+        if (m) withClause = ` with b := ${m[2]!.trim()}`;
+      }
+      lines.push(`apply ${law} : ${conn} ${s.expr}${withClause}`);
     } else if (strict) {
       return null;
     } else if (rawLaw) {
-      // Unresolved book hint — refuse to pretend via direct when strict.
       lines.push(`direct ${conn} ${s.expr}`);
     } else {
       lines.push(`direct ${conn} ${s.expr}`);

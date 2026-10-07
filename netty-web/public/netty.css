@@ -48,6 +48,7 @@ header {
   border-bottom: 1px solid var(--rule);
 }
 
+/* top nav matches deploy/aptop/site header.site — same links, full-bleed */
 .site-bar {
   display: flex;
   flex-wrap: wrap;

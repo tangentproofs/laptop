@@ -250,7 +250,7 @@ variables the match leaves unconstrained. -/
 def reachFrom (name : String) (target src : Expr) :
     List Part → Nat → Nat → Doc → List Reach
   | path, k, fuel, d =>
-      let here := (d.suggestions.filter (·.law == name)).flatMap fun s =>
+      let here := (d.suggestions.filter (·.law.toLower == name.toLower)).flatMap fun s =>
         (holeBinds s target).filterMap fun b =>
           match d.applySuggestion s b with
           | .ok d' => match zoomOutN k d' with
@@ -278,7 +278,7 @@ def maxDepth : Nat := 12
 `ty` and direction `dir`. -/
 def reach (cx : Ctx) (ty : Ty) (dir : Dir) (name : String) (target a : Expr) :
     List Reach :=
-  let named := cx.laws.filter (·.name == name)
+  let named := cx.laws.filter (·.name.toLower == name.toLower)
   match ({ laws := named, prog := cx.prog } : Doc).step (.start ty dir a) with
   | .ok d => reachFrom name target a [] 0 maxDepth d
   | .error _ => []
@@ -369,9 +369,17 @@ def lineTy (lines : List PLine) : Ty :=
 def hintLaws (cx : Ctx) (hint : String) : Option (List String) :=
   let names := (hint.splitOn ",").map Parser.trim
   let rules := cx.prog.rules.map Prog.ruleName
-  if !names.isEmpty &&
-      names.all (fun n => n == "context" || rules.contains n || cx.laws.any (·.name == n))
-  then some names else none
+  -- Resolve each hint word to the kernel's spelling (case-insensitive), so
+  -- book hints like "Substitution Law" match `substitution law`.
+  let resolve (n : String) : Option String :=
+    let nl := n.toLower
+    if nl == "context" then some "context"
+    else rules.find? (·.toLower == nl)
+    <|> (cx.laws.find? (·.name.toLower == nl)).map (·.name)
+  let resolved := names.mapM resolve
+  match resolved with
+  | some rs => if rs.isEmpty then none else some rs
+  | none => none
 
 /-- A step by a decision (`arithmetic`, `binary algebra`): the places where the
 lines differ, each shown by the decision, as certificates. -/

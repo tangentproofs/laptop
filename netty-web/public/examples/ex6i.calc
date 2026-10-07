@@ -1,8 +1,10 @@
-# aPToP Exercise 6(i) solution.
+# aPToP Exercise 6(i) — Netty-applicable steps (book uses noncontradiction as ⊥).
+# inclusion then noncontradiction (as ⊤) then base.
 
 laws boolean
 
 theorem ex6i: a ∧ ¬a ⇒ b
-    a ∧ ¬a ⇒ b                     noncontradiction
-=   ⊥ ⇒ b                          base
+    a ∧ ¬a ⇒ b                     inclusion
+=   ¬(a ∧ ¬a) ∨ b                  noncontradiction
+=   ⊤ ∨ b                          base
 =   ⊤

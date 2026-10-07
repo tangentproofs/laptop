@@ -161,6 +161,14 @@ def runCmd (r : Run) (lineNo : Nat) (c : ScriptCmd) : IO Run := do
   | .save path => do
       IO.FS.writeFile path (saveText r.session.doc)
       return r
+  | .state vs =>
+      match r.session.addState vs with
+      | .ok s => return { r with session := s }
+      | .error e => fail e
+  | .spec n e =>
+      match r.session.addSpec n e with
+      | .ok s => return { r with session := s }
+      | .error e => fail e
 
 /-- Run a whole script. -/
 def runScript (r : Run) (cs : List (Nat × ScriptCmd)) : IO Run :=
