@@ -70,6 +70,13 @@ function apiUrl(): string {
   return new URL('api', window.location.origin + base).pathname;
 }
 
+/**
+ * When true, `send` keeps the current note (manifest FAIL/MISSING status)
+ * instead of replacing it with a transient apply error or clearing it on OK.
+ * Set around loadBookCalc replays so the status bar stays honest.
+ */
+let holdStatusNote = false;
+
 /** Ask the kernel, then redraw. A refused request leaves the state alone and
  * says why, which is what the kernel's answer already carries. */
 async function send(op: Op, arg = ''): Promise<Response | null> {
@@ -82,14 +89,18 @@ async function send(op: Op, arg = ''): Promise<Response | null> {
     });
     answer = (await res.json()) as Response;
   } catch (e) {
-    note = `the server: ${String(e)}`;
-    noteIsError = true;
+    if (!holdStatusNote) {
+      note = `the server: ${String(e)}`;
+      noteIsError = true;
+    }
     draw();
     return null;
   }
   if (answer.state) state = answer.state;
-  note = answer.ok ? '' : answer.error;
-  noteIsError = !answer.ok;
+  if (!holdStatusNote) {
+    note = answer.ok ? '' : answer.error;
+    noteIsError = !answer.ok;
+  }
   draw();
   return answer;
 }
@@ -101,20 +112,37 @@ const cmd = (line: string) => send('cmd', line);
 type LoadCalcOpts = {
   /**
    * When false/omitted (PASS): every apply must succeed; gaps refuse the load.
-   * When true (FAIL / MISSING): unresolvable hints become `direct` and failed
-   * applies fall back to `direct` so broken steps show as red ! gaps.
+   * When true (FAIL): unresolvable hints become `direct` and failed applies
+   * fall back to `direct` so broken steps show as red ! gaps.
    */
   allowGaps?: boolean;
+  /**
+   * When true (MISSING): put only the goal in the proof pane and show the stub
+   * in the book-source panel. Do not replay apply/direct steps — apply-by-law
+   * name scans the full suggestion list, and direct of a huge intermediate
+   * expression can hang the kernel while building suggestions.
+   */
+  displayOnly?: boolean;
   /** Manifest status for the status line (`FAIL` / `MISSING`). */
   status?: string;
-  /** Manifest blocker / next-step text for the status line. */
+  /** Manifest blocker / next-step text for the status line (no status prefix). */
   reason?: string;
 };
+
+/** Serial so a late reply from an older load cannot overwrite a newer pick. */
+let loadGen = 0;
+
+/** Manifest status line: `MISSING: "ex5a" — law gap — …`. */
+function statusNote(tag: string, name: string, reason: string, detail = ''): string {
+  const why = reason ? ` — ${reason}` : '';
+  const extra = detail ? ` (${detail})` : '';
+  return `${tag}: “${name}”${why}${extra}`;
+}
 
 /** Replay Netty script lines into the kernel (proof pane).
  * Strict: every `apply` must succeed — no silent `direct` fallback.
  * With allowGaps: a failed `apply LAW : CONN EXPR` falls back to `direct CONN EXPR`
- * so FAIL/MISSING calcs still open with red ! gaps for inspection. */
+ * so FAIL calcs still open with red ! gaps for inspection. */
 async function replayScript(lines: string[], allowGaps = false): Promise<boolean> {
   await send('reset');
   for (const line of lines) {
@@ -140,30 +168,75 @@ async function replayScript(lines: string[], allowGaps = false): Promise<boolean
   return true;
 }
 
+/** Script lines that start a proof (state/spec/start) — no apply/direct steps. */
+function startOnlyScript(script: string[]): string[] {
+  return script.filter((l) => {
+    const w = l.trim().split(/\s+/)[0] ?? '';
+    return w !== 'apply' && w !== 'direct';
+  });
+}
+
 /** Fetch a .calc and load its first (or named) theorem into the proof editor.
- * PASS uses strict apply-only (refuse on gap). FAIL/MISSING use allowGaps. */
+ * PASS: strict apply-only. FAIL: allowGaps. MISSING: displayOnly (goal + stub). */
 async function loadBookCalc(
   file: string, label: string, theoremIndex = 0, opts: LoadCalcOpts = {},
 ): Promise<void> {
   const allowGaps = opts.allowGaps === true;
+  const displayOnly = opts.displayOnly === true;
+  const tag = opts.status ?? '';
+  const reason = opts.reason ?? '';
+  const gen = ++loadGen;
+  const stillCurrent = () => gen === loadGen;
+  // PASS clears any prior hold; FAIL/MISSING hold the status through replay.
+  holdStatusNote = tag !== '';
+
+  // Show manifest status immediately so a slow/hung step cannot leave a prior
+  // FAIL message or the generic hint on the bar. holdStatusNote keeps send()
+  // from overwriting it with apply errors or clearing it on OK mid-replay.
+  if (tag) {
+    note = statusNote(tag, label, reason, 'loading…');
+    noteIsError = true;
+    draw();
+  }
+
   try {
     const res = await fetch(examplesBase() + file);
+    if (!stillCurrent()) return;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
+    if (!stillCurrent()) return;
     bookTheorems = parseCalcTheorems(text);
     if (bookTheorems.length === 0) {
       bookExample = { name: label, text, theorem: '' };
-      const tag = opts.status ? `${opts.status} — ` : '';
-      note = `${tag}${label}: no theorem/refine blocks found to load`
-        + (opts.reason ? ` (${opts.reason})` : '');
+      note = tag
+        ? statusNote(tag, label, reason, 'no theorem/refine blocks found')
+        : `${label}: no theorem/refine blocks found to load`;
       noteIsError = true;
       draw();
       return;
     }
     const idx = Math.max(0, Math.min(theoremIndex, bookTheorems.length - 1));
     const th = bookTheorems[idx]!;
-    const script = theoremToScript(th, !allowGaps);
     bookExample = { name: label, text, theorem: th.name };
+
+    // MISSING: goal only — never apply-by-law-name / step-direct (hang risk).
+    if (displayOnly) {
+      const full = theoremToScript(th, false);
+      const goal = full === null ? [] : startOnlyScript(full);
+      const ok = await replayScript(goal, false);
+      if (!stillCurrent()) return;
+      note = statusNote(
+        tag || 'MISSING',
+        th.name,
+        reason,
+        ok ? 'stub — steps not auto-applied' : 'stub — goal failed to open',
+      );
+      noteIsError = true;
+      draw();
+      return;
+    }
+
+    const script = theoremToScript(th, !allowGaps);
     if (script === null) {
       // Strict PASS path: refuse. (allowGaps never returns null.)
       note = `“${th.name}” has hints Netty cannot apply yet — not loaded as a proof`;
@@ -172,20 +245,17 @@ async function loadBookCalc(
       return;
     }
     const ok = await replayScript(script, allowGaps);
+    if (!stillCurrent()) return;
     const gappy = state !== null && state.lines.some((l) => l.gap);
     if (allowGaps) {
-      const tag = opts.status ?? 'INSPECT';
-      const why = opts.reason ? ` — ${opts.reason}` : '';
+      const st = tag || 'INSPECT';
       const hasStep = script.some((l) => l.startsWith('apply') || l.startsWith('direct'));
-      if (!ok) {
-        note = `${tag}: “${th.name}” failed to open${why}`;
-      } else if (gappy) {
-        note = `${tag}: “${th.name}” loaded with gaps (!)${why}`;
-      } else if (!hasStep) {
-        note = `${tag}: “${th.name}” — not yet proved (goal shown)${why}`;
-      } else {
-        note = `${tag}: “${th.name}” loaded (inspect mode)${why}`;
-      }
+      let detail = '';
+      if (!ok) detail = 'failed to open';
+      else if (gappy) detail = 'loaded with gaps (!)';
+      else if (!hasStep) detail = 'not yet proved (goal shown)';
+      else detail = 'loaded (inspect mode)';
+      note = statusNote(st, th.name, reason, detail);
       noteIsError = true;
       draw();
       return;
@@ -199,12 +269,18 @@ async function loadBookCalc(
         : `“${th.name}” failed to apply a step — not a valid Netty session`;
       noteIsError = true;
       await send('reset');
+      if (!stillCurrent()) return;
     }
     draw();
   } catch (e) {
-    note = `book example: ${String(e)}`;
+    if (!stillCurrent()) return;
+    note = tag
+      ? statusNote(tag, label, reason, String(e))
+      : `book example: ${String(e)}`;
     noteIsError = true;
     draw();
+  } finally {
+    if (gen === loadGen) holdStatusNote = false;
   }
 }
 
@@ -604,16 +680,16 @@ function download(text: string): void {
 }
 
 
-/** Short reason for tooltips / status (status + blocker + nextStep). */
+/** Blocker / next-step text for tooltips and status (no status prefix). */
 function itemReason(it: ManifestItem): string {
-  const bits = [it.status.toUpperCase()];
+  const bits: string[] = [];
   if (it.blocker) bits.push(it.blocker);
   if (it.nextStep) bits.push(it.nextStep);
-  return bits.join(' — ');
+  return bits.length > 0 ? bits.join(' — ') : (it.bookRef || it.title);
 }
 
 /** Open a calc or demo from the hierarchical list.
- * PASS: strict apply-only. FAIL: load with gaps. MISSING: stub/gaps or reason banner. */
+ * PASS: strict apply-only. FAIL: load with gaps. MISSING: display-only stub. */
 function chooseExample(it: ManifestItem): void {
   if ((it.kind ?? 'calc') === 'demo') {
     if (it.status !== 'pass') return;
@@ -631,9 +707,9 @@ function chooseExample(it: ManifestItem): void {
   }
   if (it.status === 'fail') {
     if (!it.path) {
-      note = `FAIL: ${it.title} — no .calc path (${reason})`;
+      note = statusNote('FAIL', it.title, reason, 'no .calc path');
       noteIsError = true;
-      bookExample = { name: it.title, text: `# ${reason}\n# ${it.bookRef}\n`, theorem: '' };
+      bookExample = { name: it.title, text: `# FAIL — ${it.bookRef}\n# ${reason}\n`, theorem: '' };
       draw();
       return;
     }
@@ -644,7 +720,7 @@ function chooseExample(it: ManifestItem): void {
   }
   if (it.status === 'missing') {
     if (!it.path) {
-      note = `MISSING: ${it.title} — ${reason}`;
+      note = statusNote('MISSING', it.title, reason, 'no .calc stub yet');
       noteIsError = true;
       bookExample = {
         name: it.title,
@@ -655,7 +731,7 @@ function chooseExample(it: ManifestItem): void {
       return;
     }
     void loadBookCalc(it.path, it.title, 0, {
-      allowGaps: true, status: 'MISSING', reason,
+      displayOnly: true, status: 'MISSING', reason,
     });
   }
 }
@@ -818,7 +894,7 @@ function draw(): void {
         toolbar(s))),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
-          'examples…: PASS loads cleanly; FAIL/MISSING open for inspection (gaps OK); click a suggestion to take it')
+          'examples…: PASS loads cleanly; FAIL opens with gaps; MISSING shows the stub (goal only); click a suggestion to take it')
       : el('div', { class: 'note-bar' + (noteIsError ? ' error' : '') }, note),
   ];
   if (bookExample !== null) {
