@@ -1,0 +1,11 @@
+# MISSING stub — §10.1 Ex.7(g) (from solutions/Ex7.pdf)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex7g: if b then if c then P else R fi else if c then Q else R fi fi = if c then if b then P else Q fi else R fi
+    if b then if c then P else R fi else if c then Q else R fi fi    case idempotent
+=   if c then if b then if c then P else R fi else if c then Q else R fi fi else if b then if c then P else R fi else if c then Q else R fi fi fi    context
+=   if c then if b then if ⊤ then P else R fi else if ⊤ then Q else R fi fi else if b then if ⊥ then P else R fi else if ⊥ then Q else R fi fi fi    case base
+=   if c then if b then P else Q fi else if b then R else R fi fi    case idempotent
+=   if c then if b then P else Q fi else R fi

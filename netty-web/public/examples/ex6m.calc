@@ -1,0 +1,9 @@
+# MISSING stub — §10.1 Ex.6(m) (from solutions/Ex6.pdf)
+
+laws boolean
+
+theorem ex6m: (a ⇒ ¬a) ⇒ ¬a
+    (a ⇒ ¬a) ⇒ ¬a                  material implication
+=   (¬a ∨ ¬a) ⇒ ¬a                 idempotent
+=   ¬a ⇒ ¬a                        reflexive
+=   ⊤

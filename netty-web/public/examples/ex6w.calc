@@ -1,0 +1,12 @@
+# MISSING stub — §10.1 Ex.6(w) (from solutions/Ex6.pdf)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex6w: a=(b∧c) ∧ d=(¬b ∧ ¬c) ∧ e=((a∨d)=c) ⇒ e=b
+    a=(b∧c) ∧ d=(¬b ∧ ¬c) ∧ e=((a∨d)=c)    context
+=   a=(b∧c) ∧ d=(¬b ∧ ¬c) ∧ e=((b∧c ∨ ¬b ∧ ¬c)=c)    specialization
+⇒   e=((b∧c ∨ ¬b ∧ ¬c)=c)          equality and difference
+=   e=((b=c)=c)                    associativity
+=   (e=b)=(c=c)                    reflexive, identity
+=   e=b

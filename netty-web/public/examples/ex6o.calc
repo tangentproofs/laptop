@@ -1,0 +1,12 @@
+# MISSING stub — §10.1 Ex.6(o) (from solutions/Ex6.pdf)
+
+laws boolean
+
+theorem ex6o: (a⇒b)⇒a = a
+    (a⇒b)⇒a                        inclusion
+=   (¬a ∨ b) ⇒ a                   inclusion
+=   ¬(¬a ∨ b) ∨ a                  duality
+=   (¬¬a ∧ ¬b) ∨ a                 double negation
+=   (a ∧ ¬b) ∨ a                   double negation
+=   a ∨ (a ∧ ¬b)                   symmetry of ∨
+=   a                              absorption

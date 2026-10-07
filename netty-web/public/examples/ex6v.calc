@@ -1,0 +1,15 @@
+# MISSING stub — §10.1 Ex.6(v) (from solutions/Ex6.pdf)
+
+laws boolean
+
+theorem ex6v: (a⇒b⇒¬a) ∨ (b∧c ⇒ a∧c)
+    (a⇒b⇒¬a) ∨ (b∧c ⇒ a∧c)         continuing implication
+=   (a⇒b) ∧ (b⇒¬a) ∨ (b∧c ⇒ a∧c)   contrapositive and double negation
+=   (a⇒b) ∧ (a⇒¬b) ∨ (b∧c ⇒ a∧c)   distributive
+=   (a ⇒ b∧¬b) ∨ (b∧c ⇒ a∧c)       noncontradiction
+=   (a⇒⊥) ∨ (b∧c ⇒ a∧c)            double negation and indirect proof
+=   ¬a ∨ (b∧c ⇒ a∧c)               context
+=   ¬a ∨ (b∧c ⇒ ⊤∧c)               identity
+=   ¬a ∨ (b∧c ⇒ c)                 specialization
+=   ¬a ∨ ⊤                         base
+=   ⊤

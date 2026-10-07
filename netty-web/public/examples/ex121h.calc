@@ -1,0 +1,16 @@
+# MISSING stub — §10.4 Ex.121(h)
+# blocker: program/state
+# next: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit
+# Source: LaPToP/Exercises/calc/ch4.calc
+
+# Stub from LaPToP/Exercises/calc/ch4.calc (may not apply cleanly in Netty).
+laws boolean
+
+state x, y: int
+
+spec P = y:= 2
+
+theorem ex121h: (x:= 1. P) ≡ x′ = 1 ∧ y′ = 2
+    x:= 1. P                       definition of P
+=   x:= 1. y:= 2                   ex121g
+=   x′ = 1 ∧ y′ = 2

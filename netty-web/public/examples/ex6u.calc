@@ -1,0 +1,12 @@
+# MISSING stub — §10.1 Ex.6(u) (from solutions/Ex6.pdf)
+# blocker: program/state
+
+laws boolean
+
+theorem ex6u: (a⇒(p=x)) ∧ (¬a⇒p) = p=(x∨¬a)
+    p=(x∨¬a)                       case idempotent law
+=   if a then p=(x∨¬a) else p=(x∨¬a) fi    context
+=   if a then p=(x∨¬⊤) else p=(x∨¬⊥) fi
+=   if a then p=(x∨⊥) else p=(x∨⊤) fi
+=   if a then p=x else p fi        case analysis
+=   (a⇒(p=x)) ∧ (¬a⇒p)

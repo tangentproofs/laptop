@@ -1,0 +1,12 @@
+# MISSING stub — §10.1 Ex.6(b) (from solutions/Ex6.pdf)
+# blocker: law gap
+# next: Solution uses distribute + compound symmetry/idempotence
+
+laws boolean
+
+theorem ex6b: (a∧b) ∨ (b∧c) ∨ (c∧a) = (a∨b) ∧ (b∨c) ∧ (c∨a)
+    (a∧b) ∨ (b∧c) ∨ (c∧a)          distribute
+=   (a∨b∨c)∧(a∨b∨a)∧(a∨c∨c)∧(a∨c∨a)∧(b∨b∨c)∧(b∨b∨a)∧(b∨c∨c)∧(b∨c∨a)    symmetry and idempotence
+=   (a∨b∨c) ∧ (a∨b) ∧ (a∨c) ∧ (b∨c)    absorption
+=   (a∨b) ∧ (a∨c) ∧ (b∨c)          symmetry
+=   (a∨b) ∧ (b∨c) ∧ (c∨a)

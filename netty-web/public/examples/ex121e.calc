@@ -1,0 +1,13 @@
+# MISSING stub — §10.4 Ex.121(e)
+# blocker: grammar
+# next: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit
+# Source: LaPToP/Exercises/calc/ch4.calc
+
+# Stub from LaPToP/Exercises/calc/ch4.calc (may not apply cleanly in Netty).
+laws boolean
+
+state x, y: int
+
+theorem ex121e: (x:= y. x ≥ 1 ⇒ ∃y: int· y′ = x×y) ≡ y ≥ 1 ⇒ ∃y″: int· y′ = y×y″
+    x:= y. x ≥ 1 ⇒ ∃y: int· y′ = x×y       substitution law
+=   y ≥ 1 ⇒ ∃y″: int· y′ = y×y″

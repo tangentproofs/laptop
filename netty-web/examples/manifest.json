@@ -47,7 +47,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "law gap",
-              "nextStep": "Add ¬⊤≡⊥ (binary law) or allow part-apply of noncontradiction"
+              "nextStep": "Add ¬⊤≡⊥ (binary law) or allow part-apply of noncontradiction",
+              "path": "examples/ex5a.calc"
             },
             {
               "id": "ex5b",
@@ -80,7 +81,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "law gap",
-              "nextStep": "Need unequality / ¬(x=x) rewrite chain from solution"
+              "nextStep": "Need unequality / ¬(x=x) rewrite chain from solution",
+              "path": "examples/ex5e.calc"
             },
             {
               "id": "ex5f",
@@ -111,7 +113,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "law gap",
-              "nextStep": "Solution uses distribute + compound symmetry/idempotence"
+              "nextStep": "Solution uses distribute + compound symmetry/idempotence",
+              "path": "examples/ex6b.calc"
             },
             {
               "id": "ex6c",
@@ -128,7 +131,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Solution chains symmetry/associativity/inclusion of ="
+              "nextStep": "Solution chains symmetry/associativity/inclusion of =",
+              "path": "examples/ex6d.calc"
             },
             {
               "id": "ex6e",
@@ -137,7 +141,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Same shape as (d)"
+              "nextStep": "Same shape as (d)",
+              "path": "examples/ex6e.calc"
             },
             {
               "id": "ex6f",
@@ -146,7 +151,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "law gap",
-              "nextStep": "Solution uses conflation + contrapositive phrasing"
+              "nextStep": "Solution uses conflation + contrapositive phrasing",
+              "path": "examples/ex6f.calc"
             },
             {
               "id": "ex6g",
@@ -163,7 +169,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Portation then conflation as one theorem claim"
+              "nextStep": "Portation then conflation as one theorem claim",
+              "path": "examples/ex6h.calc"
             },
             {
               "id": "ex6i",
@@ -187,7 +194,8 @@
               "bookRef": "§10.1 Ex.6(k)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Book-marked done in text; write calc from absorption/duality"
+              "nextStep": "Book-marked done in text; write calc from absorption/duality",
+              "path": "examples/ex6k.calc"
             },
             {
               "id": "ex6l",
@@ -196,7 +204,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Multi-operator solution"
+              "nextStep": "Multi-operator solution",
+              "path": "examples/ex6l.calc"
             },
             {
               "id": "ex6m",
@@ -204,7 +213,8 @@
               "bookRef": "§10.1 Ex.6(m)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Short calc via portation/indirect; write .calc"
+              "nextStep": "Short calc via portation/indirect; write .calc",
+              "path": "examples/ex6m.calc"
             },
             {
               "id": "ex6n",
@@ -212,7 +222,8 @@
               "bookRef": "§10.1 Ex.6(n)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Case / identity style; write .calc"
+              "nextStep": "Case / identity style; write .calc",
+              "path": "examples/ex6n.calc"
             },
             {
               "id": "ex6o",
@@ -220,7 +231,8 @@
               "bookRef": "§10.1 Ex.6(o)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Write .calc from solution"
+              "nextStep": "Write .calc from solution",
+              "path": "examples/ex6o.calc"
             },
             {
               "id": "ex6p",
@@ -228,7 +240,8 @@
               "bookRef": "§10.1 Ex.6(p)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Write .calc from solution"
+              "nextStep": "Write .calc from solution",
+              "path": "examples/ex6p.calc"
             },
             {
               "id": "ex6q",
@@ -236,7 +249,8 @@
               "bookRef": "§10.1 Ex.6(q)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Distributive/identity; write .calc"
+              "nextStep": "Distributive/identity; write .calc",
+              "path": "examples/ex6q.calc"
             },
             {
               "id": "ex6r",
@@ -253,7 +267,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Continuing equation of three sides"
+              "nextStep": "Continuing equation of three sides",
+              "path": "examples/ex6s.calc"
             },
             {
               "id": "ex6t",
@@ -261,7 +276,8 @@
               "bookRef": "§10.1 Ex.6(t)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Write .calc from solution"
+              "nextStep": "Write .calc from solution",
+              "path": "examples/ex6t.calc"
             },
             {
               "id": "ex6u",
@@ -270,7 +286,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "program/state",
-              "nextStep": "Mixes equality with parameters; check Netty grammar"
+              "nextStep": "Mixes equality with parameters; check Netty grammar",
+              "path": "examples/ex6u.calc"
             },
             {
               "id": "ex6v",
@@ -278,7 +295,8 @@
               "bookRef": "§10.1 Ex.6(v)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Write .calc from solution"
+              "nextStep": "Write .calc from solution",
+              "path": "examples/ex6v.calc"
             },
             {
               "id": "ex6w",
@@ -287,7 +305,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Long multi-conjunct solution"
+              "nextStep": "Long multi-conjunct solution",
+              "path": "examples/ex6w.calc"
             }
           ]
         },
@@ -309,7 +328,8 @@
               "bookRef": "§10.1 Ex.7(b)",
               "status": "missing",
               "kind": "calc",
-              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)",
+              "path": "examples/ex7b.calc"
             },
             {
               "id": "ex7c",
@@ -318,7 +338,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)",
+              "path": "examples/ex7c.calc"
             },
             {
               "id": "ex7d",
@@ -327,7 +348,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)",
+              "path": "examples/ex7d.calc"
             },
             {
               "id": "ex7e",
@@ -336,7 +358,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)",
+              "path": "examples/ex7e.calc"
             },
             {
               "id": "ex7f",
@@ -345,7 +368,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)",
+              "path": "examples/ex7f.calc"
             },
             {
               "id": "ex7g",
@@ -354,7 +378,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)",
+              "path": "examples/ex7g.calc"
             },
             {
               "id": "ex7h",
@@ -363,7 +388,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "compound hint",
-              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)",
+              "path": "examples/ex7h.calc"
             }
           ]
         },
@@ -433,7 +459,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "missing",
-              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit",
+              "path": "examples/ex121c.calc"
             },
             {
               "id": "ex121d",
@@ -442,7 +469,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "grammar",
-              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit",
+              "path": "examples/ex121d.calc"
             },
             {
               "id": "ex121e",
@@ -451,7 +479,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "grammar",
-              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit",
+              "path": "examples/ex121e.calc"
             },
             {
               "id": "ex121f",
@@ -476,7 +505,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "program/state",
-              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit",
+              "path": "examples/ex121h.calc"
             },
             {
               "id": "ex121i",
@@ -485,7 +515,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "program/state",
-              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit",
+              "path": "examples/ex121i.calc"
             },
             {
               "id": "ex121j",
@@ -494,7 +525,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "program/state",
-              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit",
+              "path": "examples/ex121j.calc"
             },
             {
               "id": "ex121k",
@@ -503,7 +535,8 @@
               "status": "missing",
               "kind": "calc",
               "blocker": "missing",
-              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit",
+              "path": "examples/ex121k.calc"
             }
           ]
         },

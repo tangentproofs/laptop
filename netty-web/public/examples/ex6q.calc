@@ -1,0 +1,10 @@
+# MISSING stub — §10.1 Ex.6(q) (from solutions/Ex6.pdf)
+
+laws boolean
+
+theorem ex6q: a∧b ∨ a∧¬b = a
+    a∧b ∨ a∧¬b = a                 factor
+=   a∧(b ∨ ¬b) = a                 excluded middle
+=   a∧⊤ = a                        symmetry
+=   ⊤∧a = a                        identity
+=   ⊤

@@ -1,0 +1,9 @@
+# MISSING stub — §10.1 Ex.6(n) (from solutions/Ex6.pdf)
+
+laws boolean
+
+theorem ex6n: (a⇒b) ∧ (¬a ⇒ b) = b
+    (a⇒b) ∧ (¬a⇒b)                 antidistributive law
+=   a∨¬a ⇒ b                       excluded middle
+=   ⊤ ⇒ b                          identity
+=   b

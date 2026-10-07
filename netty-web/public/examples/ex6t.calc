@@ -1,0 +1,8 @@
+# MISSING stub — §10.1 Ex.6(t) (from solutions/Ex6.pdf)
+
+laws boolean
+
+theorem ex6t: (a ⇒ a∧b) ∨ (b ⇒ a∧b)
+    (a ⇒ a∧b) ∨ (b ⇒ a∧b)          anti-distributive
+=   a∧b ⇒ a∧b                      reflexive
+=   ⊤

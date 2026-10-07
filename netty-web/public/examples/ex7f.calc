@@ -1,0 +1,11 @@
+# MISSING stub — §10.1 Ex.7(f) (from solutions/Ex7.pdf)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex7f: if if b then c else d fi then P else Q fi = if b then if c then P else Q fi else if d then P else Q fi fi
+    if if b then c else d fi then P else Q fi    case analysis
+=   if b then c else d fi ∧ P ∨ ¬if b then c else d fi ∧ Q    distribute
+=   if b then c∧P else d∧P fi ∨ if b then ¬c∧Q else ¬d∧Q fi    distribute
+=   if b then c∧P ∨ ¬c∧Q else d∧P ∨ ¬d∧Q fi    case analysis
+=   if b then if c then P else Q fi else if d then P else Q fi fi

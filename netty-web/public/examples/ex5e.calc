@@ -1,0 +1,13 @@
+# MISSING stub — §10.1 Ex.5(e) (from solutions/Ex5.pdf)
+# blocker: law gap
+# next: Need unequality / ¬(x=x) rewrite chain from solution
+
+laws boolean
+
+theorem ex5e: x = ¬x ≡ ⊥
+    x = ¬x                         exclusion
+=   x ⧧ x                          unequality
+=   ¬(x = x)                       reflexive
+=   ¬⊤                             binary law
+=   ¬¬⊥                            double negation
+=   ⊥

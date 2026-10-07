@@ -404,34 +404,49 @@ button.operand.site, button.operand.segment.site {
   padding: 0 0 0 0.4rem;
 }
 .examples-panel li { margin: 0.12rem 0; }
-.examples-panel button.ex-pass {
+.examples-panel button.ex-pass,
+.examples-panel button.ex-fail,
+.examples-panel button.ex-missing {
   display: block;
   width: 100%;
   text-align: left;
   font: inherit;
   font-size: 0.82rem;
-  color: var(--ink);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
   padding: 0.2rem 0.4rem;
   cursor: pointer;
 }
+.examples-panel button.ex-pass {
+  color: var(--ink);
+}
 .examples-panel button.ex-pass:hover {
   border-color: var(--hot);
   color: var(--hot);
   background: rgba(255, 255, 255, 0.04);
 }
-.examples-panel .ex-disabled {
-  display: block;
+/* FAIL: amber — broken calc, still openable */
+.examples-panel button.ex-fail {
+  color: #fc9867;
   font-size: 0.78rem;
-  color: var(--dim);
-  padding: 0.15rem 0.4rem;
-  cursor: not-allowed;
-  opacity: 0.75;
 }
-.examples-panel .ex-fail .ex-disabled { color: #fc9867; }
-.examples-panel .ex-missing .ex-disabled { color: var(--dim); }
+.examples-panel button.ex-fail:hover {
+  border-color: #fc9867;
+  background: rgba(252, 152, 103, 0.08);
+}
+/* MISSING: dim/grey — stub or not-yet-proved, still openable */
+.examples-panel button.ex-missing {
+  color: var(--dim);
+  font-size: 0.78rem;
+  opacity: 0.9;
+}
+.examples-panel button.ex-missing:hover {
+  border-color: var(--dim);
+  color: var(--ink);
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.04);
+}
 
 @media (max-width: 600px) {
   .examples-panel {

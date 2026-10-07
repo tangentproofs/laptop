@@ -97,9 +97,25 @@ async function send(op: Op, arg = ''): Promise<Response | null> {
 /** Run one line of the script language. */
 const cmd = (line: string) => send('cmd', line);
 
+/** Options for loading a book .calc into the proof pane. */
+type LoadCalcOpts = {
+  /**
+   * When false/omitted (PASS): every apply must succeed; gaps refuse the load.
+   * When true (FAIL / MISSING): unresolvable hints become `direct` and failed
+   * applies fall back to `direct` so broken steps show as red ! gaps.
+   */
+  allowGaps?: boolean;
+  /** Manifest status for the status line (`FAIL` / `MISSING`). */
+  status?: string;
+  /** Manifest blocker / next-step text for the status line. */
+  reason?: string;
+};
+
 /** Replay Netty script lines into the kernel (proof pane).
- * Strict: every `apply` must succeed — no silent `direct` fallback. */
-async function replayScript(lines: string[]): Promise<boolean> {
+ * Strict: every `apply` must succeed — no silent `direct` fallback.
+ * With allowGaps: a failed `apply LAW : CONN EXPR` falls back to `direct CONN EXPR`
+ * so FAIL/MISSING calcs still open with red ! gaps for inspection. */
+async function replayScript(lines: string[], allowGaps = false): Promise<boolean> {
   await send('reset');
   for (const line of lines) {
     const t = line.trim();
@@ -108,13 +124,28 @@ async function replayScript(lines: string[]): Promise<boolean> {
     if (word === 'proof' || word === 'suggest' || word === 'context') continue;
     const a = await send('cmd', t);
     if (a === null) return false;
-    if (!a.ok) return false;
+    if (!a.ok) {
+      if (allowGaps && word === 'apply') {
+        // `apply LAW : CONN EXPR` or `apply LAW : CONN EXPR with …` → direct CONN EXPR
+        const m = t.match(/^apply\s+[^:]+:\s*([=≡⇒⇐≤≥⟹⟸])\s+(.+?)(?:\s+with\s+.+)?$/);
+        if (m) {
+          const d = await send('cmd', `direct ${m[1]} ${m[2]!.trim()}`);
+          if (d === null || !d.ok) return false;
+          continue;
+        }
+      }
+      return false;
+    }
   }
   return true;
 }
 
-/** Fetch a .calc and load its first (or named) theorem into the proof editor. */
-async function loadBookCalc(file: string, label: string, theoremIndex = 0): Promise<void> {
+/** Fetch a .calc and load its first (or named) theorem into the proof editor.
+ * PASS uses strict apply-only (refuse on gap). FAIL/MISSING use allowGaps. */
+async function loadBookCalc(
+  file: string, label: string, theoremIndex = 0, opts: LoadCalcOpts = {},
+): Promise<void> {
+  const allowGaps = opts.allowGaps === true;
   try {
     const res = await fetch(examplesBase() + file);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -122,23 +153,43 @@ async function loadBookCalc(file: string, label: string, theoremIndex = 0): Prom
     bookTheorems = parseCalcTheorems(text);
     if (bookTheorems.length === 0) {
       bookExample = { name: label, text, theorem: '' };
-      note = `book example: ${label} — no theorem/refine blocks found to load`;
+      const tag = opts.status ? `${opts.status} — ` : '';
+      note = `${tag}${label}: no theorem/refine blocks found to load`
+        + (opts.reason ? ` (${opts.reason})` : '');
       noteIsError = true;
       draw();
       return;
     }
     const idx = Math.max(0, Math.min(theoremIndex, bookTheorems.length - 1));
     const th = bookTheorems[idx]!;
-    const script = theoremToScript(th, true);
+    const script = theoremToScript(th, !allowGaps);
     bookExample = { name: label, text, theorem: th.name };
     if (script === null) {
+      // Strict PASS path: refuse. (allowGaps never returns null.)
       note = `“${th.name}” has hints Netty cannot apply yet — not loaded as a proof`;
       noteIsError = true;
       draw();
       return;
     }
-    const ok = await replayScript(script);
+    const ok = await replayScript(script, allowGaps);
     const gappy = state !== null && state.lines.some((l) => l.gap);
+    if (allowGaps) {
+      const tag = opts.status ?? 'INSPECT';
+      const why = opts.reason ? ` — ${opts.reason}` : '';
+      const hasStep = script.some((l) => l.startsWith('apply') || l.startsWith('direct'));
+      if (!ok) {
+        note = `${tag}: “${th.name}” failed to open${why}`;
+      } else if (gappy) {
+        note = `${tag}: “${th.name}” loaded with gaps (!)${why}`;
+      } else if (!hasStep) {
+        note = `${tag}: “${th.name}” — not yet proved (goal shown)${why}`;
+      } else {
+        note = `${tag}: “${th.name}” loaded (inspect mode)${why}`;
+      }
+      noteIsError = true;
+      draw();
+      return;
+    }
     if (ok && !gappy) {
       note = `loaded “${th.name}” — every step applied (${idx + 1}/${bookTheorems.length} in ${label})`;
       noteIsError = false;
@@ -553,7 +604,7 @@ function download(text: string): void {
 }
 
 
-/** Reason shown on disabled FAIL/MISSING rows. */
+/** Short reason for tooltips / status (status + blocker + nextStep). */
 function itemReason(it: ManifestItem): string {
   const bits = [it.status.toUpperCase()];
   if (it.blocker) bits.push(it.blocker);
@@ -561,30 +612,68 @@ function itemReason(it: ManifestItem): string {
   return bits.join(' — ');
 }
 
-/** Pick a PASS calc or a kernel demo from the hierarchical list. */
+/** Open a calc or demo from the hierarchical list.
+ * PASS: strict apply-only. FAIL: load with gaps. MISSING: stub/gaps or reason banner. */
 function chooseExample(it: ManifestItem): void {
-  if (it.status !== 'pass') return;
   if ((it.kind ?? 'calc') === 'demo') {
+    if (it.status !== 'pass') return;
     const demoId = it.id.startsWith('demo:') ? it.id.slice(5) : it.id;
     bookExample = null;
     bookTheorems = [];
     void send('demo', demoId);
     return;
   }
-  if (!it.path) return;
-  void loadBookCalc(it.path, it.title, 0);
+  const reason = itemReason(it);
+  if (it.status === 'pass') {
+    if (!it.path) return;
+    void loadBookCalc(it.path, it.title, 0, { allowGaps: false });
+    return;
+  }
+  if (it.status === 'fail') {
+    if (!it.path) {
+      note = `FAIL: ${it.title} — no .calc path (${reason})`;
+      noteIsError = true;
+      bookExample = { name: it.title, text: `# ${reason}\n# ${it.bookRef}\n`, theorem: '' };
+      draw();
+      return;
+    }
+    void loadBookCalc(it.path, it.title, 0, {
+      allowGaps: true, status: 'FAIL', reason,
+    });
+    return;
+  }
+  if (it.status === 'missing') {
+    if (!it.path) {
+      note = `MISSING: ${it.title} — ${reason}`;
+      noteIsError = true;
+      bookExample = {
+        name: it.title,
+        text: `# MISSING — ${it.bookRef}\n# ${reason}\n# No .calc stub yet.\n`,
+        theorem: '',
+      };
+      draw();
+      return;
+    }
+    void loadBookCalc(it.path, it.title, 0, {
+      allowGaps: true, status: 'MISSING', reason,
+    });
+  }
 }
 
 /**
  * Hierarchical examples control: details panel with chapter → section groups.
- * PASS entries are buttons; FAIL/MISSING are disabled with a tooltip reason.
- * Falls back to the flat PASS-only select if the manifest has not loaded yet.
+ * PASS / FAIL / MISSING are all clickable; OUT_OF_SCOPE is omitted.
+ * Distinct classes keep colouring (`ex-pass` / `ex-fail` / `ex-missing`).
+ * Falls back to the flat PASS-only list if the manifest has not loaded yet.
  */
 function examplesPicker(): HTMLElement {
   const wrap = el('div', { class: 'examples-picker' });
   const summary = el('summary', { class: 'examples-summary' }, 'examples…');
   const panel = el('div', { class: 'examples-panel' });
-  const root = el('details', { class: 'examples-menu', title: 'load a working example into the proof pane' });
+  const root = el('details', {
+    class: 'examples-menu',
+    title: 'load a book example or demo (PASS apply-only; FAIL/MISSING open for inspection)',
+  });
   root.append(summary, panel);
 
   const fill = (m: ExamplesManifest | null) => {
@@ -597,7 +686,7 @@ function examplesPicker(): HTMLElement {
         const b = el('button', { type: 'button', class: 'ex-pass' }, ex.label);
         b.addEventListener('click', () => {
           root.open = false;
-          if (ex.kind === 'calc') void loadBookCalc(ex.file, ex.label, 0);
+          if (ex.kind === 'calc') void loadBookCalc(ex.file, ex.label, 0, { allowGaps: false });
           else {
             bookExample = null;
             bookTheorems = [];
@@ -620,27 +709,25 @@ function examplesPicker(): HTMLElement {
         sdet.append(el('summary', {}, s.title));
         const ul = el('ul', { class: 'ex-items' });
         for (const it of s.items) {
-          // Omit pure OUT_OF_SCOPE clutter; keep FAIL/MISSING visible but disabled.
           if (it.status === 'out_of_scope') continue;
           const li = el('li', { class: `ex-${it.status}` });
           const label = it.title.length > 64 ? it.title.slice(0, 61) + '…' : it.title;
-          if (it.status === 'pass') {
-            const b = el('button', { type: 'button', class: 'ex-pass', title: `${it.bookRef}` }, label);
-            b.addEventListener('click', () => {
-              root.open = false;
-              chooseExample(it);
-            });
-            li.append(b);
-          } else {
-            const why = itemReason(it);
-            const span = el('span', {
-              class: 'ex-disabled',
-              title: why,
-              tabindex: '0',
-              'aria-disabled': 'true',
-            }, `${label} (${it.status})`);
-            li.append(span);
-          }
+          const why = itemReason(it);
+          const btnClass =
+            it.status === 'pass' ? 'ex-pass'
+              : it.status === 'fail' ? 'ex-fail'
+                : 'ex-missing';
+          const shown = it.status === 'pass' ? label : `${label} (${it.status})`;
+          const b = el('button', {
+            type: 'button',
+            class: btnClass,
+            title: `${it.bookRef} — ${why}`,
+          }, shown);
+          b.addEventListener('click', () => {
+            root.open = false;
+            chooseExample(it);
+          });
+          li.append(b);
           ul.append(li);
         }
         if (ul.childNodes.length) {
@@ -675,7 +762,7 @@ function toolbar(s: StateView | null): HTMLElement {
     bar.append(b);
     return b;
   };
-  // Hierarchical Examples picker (chapter → section → proof); PASS loads only.
+  // Hierarchical Examples picker (chapter → section → proof); PASS/FAIL/MISSING open.
   bar.append(examplesPicker());
   button('new', 'start again with the same laws', () => void send('reset'));
   button('undo (u)', 'undo one command', () => void cmd('undo'), s === null || !s.canUndo);
@@ -731,7 +818,7 @@ function draw(): void {
         toolbar(s))),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
-          'examples… loads a working proof into the proof pane; click a suggestion to take it')
+          'examples…: PASS loads cleanly; FAIL/MISSING open for inspection (gaps OK); click a suggestion to take it')
       : el('div', { class: 'note-bar' + (noteIsError ? ' error' : '') }, note),
   ];
   if (bookExample !== null) {

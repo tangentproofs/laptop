@@ -1,0 +1,9 @@
+# MISSING stub — §10.1 Ex.6(h) (from solutions/Ex6.pdf)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex6h: (a⇒b) ∧ (c⇒d) ∧ (a∨c) ⇒ (b∨d)
+    (a⇒b) ∧ (c⇒d) ∧ (a∨c) ⇒ (b∨d)  portation
+=   (a⇒b) ∧ (c⇒d) ⇒ (a∨c ⇒ b∨d)    conflation
+=   ⊤

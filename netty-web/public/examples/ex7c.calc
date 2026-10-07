@@ -1,0 +1,16 @@
+# MISSING stub — §10.1 Ex.7(c) (from solutions/Ex7.pdf)
+# blocker: compound hint
+# Note: solution proves RHS ⇒ LHS direction in book; claim is the equality.
+
+laws boolean
+
+theorem ex7c: if b∧c then P else Q fi = if b then if c then P else Q fi else Q fi
+    if b then if c then P else Q fi else Q fi    case analysis, twice
+=   b ∧ (c∧P ∨ ¬c∧Q) ∨ ¬b∧Q        distribution
+=   b∧c∧P ∨ b∧¬c∧Q ∨ ¬b∧Q          distribution
+=   b∧c∧P ∨ (b∧¬c ∨ ¬b) ∧ Q        symmetry
+=   b∧c∧P ∨ (¬b ∨ b∧¬c) ∧ Q        distribution
+=   b∧c∧P ∨ (¬b ∨ b)∧(¬b ∨ ¬c)∧Q   excluded middle, duality
+=   b∧c∧P ∨ ⊤∧¬(b∧c)∧Q             identity
+=   b∧c∧P ∨ ¬(b∧c)∧Q               case analysis
+=   if b∧c then P else Q fi

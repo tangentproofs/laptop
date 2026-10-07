@@ -1,0 +1,15 @@
+# MISSING stub — §10.1 Ex.6(l) (from solutions/Ex6.pdf, first solution abbreviated)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex6l: (¬a⇒¬b) ∧ (a⧧b) ∨ (a∧c ⇒ b∧c)
+    (¬a⇒¬b) ∧ (a⧧b) ∨ (a∧c ⇒ b∧c)  law of exclusion
+=   (¬a⇒¬b) ∧ (a=¬b) ∨ (a∧c ⇒ b∧c) context
+=   (¬a⇒a) ∧ (a=¬b) ∨ (a∧c ⇒ b∧c)  indirect proof
+=   a ∧ (a=¬b) ∨ (a∧c ⇒ b∧c)       context
+=   a ∧ ¬b ∨ (a∧c ⇒ b∧c)           duality and double negation
+=   ¬(¬a ∨ b) ∨ (a∧c ⇒ b∧c)        inclusion
+=   ¬(a⇒b) ∨ (a∧c ⇒ b∧c)           context
+⇐   ¬(a⇒b) ∨ (a∧c ⇒ a∧c)           reflexive and base
+=   ⊤

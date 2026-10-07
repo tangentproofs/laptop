@@ -1,0 +1,10 @@
+# MISSING stub — §10.1 Ex.6(s) (from solutions/Ex6.pdf)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex6s: a ⇒ a∧b = a⇒b = a∨b ⇒ b
+    (a ⇒ a∧b = a⇒b = a∨b ⇒ b)      distribute ⇒ over ∧; antidistribute ⇒ over ∨
+=   ((a⇒a) ∧ (a⇒b) = a⇒b = (a⇒b) ∧ (b⇒b))    reflexive of ⇒ and identity of ∧
+=   (a⇒b = a⇒b = a⇒b)              reflexive of =
+=   ⊤

@@ -1,0 +1,11 @@
+# MISSING stub — §10.1 Ex.6(e) (from solutions/Ex6.pdf)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex6e: a=(a⇒b) = a∧b
+    (a=(a⇒b) = a∧b)                symmetry of =
+=   ((a⇒b)=a = a∧b)                associativity of =
+=   ((a⇒b) = a=(a∧b))              symmetry of =
+=   ((a⇒b) = (a∧b)=a)              inclusion
+=   ⊤

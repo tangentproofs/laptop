@@ -1,0 +1,13 @@
+# MISSING stub — §10.1 Ex.7(d) (from solutions/Ex7.pdf)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex7d: if b∨c then P else Q fi = if b then P else if c then P else Q fi fi
+    if b then P else if c then P else Q fi fi    case analysis twice
+=   b∧P ∨ ¬b∧(c∧P ∨ ¬c∧Q)          distribute
+=   b∧P ∨ ¬b∧c∧P ∨ ¬b∧¬c∧Q         factor
+=   (b ∨ ¬b∧c)∧P ∨ ¬b∧¬c∧Q         distribute, duality
+=   (b ∨ ¬b)∧(b ∨ c)∧P ∨ ¬(b ∨ c)∧Q    excluded middle and identity
+=   (b ∨ c)∧P ∨ ¬(b ∨ c)∧Q         case analysis
+=   if b∨c then P else Q fi

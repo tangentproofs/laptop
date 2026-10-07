@@ -25,12 +25,12 @@ Status values:
 
 | Status | Meaning |
 |--------|---------|
-| **PASS** | `.calc` exists; every step `apply`s; in hierarchical picker (loadable) |
-| **FAIL** | `.calc` exists; audit refuses (apply gap / compound hint / …); shown disabled |
-| **MISSING** | Netty-candidate with no working `.calc` yet |
-| **OUT_OF_SCOPE** | Not a Netty calc target (reason in table) |
+| **PASS** | `.calc` exists; every step `apply`s; picker loads **strict** (refuse on gap) |
+| **FAIL** | `.calc` exists; audit refuses (apply gap / compound hint / …); **clickable** — opens with gaps allowed; status shows FAIL + blocker |
+| **MISSING** | Netty-candidate not yet proved; **clickable** — opens stub `.calc` (goal / best-effort steps) or a reason banner; status shows MISSING |
+| **OUT_OF_SCOPE** | Not a Netty calc target (reason in table); omitted from picker |
 
-Standing: **apply-only** calc-load (refuse on gap / no red `!`). Honesty over coverage.
+Standing: **apply-only** for PASS (refuse on gap / no red `!`). FAIL/MISSING are choosable for inspection (gaps / stubs OK); honesty over coverage for PASS.
 
 ## Netty-candidate summary
 
@@ -44,7 +44,7 @@ Standing: **apply-only** calc-load (refuse on gap / no red `!`). Honesty over co
 
 Plus **6** kernel demos (always PASS, separate top-level group).
 
-**PASS book calcs loadable in picker: 19** (was 13 before this census pass).
+**PASS book calcs loadable in picker: 19.** FAIL (7) and MISSING (33) are also choosable for inspection; MISSING entries now have stub `.calc` paths.
 
 ### Counts by chapter / section (candidates only)
 
@@ -77,11 +77,11 @@ Hierarchical picker data: `netty-web/public/examples/manifest.json` (copy: `nett
 
 | id | bookRef | title | status | path | blocker / next step |
 |----|---------|-------|--------|------|---------------------|
-| `ex5a` | §10.1 Ex.5(a) | Simplify x ∧ ¬x | **MISSING** | `—` | law gap: Add ¬⊤≡⊥ (binary law) or allow part-apply of noncontradiction |
+| `ex5a` | §10.1 Ex.5(a) | Simplify x ∧ ¬x | **MISSING** | `examples/ex5a.calc` | law gap: Add ¬⊤≡⊥ (binary law) or allow part-apply of noncontradiction |
 | `ex5b` | §10.1 Ex.5(b) | Simplify x ∨ ¬x (excluded middle) | **PASS** | `examples/ex5b.calc` | — |
 | `ex5c` | §10.1 Ex.5(c) | Simplify x ⇒ ¬x | **PASS** | `examples/ex5c.calc` | — |
 | `ex5d` | §10.1 Ex.5(d) | Simplify x ⇐ ¬x | **PASS** | `examples/ex5d.calc` | — |
-| `ex5e` | §10.1 Ex.5(e) | Simplify x = ¬x | **MISSING** | `—` | law gap: Need unequality / ¬(x=x) rewrite chain from solution |
+| `ex5e` | §10.1 Ex.5(e) | Simplify x = ¬x | **MISSING** | `examples/ex5e.calc` | law gap: Need unequality / ¬(x=x) rewrite chain from solution |
 | `ex5f` | §10.1 Ex.5(f) | Simplify x ⧧ ¬x | **PASS** | `examples/ex5f.calc` | — |
 
 #### §10.1 Ex.6 — Prove binary laws
@@ -89,41 +89,41 @@ Hierarchical picker data: `netty-web/public/examples/manifest.json` (copy: `nett
 | id | bookRef | title | status | path | blocker / next step |
 |----|---------|-------|--------|------|---------------------|
 | `ex6a` | §10.1 Ex.6(a) | Prove a∧b ⇒ a∨b | **PASS** | `examples/ex6a.calc` | — |
-| `ex6b` | §10.1 Ex.6(b) | Prove (a∧b)∨(b∧c)∨(c∧a) = (a∨b)∧(b∨c)∧(c∧a) | **MISSING** | `—` | law gap: Solution uses distribute + compound symmetry/idempotence |
+| `ex6b` | §10.1 Ex.6(b) | Prove (a∧b)∨(b∧c)∨(c∧a) = (a∨b)∧(b∨c)∧(c∧a) | **MISSING** | `examples/ex6b.calc` | law gap: Solution uses distribute + compound symmetry/idempotence |
 | `ex6c` | §10.1 Ex.6(c) | Prove ¬a ⇒ (a⇒b) | **PASS** | `examples/ex6c.calc` | — |
-| `ex6d` | §10.1 Ex.6(d) | Prove a=(b⇒a) = a∨b | **MISSING** | `—` | compound hint: Solution chains symmetry/associativity/inclusion of = |
-| `ex6e` | §10.1 Ex.6(e) | Prove a=(a⇒b) = a∧b | **MISSING** | `—` | compound hint: Same shape as (d) |
-| `ex6f` | §10.1 Ex.6(f) | Prove (a⇒c)∧(b⇒¬c) ⇒ ¬(a∧b) | **MISSING** | `—` | law gap: Solution uses conflation + contrapositive phrasing |
+| `ex6d` | §10.1 Ex.6(d) | Prove a=(b⇒a) = a∨b | **MISSING** | `examples/ex6d.calc` | compound hint: Solution chains symmetry/associativity/inclusion of = |
+| `ex6e` | §10.1 Ex.6(e) | Prove a=(a⇒b) = a∧b | **MISSING** | `examples/ex6e.calc` | compound hint: Same shape as (d) |
+| `ex6f` | §10.1 Ex.6(f) | Prove (a⇒c)∧(b⇒¬c) ⇒ ¬(a∧b) | **MISSING** | `examples/ex6f.calc` | law gap: Solution uses conflation + contrapositive phrasing |
 | `ex6g` | §10.1 Ex.6(g) | Prove a∧¬b ⇒ a∨b | **PASS** | `examples/ex6g.calc` | — |
-| `ex6h` | §10.1 Ex.6(h) | Prove (a⇒b)∧(c⇒d)∧(a∨c) ⇒ (b∨d) | **MISSING** | `—` | compound hint: Portation then conflation as one theorem claim |
+| `ex6h` | §10.1 Ex.6(h) | Prove (a⇒b)∧(c⇒d)∧(a∨c) ⇒ (b∨d) | **MISSING** | `examples/ex6h.calc` | compound hint: Portation then conflation as one theorem claim |
 | `ex6i` | §10.1 Ex.6(i) | Prove a∧¬a ⇒ b | **PASS** | `examples/ex6i.calc` | — |
 | `ex6j` | §10.1 Ex.6(j) | Prove (a⇒b)∨(b⇒a) | **PASS** | `examples/ex6j.calc` | — |
-| `ex6k` | §10.1 Ex.6(k) | Prove ¬(a ∧ ¬(a∨b)) | **MISSING** | `—` | Book-marked done in text; write calc from absorption/duality |
-| `ex6l` | §10.1 Ex.6(l) | Prove (¬a⇒¬b)∧(a⧧b) ∨ (a∧c⇒b∧c) | **MISSING** | `—` | compound hint: Multi-operator solution |
-| `ex6m` | §10.1 Ex.6(m) | Prove (a⇒¬a)⇒¬a | **MISSING** | `—` | Short calc via portation/indirect; write .calc |
-| `ex6n` | §10.1 Ex.6(n) | Prove (a⇒b)∧(¬a⇒b)=b | **MISSING** | `—` | Case / identity style; write .calc |
-| `ex6o` | §10.1 Ex.6(o) | Prove (a⇒b)⇒a = a | **MISSING** | `—` | Write .calc from solution |
-| `ex6p` | §10.1 Ex.6(p) | Prove a=b ∨ a=c ∨ b=c | **MISSING** | `—` | Write .calc from solution |
-| `ex6q` | §10.1 Ex.6(q) | Prove a∧b ∨ a∧¬b = a | **MISSING** | `—` | Distributive/identity; write .calc |
+| `ex6k` | §10.1 Ex.6(k) | Prove ¬(a ∧ ¬(a∨b)) | **MISSING** | `examples/ex6k.calc` | Book-marked done in text; write calc from absorption/duality |
+| `ex6l` | §10.1 Ex.6(l) | Prove (¬a⇒¬b)∧(a⧧b) ∨ (a∧c⇒b∧c) | **MISSING** | `examples/ex6l.calc` | compound hint: Multi-operator solution |
+| `ex6m` | §10.1 Ex.6(m) | Prove (a⇒¬a)⇒¬a | **MISSING** | `examples/ex6m.calc` | Short calc via portation/indirect; write .calc |
+| `ex6n` | §10.1 Ex.6(n) | Prove (a⇒b)∧(¬a⇒b)=b | **MISSING** | `examples/ex6n.calc` | Case / identity style; write .calc |
+| `ex6o` | §10.1 Ex.6(o) | Prove (a⇒b)⇒a = a | **MISSING** | `examples/ex6o.calc` | Write .calc from solution |
+| `ex6p` | §10.1 Ex.6(p) | Prove a=b ∨ a=c ∨ b=c | **MISSING** | `examples/ex6p.calc` | Write .calc from solution |
+| `ex6q` | §10.1 Ex.6(q) | Prove a∧b ∨ a∧¬b = a | **MISSING** | `examples/ex6q.calc` | Distributive/identity; write .calc |
 | `ex6r` | §10.1 Ex.6(r) | Prove a⇒(b⇒a) | **PASS** | `examples/ex6r.calc` | — |
-| `ex6s` | §10.1 Ex.6(s) | Prove a⇒a∧b = a⇒b = a∨b⇒b | **MISSING** | `—` | compound hint: Continuing equation of three sides |
-| `ex6t` | §10.1 Ex.6(t) | Prove (a⇒a∧b)∨(b⇒a∧b) | **MISSING** | `—` | Write .calc from solution |
-| `ex6u` | §10.1 Ex.6(u) | Prove (a⇒(p=x))∧(¬a⇒p) = p=(x∨¬a) | **MISSING** | `—` | program/state: Mixes equality with parameters; check Netty grammar |
-| `ex6v` | §10.1 Ex.6(v) | Prove (a⇒b⇒¬a)∨(b∧c⇒a∧c) | **MISSING** | `—` | Write .calc from solution |
-| `ex6w` | §10.1 Ex.6(w) | Prove a=(b∧c)∧d=(¬b∧¬c)∧e=((a∨d)=c) ⇒ e=b | **MISSING** | `—` | compound hint: Long multi-conjunct solution |
+| `ex6s` | §10.1 Ex.6(s) | Prove a⇒a∧b = a⇒b = a∨b⇒b | **MISSING** | `examples/ex6s.calc` | compound hint: Continuing equation of three sides |
+| `ex6t` | §10.1 Ex.6(t) | Prove (a⇒a∧b)∨(b⇒a∧b) | **MISSING** | `examples/ex6t.calc` | Write .calc from solution |
+| `ex6u` | §10.1 Ex.6(u) | Prove (a⇒(p=x))∧(¬a⇒p) = p=(x∨¬a) | **MISSING** | `examples/ex6u.calc` | program/state: Mixes equality with parameters; check Netty grammar |
+| `ex6v` | §10.1 Ex.6(v) | Prove (a⇒b⇒¬a)∨(b∧c⇒a∧c) | **MISSING** | `examples/ex6v.calc` | Write .calc from solution |
+| `ex6w` | §10.1 Ex.6(w) | Prove a=(b∧c)∧d=(¬b∧¬c)∧e=((a∨d)=c) ⇒ e=b | **MISSING** | `examples/ex6w.calc` | compound hint: Long multi-conjunct solution |
 
 #### §10.1 Ex.7 — if-then-else laws
 
 | id | bookRef | title | status | path | blocker / next step |
 |----|---------|-------|--------|------|---------------------|
 | `ex7a` | §10.1 Ex.7(a) | if a then a else ¬a ≡ ⊤ | **PASS** | `examples/ex7a.calc` | — |
-| `ex7b` | §10.1 Ex.7(b) | if b then c else ¬c = if c then b else ¬b | **MISSING** | `—` | Rewrite solution with one Netty law per step (case analysis, distributive) |
-| `ex7c` | §10.1 Ex.7(c) | if b∧c then P else Q = if b then if c then P else Q else Q | **MISSING** | `—` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
-| `ex7d` | §10.1 Ex.7(d) | if b∨c then P else Q = if b then P else if c then P else Q | **MISSING** | `—` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
-| `ex7e` | §10.1 Ex.7(e) | if b then P else if b then Q else R = if b then P else R | **MISSING** | `—` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
-| `ex7f` | §10.1 Ex.7(f) | if if b then c else d then P else Q = … | **MISSING** | `—` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
-| `ex7g` | §10.1 Ex.7(g) | if b then if c then P else R else if c then Q else R = … | **MISSING** | `—` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
-| `ex7h` | §10.1 Ex.7(h) | if b then if c then P else R else if d then Q else R = … | **MISSING** | `—` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
+| `ex7b` | §10.1 Ex.7(b) | if b then c else ¬c = if c then b else ¬b | **MISSING** | `examples/ex7b.calc` | Rewrite solution with one Netty law per step (case analysis, distributive) |
+| `ex7c` | §10.1 Ex.7(c) | if b∧c then P else Q = if b then if c then P else Q else Q | **MISSING** | `examples/ex7c.calc` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
+| `ex7d` | §10.1 Ex.7(d) | if b∨c then P else Q = if b then P else if c then P else Q | **MISSING** | `examples/ex7d.calc` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
+| `ex7e` | §10.1 Ex.7(e) | if b then P else if b then Q else R = if b then P else R | **MISSING** | `examples/ex7e.calc` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
+| `ex7f` | §10.1 Ex.7(f) | if if b then c else d then P else Q = … | **MISSING** | `examples/ex7f.calc` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
+| `ex7g` | §10.1 Ex.7(g) | if b then if c then P else R else if c then Q else R = … | **MISSING** | `examples/ex7g.calc` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
+| `ex7h` | §10.1 Ex.7(h) | if b then if c then P else R else if d then Q else R = … | **MISSING** | `examples/ex7h.calc` | compound hint: Rewrite solution with one Netty law per step (case analysis, distributive) |
 
 #### §10.1 Ex.12 — Drink and drive
 
@@ -140,15 +140,15 @@ Hierarchical picker data: `netty-web/public/examples/manifest.json` (copy: `nett
 |----|---------|-------|--------|------|---------------------|
 | `ex121a` | §10.4 Ex.121(a) | Substitution after x:= y+1 | **PASS** | `examples/ex121a.calc` | — |
 | `ex121b` | §10.4 Ex.121(b) | Substitution into a conjunction | **PASS** | `examples/ex121b.calc` | — |
-| `ex121c` | §10.4 Ex.121(c) | x:= y+1. y′=2×x | **MISSING** | `—` | missing: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
-| `ex121d` | §10.4 Ex.121(d) | x:= 1 with exists; needs quantifier + arithmetic | **MISSING** | `—` | grammar: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
-| `ex121e` | §10.4 Ex.121(e) | x:= y with exists; binder capture | **MISSING** | `—` | grammar: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
+| `ex121c` | §10.4 Ex.121(c) | x:= y+1. y′=2×x | **MISSING** | `examples/ex121c.calc` | missing: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
+| `ex121d` | §10.4 Ex.121(d) | x:= 1 with exists; needs quantifier + arithmetic | **MISSING** | `examples/ex121d.calc` | grammar: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
+| `ex121e` | §10.4 Ex.121(e) | x:= y with exists; binder capture | **MISSING** | `examples/ex121e.calc` | grammar: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
 | `ex121f` | §10.4 Ex.121(f) | Assignment then ok | **PASS** | `examples/ex121f.calc` | — |
 | `ex121g` | §10.4 Ex.121(g) | Two assignments | **PASS** | `examples/ex121g.calc` | — |
-| `ex121h` | §10.4 Ex.121(h) | Named spec P; needs definition of P | **MISSING** | `—` | program/state: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
-| `ex121i` | §10.4 Ex.121(i) | Three assignments | **MISSING** | `—` | program/state: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
-| `ex121j` | §10.4 Ex.121(j) | Assignment then if | **MISSING** | `—` | program/state: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
-| `ex121k` | §10.4 Ex.121(k) | Impossible / inconsistency style | **MISSING** | `—` | missing: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
+| `ex121h` | §10.4 Ex.121(h) | Named spec P; needs definition of P | **MISSING** | `examples/ex121h.calc` | program/state: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
+| `ex121i` | §10.4 Ex.121(i) | Three assignments | **MISSING** | `examples/ex121i.calc` | program/state: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
+| `ex121j` | §10.4 Ex.121(j) | Assignment then if | **MISSING** | `examples/ex121j.calc` | program/state: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
+| `ex121k` | §10.4 Ex.121(k) | Impossible / inconsistency style | **MISSING** | `examples/ex121k.calc` | missing: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit |
 
 #### §10.4 Ex.136–140 — Programs & refinement
 

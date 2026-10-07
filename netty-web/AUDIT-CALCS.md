@@ -3,6 +3,16 @@
 Source of truth for inventory/blockers: [`BOOK-CENSUS.md`](BOOK-CENSUS.md).
 Hierarchical picker: `public/examples/manifest.json`.
 
+## Picker inspection (FAIL / MISSING)
+
+As of the hierarchical-picker UX pass: FAIL and MISSING rows are **choosable**.
+- **PASS** — still apply-only (`allowGaps: false`); refuse on gap.
+- **FAIL** — load existing `.calc` with `allowGaps: true` (red `!` OK); status line shows FAIL + blocker.
+- **MISSING** — stub `.calc` under `public/examples/<id>.calc` (goal and/or solution steps that may not apply); loaded with gaps; status shows MISSING.
+
+This audit table’s “in picker” column historically meant “PASS loadable”. All non-OUT_OF_SCOPE candidates are now openable in the picker for inspection.
+
+
 | id | in picker | status | reason |
 |----|-----------|--------|--------|
 | `ex121a` | yes | **PASS** | every apply ok, no gaps |

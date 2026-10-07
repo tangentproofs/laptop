@@ -288,8 +288,8 @@ export function parseCalcTheorems(text: string): CalcTheorem[] {
 /**
  * Turn one theorem into Netty script lines.
  * Uses LAW_ALIASES; returns null for a step whose hint cannot resolve to one law
- * when `strict` (default true). With strict=false, unresolvable hints become
- * `direct` (audit / legacy only — not used for the picker load path).
+ * when `strict` (default true). With strict=false (FAIL / MISSING inspection loads),
+ * unresolvable hints become `direct` so the calculation can still be shown with gaps.
  */
 export function theoremToScript(th: CalcTheorem, strict = true): string[] | null {
   if (th.steps.length === 0) return [];

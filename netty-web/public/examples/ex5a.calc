@@ -1,0 +1,12 @@
+# MISSING stub — §10.1 Ex.5(a) (from solutions/Ex5.pdf)
+# blocker: law gap
+# next: Add ¬⊤≡⊥ (binary law) or allow part-apply of noncontradiction
+
+laws boolean
+
+theorem ex5a: x ∧ ¬x ≡ ⊥
+    x ∧ ¬x                         double negation
+=   ¬¬(x ∧ ¬x)                     noncontradiction
+=   ¬⊤                             binary law
+=   ¬¬⊥                            double negation
+=   ⊥

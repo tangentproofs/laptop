@@ -1,0 +1,11 @@
+# MISSING stub — §10.1 Ex.6(f) (from solutions/Ex6.pdf)
+# blocker: law gap
+
+laws boolean
+
+theorem ex6f: (a⇒c) ∧ (b ⇒ ¬c) ⇒ ¬(a∧b)
+    (a⇒c) ∧ (b ⇒ ¬c)               law of conflation
+⇒   a∧b ⇒ c ∧ ¬c                   contrapositive law
+=   ¬(c ∧ ¬c) ⇒ ¬(a∧b)             noncontradiction
+=   ⊤ ⇒ ¬(a∧b)                     identity
+=   ¬(a∧b)

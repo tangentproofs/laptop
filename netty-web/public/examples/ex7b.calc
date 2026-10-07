@@ -1,0 +1,9 @@
+# MISSING stub — §10.1 Ex.7(b) (from solutions/Ex7.pdf)
+
+laws boolean
+
+theorem ex7b: if b then c else ¬c fi = if c then b else ¬b fi
+    if b then c else ¬c fi         case analysis
+=   b∧c ∨ ¬b∧¬c                    symmetry twice
+=   c∧b ∨ ¬c∧¬b                    case analysis
+=   if c then b else ¬b fi

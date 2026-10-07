@@ -1,0 +1,13 @@
+# MISSING stub — §10.4 Ex.121(c)
+# blocker: missing
+# next: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit
+# Source: LaPToP/Exercises/calc/ch4.calc
+
+# Stub from LaPToP/Exercises/calc/ch4.calc (may not apply cleanly in Netty).
+laws boolean
+
+state x, y: int
+
+theorem ex121c: (x:= y+1. y′ = 2×x) ≡ y′ = 2×(y+1)
+    x:= y+1. y′ = 2×x              substitution law
+=   y′ = 2×(y+1)

@@ -1,0 +1,15 @@
+# MISSING stub — §10.4 Ex.121(j)
+# blocker: program/state
+# next: Write .calc from LaPToP/Exercises/calc/ch4.calc and audit
+# Source: LaPToP/Exercises/calc/ch4.calc
+
+# Stub from LaPToP/Exercises/calc/ch4.calc (may not apply cleanly in Netty).
+laws boolean
+
+state x, y: int
+
+theorem ex121j: (x:= 1. if y > x then x:= x+1 else x:= y fi) ≡ if y > 1 then x′ = 2 ∧ y′ = y else x′ = y ∧ y′ = y fi
+    x:= 1. if y > x then x:= x+1 else x:= y fi                        assignment, assignment
+=   x:= 1. if y > x then x′ = x+1 ∧ y′ = y else x′ = y ∧ y′ = y fi    substitution law
+=   if y > 1 then x′ = 1+1 ∧ y′ = y else x′ = y ∧ y′ = y fi           arithmetic
+=   if y > 1 then x′ = 2 ∧ y′ = y else x′ = y ∧ y′ = y fi

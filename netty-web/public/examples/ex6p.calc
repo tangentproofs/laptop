@@ -1,0 +1,11 @@
+# MISSING stub — §10.1 Ex.6(p) (from solutions/Ex6.pdf, shorter second style abbreviated)
+
+laws boolean
+
+theorem ex6p: a=b ∨ a=c ∨ b=c
+    a=b ∨ a=c ∨ b=c                identity and reflexive laws for =
+=   a=b ∨ a=c ∨ b=((a=a)=c)        symmetry and associative laws for =
+=   (a=b ∨ a=c) ∨ (a=b)=(a=c)      main ∨ distributes over =
+=   (a=b ∨ a=c ∨ a=b) = (a=b ∨ a=c ∨ a=c)    symmetry, associativity, and idempotence of ∨ twice
+=   (a=b ∨ a=c) = (a=b ∨ a=c)      reflexive
+=   ⊤

@@ -1,0 +1,9 @@
+# MISSING stub — §10.1 Ex.7(e) (from solutions/Ex7.pdf)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex7e: if b then P else if b then Q else R fi fi = if b then P else R fi
+    if b then P else if b then Q else R fi fi    context
+=   if b then P else if ⊥ then Q else R fi fi    case base
+=   if b then P else R fi

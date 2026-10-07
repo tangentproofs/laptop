@@ -1,0 +1,8 @@
+# MISSING stub — §10.1 Ex.6(k)
+# Book marks this done in §1.0.2; goal shown for inspection.
+# next: write calc from absorption/duality
+
+laws boolean
+
+theorem ex6k: ¬(a ∧ ¬(a∨b))
+    ¬(a ∧ ¬(a∨b))

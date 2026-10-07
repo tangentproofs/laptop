@@ -1,0 +1,10 @@
+# MISSING stub — §10.1 Ex.7(h) (from solutions/Ex7.pdf; book proves both directions)
+# blocker: compound hint
+
+laws boolean
+
+theorem ex7h: if b then if c then P else R fi else if d then Q else R fi fi = if if b then c else d fi then if b then P else Q fi else R fi
+    if if b then c else d fi then if b then P else Q fi else R fi    case analysis law
+=   if b then c else d fi ∧ if b then P else Q fi ∨ ¬if b then c else d fi ∧ R    four case distributive laws
+=   if b then c∧P ∨ ¬c∧R else d∧Q ∨ ¬d∧R fi    case analysis law twice
+=   if b then if c then P else R fi else if d then Q else R fi fi
