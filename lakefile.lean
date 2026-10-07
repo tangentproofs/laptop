@@ -5,10 +5,9 @@ require VersoBlueprint from git
   "https://github.com/tangentforks/verso-blueprint" @ "bump/lean-4.35"
 
 -- The b4 virtual machine, which Hehner's language is compiled to
--- (`LaPToP.ProgramTheory.CompileB4`). Pinned to a commit of the branch carrying
--- its formalization until that is merged.
+-- (`LaPToP.ProgramTheory.CompileB4`). Its formalization is on b4's main branch.
 require b4 from git
-  "https://github.com/tangentstorm/b4" @ "e5827437f9d287b0e150de3ad62020885b76e1d6" / "imp/lean"
+  "https://github.com/tangentstorm/b4" @ "main" / "imp/lean"
 
 -- Mathlib last so its transitive pins win for `lake exe cache get` hashes.
 require mathlib from git
