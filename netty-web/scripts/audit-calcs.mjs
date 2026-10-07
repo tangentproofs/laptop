@@ -129,6 +129,9 @@ for (const ex of PICKER_EXAMPLES.filter((e) => e.kind === 'demo')) {
 k.kill();
 
 const md = ['# Netty examples step-validity audit', '',
+  'Source of truth for inventory/blockers: [`BOOK-CENSUS.md`](BOOK-CENSUS.md).',
+  'Hierarchical picker: `public/examples/manifest.json`.',
+  '',
   '| id | in picker | status | reason |',
   '|----|-----------|--------|--------|',
   ...rows.map((r) => `| \`${r.id}\` | ${r.inPicker ? 'yes' : 'no'} | **${r.status}** | ${String(r.reason).replace(/\|/g, '/')} |`),

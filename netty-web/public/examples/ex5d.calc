@@ -1,0 +1,9 @@
+# aPToP Exercise 5(d) solution — simplify x ⇐ ¬x.
+# Via mirror to match Netty's indirect-proof shape (¬a ⇒ a ≡ a).
+
+laws boolean
+
+theorem ex5d: x ⇐ (¬x) ≡ x
+    x ⇐ (¬x)                       mirror
+=   ¬x ⇒ x                         indirect proof
+=   x

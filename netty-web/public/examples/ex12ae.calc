@@ -1,0 +1,7 @@
+# aPToP Exercise 12 — (a)=(e): Don't drink and drive ≡ Don't drink or don't drive.
+
+laws boolean
+
+theorem ex12ae: ¬(drink ∧ drive) ≡ ¬drink ∨ ¬drive
+    ¬(drink ∧ drive)               duality
+=   ¬drink ∨ ¬drive

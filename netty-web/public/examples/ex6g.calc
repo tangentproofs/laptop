@@ -1,0 +1,8 @@
+# aPToP Exercise 6(g) solution — a ∧ ¬b ⇒ a∨b.
+
+laws boolean
+
+theorem ex6g: a ∧ ¬b ⇒ a ∨ b
+    a ∧ ¬b                         specialization
+⇒   a                              generalization
+⇒   a ∨ b

@@ -94,14 +94,20 @@ export function resolveLawHint(raw: string): string | null {
  */
 export const BOOK_CALCS: BookCalc[] = [
   { id: 'portation', label: 'Law of Portation', file: 'examples/portation.calc' },
-  { id: 'ex6r', label: 'Portation proves a ⇒ (b ⇒ a)', file: 'examples/ex6r.calc' },
   { id: 'ex5b', label: 'Excluded middle', file: 'examples/ex5b.calc' },
+  { id: 'ex5c', label: 'Simplify x ⇒ ¬x', file: 'examples/ex5c.calc' },
+  { id: 'ex5d', label: 'Simplify x ⇐ ¬x', file: 'examples/ex5d.calc' },
+  { id: 'ex5f', label: 'Simplify x ⧧ ¬x', file: 'examples/ex5f.calc' },
   { id: 'ex6a', label: 'Specialization then generalization', file: 'examples/ex6a.calc' },
   { id: 'ex6c', label: 'Portation and noncontradiction', file: 'examples/ex6c.calc' },
+  { id: 'ex6g', label: 'a ∧ ¬b ⇒ a ∨ b', file: 'examples/ex6g.calc' },
   { id: 'ex6i', label: 'Contradiction implies anything', file: 'examples/ex6i.calc' },
   { id: 'ex6j', label: 'Either a ⇒ b or b ⇒ a', file: 'examples/ex6j.calc' },
+  { id: 'ex6r', label: 'Portation proves a ⇒ (b ⇒ a)', file: 'examples/ex6r.calc' },
   { id: 'ex7a', label: 'If-then-else by case analysis', file: 'examples/ex7a.calc' },
   { id: 'ex12ab', label: 'Don\'t drink and drive', file: 'examples/ex12ab.calc' },
+  { id: 'ex12ae', label: 'Don\'t drink and drive ≡ ¬drink ∨ ¬drive', file: 'examples/ex12ae.calc' },
+  { id: 'ex12bc', label: 'drink ⇒ ¬drive ≡ drive ⇒ ¬drink', file: 'examples/ex12bc.calc' },
   { id: 'ex121a', label: 'Substitution after x:= y+1', file: 'examples/ex121a.calc' },
   { id: 'ex121b', label: 'Substitution into a conjunction', file: 'examples/ex121b.calc' },
   { id: 'ex121f', label: 'Assignment then ok', file: 'examples/ex121f.calc' },
@@ -123,6 +129,48 @@ export const PICKER_EXAMPLES: PickerExample[] = [
   ...BOOK_CALCS.map((b): PickerExample => ({ kind: 'calc', ...b })),
   ...DEMO_EXAMPLES,
 ];
+
+
+/** Hierarchical examples manifest (data-driven picker). */
+export type ManifestStatus = 'pass' | 'fail' | 'missing' | 'out_of_scope';
+
+export type ManifestItem = {
+  id: string;
+  title: string;
+  bookRef: string;
+  status: ManifestStatus;
+  kind?: 'calc' | 'demo';
+  path?: string;
+  blocker?: string;
+  nextStep?: string;
+};
+
+export type ManifestSection = { id: string; title: string; items: ManifestItem[] };
+export type ManifestGroup = { id: string; title: string; sections: ManifestSection[] };
+export type ExamplesManifest = { version: number; source?: string; groups: ManifestGroup[] };
+
+/** Fetch `examples/manifest.json` (relative to the Netty page). */
+export async function loadExamplesManifest(): Promise<ExamplesManifest> {
+  const res = await fetch(examplesBase() + 'examples/manifest.json');
+  if (!res.ok) throw new Error(`manifest HTTP ${res.status}`);
+  return (await res.json()) as ExamplesManifest;
+}
+
+/** Book calcs that are audit PASS (loadable). Prefer manifest when available. */
+export function passCalcsFromManifest(m: ExamplesManifest): BookCalc[] {
+  const out: BookCalc[] = [];
+  for (const g of m.groups) {
+    if (g.id === 'demos') continue;
+    for (const s of g.sections) {
+      for (const it of s.items) {
+        if (it.status === 'pass' && it.path && (it.kind ?? 'calc') === 'calc') {
+          out.push({ id: it.id, label: it.title, file: it.path });
+        }
+      }
+    }
+  }
+  return out;
+}
 
 /** @deprecated use DEMO_EXAMPLES / PICKER_EXAMPLES */
 export const UI_DEMOS = DEMO_EXAMPLES.map((d) => d.id);

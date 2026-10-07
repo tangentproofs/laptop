@@ -344,3 +344,102 @@ button.operand.site, button.operand.segment.site {
   white-space: pre-wrap;
   color: var(--ink);
 }
+
+/* Hierarchical examples picker (chapter → section → proof) */
+.examples-picker { position: relative; }
+.examples-menu {
+  position: relative;
+  font-size: 0.85rem;
+}
+.examples-summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--ink);
+  background: var(--pane);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.2rem 0.55rem;
+  user-select: none;
+}
+.examples-summary::-webkit-details-marker { display: none; }
+.examples-menu[open] > .examples-summary {
+  border-color: var(--hot);
+  color: var(--hot);
+}
+.examples-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 40;
+  width: min(92vw, 28rem);
+  max-height: min(70vh, 28rem);
+  overflow: auto;
+  background: var(--pane);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 0.35rem 0.45rem 0.55rem;
+}
+.examples-panel .ex-group,
+.examples-panel .ex-section {
+  border: none;
+  margin: 0.15rem 0;
+}
+.examples-panel .ex-group > summary,
+.examples-panel .ex-section > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--hot);
+  padding: 0.2rem 0.25rem;
+}
+.examples-panel .ex-section > summary {
+  font-weight: 500;
+  color: var(--ink);
+  opacity: 0.9;
+}
+.examples-panel ul.ex-items,
+.examples-panel ul.examples-flat {
+  list-style: none;
+  margin: 0.15rem 0 0.35rem;
+  padding: 0 0 0 0.4rem;
+}
+.examples-panel li { margin: 0.12rem 0; }
+.examples-panel button.ex-pass {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+}
+.examples-panel button.ex-pass:hover {
+  border-color: var(--hot);
+  color: var(--hot);
+  background: rgba(255, 255, 255, 0.04);
+}
+.examples-panel .ex-disabled {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--dim);
+  padding: 0.15rem 0.4rem;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+.examples-panel .ex-fail .ex-disabled { color: #fc9867; }
+.examples-panel .ex-missing .ex-disabled { color: var(--dim); }
+
+@media (max-width: 600px) {
+  .examples-panel {
+    position: fixed;
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    top: 3.5rem;
+    max-height: 75vh;
+  }
+}

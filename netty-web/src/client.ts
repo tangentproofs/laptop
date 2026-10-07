@@ -23,7 +23,8 @@
 import type { LineView, Op, PartView, Response, StateView, SuggestionView } from './protocol.js';
 import {
   PICKER_EXAMPLES, examplesBase, parseCalcTheorems, theoremToScript,
-  type CalcTheorem,
+  loadExamplesManifest,
+  type CalcTheorem, type ExamplesManifest, type ManifestItem,
 } from './calc-load.js';
 import { appendHighlighted } from './highlight.js';
 
@@ -40,6 +41,9 @@ const typed = { start: '', direct: '', ty: 'boolean', startConn: '⇐', directCo
 let bookExample: { name: string; text: string; theorem: string } | null = null;
 /** Theorems parsed from the last fetched .calc (for the theorem picker). */
 let bookTheorems: CalcTheorem[] = [];
+/** Hierarchical examples list (manifest.json); null until fetched. */
+let examplesManifest: ExamplesManifest | null = null;
+
 
 
 /** Make an element. */
@@ -548,6 +552,119 @@ function download(text: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+
+/** Reason shown on disabled FAIL/MISSING rows. */
+function itemReason(it: ManifestItem): string {
+  const bits = [it.status.toUpperCase()];
+  if (it.blocker) bits.push(it.blocker);
+  if (it.nextStep) bits.push(it.nextStep);
+  return bits.join(' — ');
+}
+
+/** Pick a PASS calc or a kernel demo from the hierarchical list. */
+function chooseExample(it: ManifestItem): void {
+  if (it.status !== 'pass') return;
+  if ((it.kind ?? 'calc') === 'demo') {
+    const demoId = it.id.startsWith('demo:') ? it.id.slice(5) : it.id;
+    bookExample = null;
+    bookTheorems = [];
+    void send('demo', demoId);
+    return;
+  }
+  if (!it.path) return;
+  void loadBookCalc(it.path, it.title, 0);
+}
+
+/**
+ * Hierarchical examples control: details panel with chapter → section groups.
+ * PASS entries are buttons; FAIL/MISSING are disabled with a tooltip reason.
+ * Falls back to the flat PASS-only select if the manifest has not loaded yet.
+ */
+function examplesPicker(): HTMLElement {
+  const wrap = el('div', { class: 'examples-picker' });
+  const summary = el('summary', { class: 'examples-summary' }, 'examples…');
+  const panel = el('div', { class: 'examples-panel' });
+  const root = el('details', { class: 'examples-menu', title: 'load a working example into the proof pane' });
+  root.append(summary, panel);
+
+  const fill = (m: ExamplesManifest | null) => {
+    panel.replaceChildren();
+    if (!m) {
+      // Flat fallback until manifest arrives (PASS book + demos).
+      const list = el('ul', { class: 'examples-flat' });
+      for (const ex of PICKER_EXAMPLES) {
+        const li = el('li');
+        const b = el('button', { type: 'button', class: 'ex-pass' }, ex.label);
+        b.addEventListener('click', () => {
+          root.open = false;
+          if (ex.kind === 'calc') void loadBookCalc(ex.file, ex.label, 0);
+          else {
+            bookExample = null;
+            bookTheorems = [];
+            void send('demo', ex.id);
+          }
+        });
+        li.append(b);
+        list.append(li);
+      }
+      panel.append(list);
+      return;
+    }
+    for (const g of m.groups) {
+      const gdet = el('details', { class: 'ex-group' });
+      if (g.id === 'ch1' || g.id === 'demos') gdet.setAttribute('open', '');
+      gdet.append(el('summary', {}, g.title));
+      for (const s of g.sections) {
+        const sdet = el('details', { class: 'ex-section' });
+        sdet.setAttribute('open', '');
+        sdet.append(el('summary', {}, s.title));
+        const ul = el('ul', { class: 'ex-items' });
+        for (const it of s.items) {
+          // Omit pure OUT_OF_SCOPE clutter; keep FAIL/MISSING visible but disabled.
+          if (it.status === 'out_of_scope') continue;
+          const li = el('li', { class: `ex-${it.status}` });
+          const label = it.title.length > 64 ? it.title.slice(0, 61) + '…' : it.title;
+          if (it.status === 'pass') {
+            const b = el('button', { type: 'button', class: 'ex-pass', title: `${it.bookRef}` }, label);
+            b.addEventListener('click', () => {
+              root.open = false;
+              chooseExample(it);
+            });
+            li.append(b);
+          } else {
+            const why = itemReason(it);
+            const span = el('span', {
+              class: 'ex-disabled',
+              title: why,
+              tabindex: '0',
+              'aria-disabled': 'true',
+            }, `${label} (${it.status})`);
+            li.append(span);
+          }
+          ul.append(li);
+        }
+        if (ul.childNodes.length) {
+          sdet.append(ul);
+          gdet.append(sdet);
+        }
+      }
+      if (gdet.querySelector('.ex-items')) panel.append(gdet);
+    }
+  };
+
+  fill(examplesManifest);
+  if (examplesManifest === null) {
+    void loadExamplesManifest().then((m) => {
+      examplesManifest = m;
+      // Only refill if this picker is still mounted (draw() rebuilds the toolbar).
+      if (wrap.isConnected) fill(m);
+    }).catch(() => { /* keep flat fallback */ });
+  }
+
+  wrap.append(root);
+  return wrap;
+}
+
 /** The toolbar. */
 function toolbar(s: StateView | null): HTMLElement {
   const bar = el('nav', { class: 'toolbar' });
@@ -558,27 +675,8 @@ function toolbar(s: StateView | null): HTMLElement {
     bar.append(b);
     return b;
   };
-  // One Examples picker: book calcs + kernel demos, human-readable labels only.
-  const examples = el('select', { class: 'demos', title: 'load a working example into the proof pane' });
-  examples.append(el('option', { value: '' }, 'examples…'));
-  for (const ex of PICKER_EXAMPLES) {
-    const value = ex.kind === 'calc' ? `calc|${ex.file}|${ex.label}` : `demo|${ex.id}`;
-    examples.append(el('option', { value }, ex.label));
-  }
-  examples.addEventListener('change', () => {
-    const v = examples.value;
-    examples.value = '';
-    if (v === '') return;
-    const parts = v.split('|');
-    if (parts[0] === 'calc' && parts[1] && parts[2]) {
-      void loadBookCalc(parts[1], parts[2], 0);
-    } else if (parts[0] === 'demo' && parts[1]) {
-      bookExample = null;
-      bookTheorems = [];
-      void send('demo', parts[1]);
-    }
-  });
-  bar.append(examples);
+  // Hierarchical Examples picker (chapter → section → proof); PASS loads only.
+  bar.append(examplesPicker());
   button('new', 'start again with the same laws', () => void send('reset'));
   button('undo (u)', 'undo one command', () => void cmd('undo'), s === null || !s.canUndo);
   button('zoom out (o)', 'zoom out of this subproof', () => void cmd('out'), s === null || !s.canZoomOut);

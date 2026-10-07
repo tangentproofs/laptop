@@ -1,0 +1,633 @@
+{
+  "version": 1,
+  "source": "BOOK-CENSUS.md",
+  "groups": [
+    {
+      "id": "ch1",
+      "title": "1 · Basic Theories",
+      "sections": [
+        {
+          "id": "1.0.1",
+          "title": "Expression and Proof Format",
+          "items": [
+            {
+              "id": "portation",
+              "title": "Law of Portation (continuing equation)",
+              "bookRef": "§1.0.1",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/portation.calc"
+            },
+            {
+              "id": "portation-top",
+              "title": "Law of Portation reduced to ⊤",
+              "bookRef": "§1.0.1",
+              "status": "fail",
+              "kind": "calc",
+              "path": "examples/portation-top.calc",
+              "blocker": "zoom/inclusion",
+              "nextStep": "nested inclusion after MI; needs zoom (#54)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ch10",
+      "title": "10 · Exercises",
+      "sections": [
+        {
+          "id": "10.1-ex5",
+          "title": "§10.1 Ex.5 — Simplify binary",
+          "items": [
+            {
+              "id": "ex5a",
+              "title": "Simplify x ∧ ¬x",
+              "bookRef": "§10.1 Ex.5(a)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "law gap",
+              "nextStep": "Add ¬⊤≡⊥ (binary law) or allow part-apply of noncontradiction"
+            },
+            {
+              "id": "ex5b",
+              "title": "Simplify x ∨ ¬x (excluded middle)",
+              "bookRef": "§10.1 Ex.5(b)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex5b.calc"
+            },
+            {
+              "id": "ex5c",
+              "title": "Simplify x ⇒ ¬x",
+              "bookRef": "§10.1 Ex.5(c)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex5c.calc"
+            },
+            {
+              "id": "ex5d",
+              "title": "Simplify x ⇐ ¬x",
+              "bookRef": "§10.1 Ex.5(d)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex5d.calc"
+            },
+            {
+              "id": "ex5e",
+              "title": "Simplify x = ¬x",
+              "bookRef": "§10.1 Ex.5(e)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "law gap",
+              "nextStep": "Need unequality / ¬(x=x) rewrite chain from solution"
+            },
+            {
+              "id": "ex5f",
+              "title": "Simplify x ⧧ ¬x",
+              "bookRef": "§10.1 Ex.5(f)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex5f.calc"
+            }
+          ]
+        },
+        {
+          "id": "10.1-ex6",
+          "title": "§10.1 Ex.6 — Prove binary laws",
+          "items": [
+            {
+              "id": "ex6a",
+              "title": "Prove a∧b ⇒ a∨b",
+              "bookRef": "§10.1 Ex.6(a)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex6a.calc"
+            },
+            {
+              "id": "ex6b",
+              "title": "Prove (a∧b)∨(b∧c)∨(c∧a) = (a∨b)∧(b∨c)∧(c∧a)",
+              "bookRef": "§10.1 Ex.6(b)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "law gap",
+              "nextStep": "Solution uses distribute + compound symmetry/idempotence"
+            },
+            {
+              "id": "ex6c",
+              "title": "Prove ¬a ⇒ (a⇒b)",
+              "bookRef": "§10.1 Ex.6(c)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex6c.calc"
+            },
+            {
+              "id": "ex6d",
+              "title": "Prove a=(b⇒a) = a∨b",
+              "bookRef": "§10.1 Ex.6(d)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Solution chains symmetry/associativity/inclusion of ="
+            },
+            {
+              "id": "ex6e",
+              "title": "Prove a=(a⇒b) = a∧b",
+              "bookRef": "§10.1 Ex.6(e)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Same shape as (d)"
+            },
+            {
+              "id": "ex6f",
+              "title": "Prove (a⇒c)∧(b⇒¬c) ⇒ ¬(a∧b)",
+              "bookRef": "§10.1 Ex.6(f)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "law gap",
+              "nextStep": "Solution uses conflation + contrapositive phrasing"
+            },
+            {
+              "id": "ex6g",
+              "title": "Prove a∧¬b ⇒ a∨b",
+              "bookRef": "§10.1 Ex.6(g)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex6g.calc"
+            },
+            {
+              "id": "ex6h",
+              "title": "Prove (a⇒b)∧(c⇒d)∧(a∨c) ⇒ (b∨d)",
+              "bookRef": "§10.1 Ex.6(h)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Portation then conflation as one theorem claim"
+            },
+            {
+              "id": "ex6i",
+              "title": "Prove a∧¬a ⇒ b",
+              "bookRef": "§10.1 Ex.6(i)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex6i.calc"
+            },
+            {
+              "id": "ex6j",
+              "title": "Prove (a⇒b)∨(b⇒a)",
+              "bookRef": "§10.1 Ex.6(j)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex6j.calc"
+            },
+            {
+              "id": "ex6k",
+              "title": "Prove ¬(a ∧ ¬(a∨b))",
+              "bookRef": "§10.1 Ex.6(k)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Book-marked done in text; write calc from absorption/duality"
+            },
+            {
+              "id": "ex6l",
+              "title": "Prove (¬a⇒¬b)∧(a⧧b) ∨ (a∧c⇒b∧c)",
+              "bookRef": "§10.1 Ex.6(l)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Multi-operator solution"
+            },
+            {
+              "id": "ex6m",
+              "title": "Prove (a⇒¬a)⇒¬a",
+              "bookRef": "§10.1 Ex.6(m)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Short calc via portation/indirect; write .calc"
+            },
+            {
+              "id": "ex6n",
+              "title": "Prove (a⇒b)∧(¬a⇒b)=b",
+              "bookRef": "§10.1 Ex.6(n)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Case / identity style; write .calc"
+            },
+            {
+              "id": "ex6o",
+              "title": "Prove (a⇒b)⇒a = a",
+              "bookRef": "§10.1 Ex.6(o)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Write .calc from solution"
+            },
+            {
+              "id": "ex6p",
+              "title": "Prove a=b ∨ a=c ∨ b=c",
+              "bookRef": "§10.1 Ex.6(p)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Write .calc from solution"
+            },
+            {
+              "id": "ex6q",
+              "title": "Prove a∧b ∨ a∧¬b = a",
+              "bookRef": "§10.1 Ex.6(q)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Distributive/identity; write .calc"
+            },
+            {
+              "id": "ex6r",
+              "title": "Prove a⇒(b⇒a)",
+              "bookRef": "§10.1 Ex.6(r)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex6r.calc"
+            },
+            {
+              "id": "ex6s",
+              "title": "Prove a⇒a∧b = a⇒b = a∨b⇒b",
+              "bookRef": "§10.1 Ex.6(s)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Continuing equation of three sides"
+            },
+            {
+              "id": "ex6t",
+              "title": "Prove (a⇒a∧b)∨(b⇒a∧b)",
+              "bookRef": "§10.1 Ex.6(t)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Write .calc from solution"
+            },
+            {
+              "id": "ex6u",
+              "title": "Prove (a⇒(p=x))∧(¬a⇒p) = p=(x∨¬a)",
+              "bookRef": "§10.1 Ex.6(u)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "program/state",
+              "nextStep": "Mixes equality with parameters; check Netty grammar"
+            },
+            {
+              "id": "ex6v",
+              "title": "Prove (a⇒b⇒¬a)∨(b∧c⇒a∧c)",
+              "bookRef": "§10.1 Ex.6(v)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Write .calc from solution"
+            },
+            {
+              "id": "ex6w",
+              "title": "Prove a=(b∧c)∧d=(¬b∧¬c)∧e=((a∨d)=c) ⇒ e=b",
+              "bookRef": "§10.1 Ex.6(w)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Long multi-conjunct solution"
+            }
+          ]
+        },
+        {
+          "id": "10.1-ex7",
+          "title": "§10.1 Ex.7 — if-then-else laws",
+          "items": [
+            {
+              "id": "ex7a",
+              "title": "if a then a else ¬a ≡ ⊤",
+              "bookRef": "§10.1 Ex.7(a)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex7a.calc"
+            },
+            {
+              "id": "ex7b",
+              "title": "if b then c else ¬c = if c then b else ¬b",
+              "bookRef": "§10.1 Ex.7(b)",
+              "status": "missing",
+              "kind": "calc",
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+            },
+            {
+              "id": "ex7c",
+              "title": "if b∧c then P else Q = if b then if c then P else Q else Q",
+              "bookRef": "§10.1 Ex.7(c)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+            },
+            {
+              "id": "ex7d",
+              "title": "if b∨c then P else Q = if b then P else if c then P else Q",
+              "bookRef": "§10.1 Ex.7(d)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+            },
+            {
+              "id": "ex7e",
+              "title": "if b then P else if b then Q else R = if b then P else R",
+              "bookRef": "§10.1 Ex.7(e)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+            },
+            {
+              "id": "ex7f",
+              "title": "if if b then c else d then P else Q = …",
+              "bookRef": "§10.1 Ex.7(f)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+            },
+            {
+              "id": "ex7g",
+              "title": "if b then if c then P else R else if c then Q else R = …",
+              "bookRef": "§10.1 Ex.7(g)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+            },
+            {
+              "id": "ex7h",
+              "title": "if b then if c then P else R else if d then Q else R = …",
+              "bookRef": "§10.1 Ex.7(h)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "compound hint",
+              "nextStep": "Rewrite solution with one Netty law per step (case analysis, distributive)"
+            }
+          ]
+        },
+        {
+          "id": "10.1-ex12",
+          "title": "§10.1 Ex.12 — Drink and drive",
+          "items": [
+            {
+              "id": "ex12ab",
+              "title": "¬(drink∧drive) ≡ drink ⇒ ¬drive",
+              "bookRef": "§10.1 Ex.12(a)=(b)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex12ab.calc"
+            },
+            {
+              "id": "ex12bc",
+              "title": "drink ⇒ ¬drive ≡ drive ⇒ ¬drink",
+              "bookRef": "§10.1 Ex.12(b)=(c)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex12bc.calc"
+            },
+            {
+              "id": "ex12ae",
+              "title": "¬(drink∧drive) ≡ ¬drink ∨ ¬drive",
+              "bookRef": "§10.1 Ex.12(a)=(e)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex12ae.calc"
+            },
+            {
+              "id": "ex12ad",
+              "title": "¬(drink∧drive) differs from ¬drink ∧ ¬drive",
+              "bookRef": "§10.1 Ex.12(a)≠(d)",
+              "status": "out_of_scope",
+              "kind": "calc",
+              "blocker": "other",
+              "nextStep": "Counterexample/instantiation, not a continuing-equation calc"
+            }
+          ]
+        },
+        {
+          "id": "10.4-ex121",
+          "title": "§10.4 Ex.121 — Simplify programs",
+          "items": [
+            {
+              "id": "ex121a",
+              "title": "Substitution after x:= y+1",
+              "bookRef": "§10.4 Ex.121(a)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex121a.calc"
+            },
+            {
+              "id": "ex121b",
+              "title": "Substitution into a conjunction",
+              "bookRef": "§10.4 Ex.121(b)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex121b.calc"
+            },
+            {
+              "id": "ex121c",
+              "title": "x:= y+1. y′=2×x",
+              "bookRef": "§10.4 Ex.121(c)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "missing",
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+            },
+            {
+              "id": "ex121d",
+              "title": "x:= 1 with exists; needs quantifier + arithmetic",
+              "bookRef": "§10.4 Ex.121(d)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "grammar",
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+            },
+            {
+              "id": "ex121e",
+              "title": "x:= y with exists; binder capture",
+              "bookRef": "§10.4 Ex.121(e)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "grammar",
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+            },
+            {
+              "id": "ex121f",
+              "title": "Assignment then ok",
+              "bookRef": "§10.4 Ex.121(f)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex121f.calc"
+            },
+            {
+              "id": "ex121g",
+              "title": "Two assignments",
+              "bookRef": "§10.4 Ex.121(g)",
+              "status": "pass",
+              "kind": "calc",
+              "path": "examples/ex121g.calc"
+            },
+            {
+              "id": "ex121h",
+              "title": "Named spec P; needs definition of P",
+              "bookRef": "§10.4 Ex.121(h)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "program/state",
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+            },
+            {
+              "id": "ex121i",
+              "title": "Three assignments",
+              "bookRef": "§10.4 Ex.121(i)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "program/state",
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+            },
+            {
+              "id": "ex121j",
+              "title": "Assignment then if",
+              "bookRef": "§10.4 Ex.121(j)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "program/state",
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+            },
+            {
+              "id": "ex121k",
+              "title": "Impossible / inconsistency style",
+              "bookRef": "§10.4 Ex.121(k)",
+              "status": "missing",
+              "kind": "calc",
+              "blocker": "missing",
+              "nextStep": "Write .calc from LaPToP/Exercises/calc/ch4.calc and audit"
+            }
+          ]
+        },
+        {
+          "id": "10.4-prog",
+          "title": "§10.4 Ex.136–140 — Programs & refinement",
+          "items": [
+            {
+              "id": "ex136a",
+              "title": "x:= x=y. x:= x=y ≡ ok",
+              "bookRef": "§10.4 Ex.136(a)",
+              "status": "fail",
+              "kind": "calc",
+              "path": "examples/ex136a.calc",
+              "blocker": "compound hint",
+              "nextStep": "step 3: unresolved hint “Associative Law for binary =”"
+            },
+            {
+              "id": "ex136b",
+              "title": "swap via ⧧",
+              "bookRef": "§10.4 Ex.136(b)",
+              "status": "fail",
+              "kind": "calc",
+              "path": "examples/ex136b.calc",
+              "blocker": "compound hint",
+              "nextStep": "step 4: unresolved hint “Associativity and Symmetry of ⧧”"
+            },
+            {
+              "id": "ex137a",
+              "title": "b:= a–b. b:= a–b ≡ ok",
+              "bookRef": "§10.4 Ex.137(a)",
+              "status": "fail",
+              "kind": "calc",
+              "path": "examples/ex137a.calc",
+              "blocker": "compound hint",
+              "nextStep": "step 3: empty hint (would need direct)"
+            },
+            {
+              "id": "ex137b",
+              "title": "swap via +/–",
+              "bookRef": "§10.4 Ex.137(b)",
+              "status": "fail",
+              "kind": "calc",
+              "path": "examples/ex137b.calc",
+              "blocker": "substitution",
+              "nextStep": "substitution law fails on arithmetic shape"
+            },
+            {
+              "id": "ex139",
+              "title": "Refine P with n:=n+1 and if",
+              "bookRef": "§10.4 Ex.139",
+              "status": "fail",
+              "kind": "calc",
+              "path": "examples/ex139.calc",
+              "blocker": "program/state",
+              "nextStep": "step 3: empty hint (would need direct)"
+            },
+            {
+              "id": "ex140-R",
+              "title": "Sum 0..n–1 via Q loop",
+              "bookRef": "§10.4 Ex.140",
+              "status": "fail",
+              "kind": "calc",
+              "path": "examples/ex140-R.calc",
+              "blocker": "program/state",
+              "nextStep": "step 3: empty hint (would need direct)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demos",
+      "title": "Kernel demos",
+      "sections": [
+        {
+          "id": "demos",
+          "title": "Built-in sessions",
+          "items": [
+            {
+              "id": "demo:portation",
+              "title": "Portation (kernel demo)",
+              "bookRef": "Netty demo",
+              "status": "pass",
+              "kind": "demo"
+            },
+            {
+              "id": "demo:discharge",
+              "title": "Discharge with context",
+              "bookRef": "Netty demo",
+              "status": "pass",
+              "kind": "demo"
+            },
+            {
+              "id": "demo:minimize",
+              "title": "Apply a law to a part",
+              "bookRef": "Netty demo",
+              "status": "pass",
+              "kind": "demo"
+            },
+            {
+              "id": "demo:segment",
+              "title": "Segment of an association",
+              "bookRef": "Netty demo",
+              "status": "pass",
+              "kind": "demo"
+            },
+            {
+              "id": "demo:fold",
+              "title": "Fold an association",
+              "bookRef": "Netty demo",
+              "status": "pass",
+              "kind": "demo"
+            },
+            {
+              "id": "demo:merge",
+              "title": "Merge adjacent steps",
+              "bookRef": "Netty demo",
+              "status": "pass",
+              "kind": "demo"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

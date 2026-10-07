@@ -1,0 +1,8 @@
+# aPToP Exercise 12 — (b)=(c): drink ⇒ ¬drive ≡ drive ⇒ ¬drink.
+# Book uses contrapositive + double negation; Netty exclusion is one step.
+
+laws boolean
+
+theorem ex12bc: drink ⇒ (¬drive) ≡ drive ⇒ (¬drink)
+    drink ⇒ (¬drive)               exclusion
+=   drive ⇒ (¬drink)

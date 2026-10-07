@@ -1,0 +1,8 @@
+# aPToP Exercise 5(c) solution — simplify x ⇒ ¬x.
+
+laws boolean
+
+theorem ex5c: x ⇒ ¬x ≡ ¬x
+    x ⇒ ¬x                         double negation
+=   ¬¬x ⇒ ¬x                       indirect proof
+=   ¬x

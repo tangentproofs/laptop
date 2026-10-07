@@ -1,0 +1,10 @@
+# aPToP Exercise 5(f) solution — simplify x ⧧ ¬x.
+# Parentheses: Netty's ¬ binds more weakly than = / ⧧.
+
+laws boolean
+
+theorem ex5f: x ⧧ (¬x) ≡ ⊤
+    x ⧧ (¬x)                       exclusion
+=   x = (¬(¬x))                    double negation
+=   x = x                          reflexive
+=   ⊤
