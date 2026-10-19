@@ -1,7 +1,7 @@
 # aptop.tangentcode.com — deploy notes
 
 Lean deploy package for [aptop.tangentcode.com](https://aptop.tangentcode.com):
-home + Ampheck under `/ampheck/`, Interpreter link “coming soon” under `/interp/`.
+home + Ampheck under `/ampheck/`, the interpreter runner under `/interp/`.
 This directory is the survey and the one path cornerbot / the Linode host should
 follow. Do **not** build Mathlib-heavy Aptop/interp on the aptop box for v1.
 
@@ -20,7 +20,7 @@ Host: tangentcode Linode `45.79.174.182` (box ~4 GB RAM, disk tight).
 |------|------|
 | `/` | Static home (`deploy/aptop/site/`) |
 | `/ampheck/` | Ampheck three-pane UI (Node + Lean kernel) |
-| `/interp/` | Editable CodeMirror runner + Symbols sheet (loopback `:4712` may be stubbed) |
+| `/interp/` | Editable CodeMirror runner + Symbols sheet; Run POSTs to `/interp/api/run` |
 | `/examples/` | Highlighted editable demos + Symbols sheet |
 | `/ampheck/` book examples | `.calc` files under `ampheck-web/public/examples/` load into the proof pane |
 | `/docs/` | Optional later |
@@ -30,7 +30,7 @@ Host: tangentcode Linode `45.79.174.182` (box ~4 GB RAM, disk tight).
 | Service | Bind | Notes |
 |---------|------|-------|
 | Ampheck Node | `127.0.0.1:4711` | Serves `ampheck-web/public/` + `POST /api` |
-| Interp (later) | `127.0.0.1:4712` | Web wrapper **not ready** — do not install a broken unit |
+| interp-web Node | `127.0.0.1:4712` | `POST /run` → `.lake/build/bin/interp`; answers `stub:true` if the binary is absent |
 
 ## Architecture survey
 
@@ -43,12 +43,20 @@ Host: tangentcode Linode `45.79.174.182` (box ~4 GB RAM, disk tight).
 4. Kernel: `lake exe ampheck --serve` or, after build,
    `.lake/build/bin/ampheck --serve`. **Ampheck has no Mathlib dependency.**
 
-### Interpreter — CLI only for v1
+### Interpreter — static page + small Node wrapper
 
-- CLI today: `lake exe interp` (needs Aptop + Mathlib oleans).
-- Web runner / wrapper is **not ready**. Home links to `/interp/` as “coming
-  soon”; that page shows the CodeMirror mode with a read-only sample.
-- Do **not** build interp on this box for v1 unless necessary (RAM/disk).
+1. `/interp/` is static (`deploy/aptop/site/interp/`), served by nginx's `location /`.
+2. Its Run button POSTs `{program, args, demo}` to **`api/run` relative to the
+   page**, i.e. `/interp/api/run`.
+3. nginx strips `/interp/api/` and proxies to `interp-web` (`interp-web/dist/server.js`,
+   `aptop-interp.service`) on `127.0.0.1:4712`, which sees `/run`.
+4. interp-web writes the program to a temp file and runs
+   `.lake/build/bin/interp FILE --x=12 …` with a 15 s timeout. If the binary
+   is missing it still answers 200 with `{ok:false, stub:true, error:…}`, so the
+   page shows a clear message instead of a 502. `GET /health` reports `binExists`.
+- The interp binary needs Aptop + Mathlib oleans (`lake exe cache get`, then
+  `lake build interp`). Do **not** build it on this box unless necessary
+  (RAM/disk); without it the runner is in stub mode.
 
 ## Critical: Ampheck under `/ampheck/`
 
@@ -128,6 +136,7 @@ cd /home/michal/ver/laptop
 lake build ampheck
 # Prefer:
 lake build ampheck && (cd ampheck-web && npm ci && npm run build)
+(cd interp-web && npm ci && npm run build)   # the /interp/api wrapper
 ```
 
 Runtime:
@@ -160,14 +169,18 @@ Units live in this directory:
 - `aptop-ampheck.service` — install as a **system** unit with `User=michal`
   (same pattern as ofcp), or document `systemctl --user` if you prefer a user
   session. Cornerbot / host uses user `michal`.
-- `aptop-interp.service` — **stub only**; wrapper not ready. Do not enable.
-  Notes live here and in that file’s comments.
+- `aptop-interp.service` — runs `interp-web` (`WorkingDirectory=…/interp-web`,
+  `ExecStart=/usr/bin/node dist/server.js`). Build it first with
+  `(cd interp-web && npm ci && npm run build)`; without `dist/server.js` the
+  unit crash-loops and `/interp/api` returns 502.
 
 ```bash
-sudo cp deploy/aptop/aptop-ampheck.service /etc/systemd/system/
+sudo cp deploy/aptop/aptop-ampheck.service deploy/aptop/aptop-interp.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now aptop-ampheck.service
-# systemctl status aptop-ampheck
+sudo systemctl enable --now aptop-ampheck.service aptop-interp.service
+# systemctl status aptop-ampheck aptop-interp
+curl -s http://127.0.0.1:4712/health        # ok:true, binExists true/false
+curl -s -XPOST https://aptop.tangentcode.com/interp/api/run -d '{"demo":"gcd"}'
 ```
 
 Confirm `node` path (`which node` → often `/usr/bin/node`). Adjust
@@ -203,7 +216,8 @@ git fetch origin feat/aptop-site && git checkout feat/aptop-site
 export PATH="$HOME/.elan/bin:$PATH"
 lake build ampheck
 (cd ampheck-web && npm ci && npm run build)
-# install nginx snippet + aptop-ampheck.service; do not enable aptop-interp
+(cd interp-web && npm ci && npm run build)
+# install nginx snippet + aptop-ampheck.service + aptop-interp.service
 ```
 
 ## Deferred (v1)

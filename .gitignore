@@ -7,3 +7,6 @@ _out/
 ampheck-web/node_modules/
 ampheck-web/dist/
 ampheck-web/public/js/
+# interp-web: same as ampheck-web
+interp-web/node_modules/
+interp-web/dist/
