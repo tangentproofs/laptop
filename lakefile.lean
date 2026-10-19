@@ -41,6 +41,14 @@ lean_lib «AptopBlueprint» where
 lean_lib «Ampheck» where
   precompileModules := true
 
+-- The replays of `Ampheck.Replay` that run against the shipped law lists: each
+-- has the kernel evaluate whole proof steps over the full boolean list, which is
+-- minutes of work and gigabytes of memory in all. Kept out of `Ampheck` so that
+-- `lake build ampheck` does not pay for them; a plain `lake build` checks them.
+@[default_target]
+lean_lib «AmpheckReplay» where
+  globs := #[.submodules `Ampheck.Replay]
+
 -- The headless Ampheck command line (`lake exe ampheck`).
 lean_exe «ampheck» where
   root := `AmpheckMain

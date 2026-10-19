@@ -45,6 +45,8 @@ with no user interface but a script language and `lake exe ampheck`:
 * `Ampheck.Api` — the same session as one JSON request and one JSON answer, which
   is what a window with three panes talks to;
 * `Ampheck.Replay` — the document's own example, replayed and checked in Lean;
+  the replays against the shipped law lists are `Ampheck.Replay.Zoom`, `.Focus`,
+  `.Conditional` and `.Matching`, the separate `AmpheckReplay` library;
 * `Ampheck.Proof` — calculations written as the book writes them, in a
   calculation file, read back and checked step by step;
 * `Ampheck.Lean` — `ampheck_proofs`, which translates a checked calculation file

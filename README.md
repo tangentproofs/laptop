@@ -286,9 +286,12 @@ the third of the 227 offered.
 Laws are plain text files (`Ampheck/laws/boolean.laws` holds the Binary laws of
 aPToP §11.3.1); add your own with `--laws=FILE`. `Ampheck/Laws.lean` reads the
 shipped file at compile time and `Ampheck.boolean_isTautology` checks in Lean's
-kernel that every law in it is a tautology; `Ampheck/Replay.lean` replays every
-demonstration in Lean and proves that each ends with no gaps, fully
-zoomed out, and proving the formula it claims. Exit status is 1 when a `check`
+kernel that every law in it is a tautology; `Ampheck/Replay.lean` and the
+modules under `Ampheck/Replay/` replay every demonstration in Lean and prove that
+each ends with no gaps, fully zoomed out, and proving the formula it claims. The
+replays against the shipped laws are a separate target, `lake build
+AmpheckReplay` (part of plain `lake build`): they take minutes of kernel
+evaluation and gigabytes of memory, which `lake build ampheck` does not pay. Exit status is 1 when a `check`
 fails and 2 for a bad script or law file.
 
 ### Proofs written in aPToP's notation, checked by Lean
@@ -460,6 +463,7 @@ Ampheck/                       # the Ampheck proof-assistant kernel (no Mathlib,
   Json.lean Script.lean      #   saving a proof; the script language and the demos
   Api.lean                   #   the session as one JSON request and one JSON answer
   Replay.lean                #   the document's examples, replayed and checked in Lean
+  Replay/                    #   the replays against the shipped laws (`lake build AmpheckReplay`)
 ampheck-web/                   # the three panes in a browser, over `ampheck --serve`
   src/protocol.ts            #   the shapes Ampheck/Api.lean writes
   src/kernel.ts src/server.ts#   the kernel as a child process; static files and POST /api

@@ -191,6 +191,8 @@ Confirm `node` path (`which node` → often `/usr/bin/node`). Adjust
 | Concern | Guidance |
 |---------|----------|
 | Ampheck Node + Mathlib-free kernel | ~512 M–1 G in practice; **`MemoryMax=768M`** on `aptop-ampheck` |
+| `lake build ampheck` | Under a minute; `Ampheck/Replay.lean` alone is ~7 s and ~110 MB of anonymous memory |
+| `lake build AmpheckReplay` (also in plain `lake build`) | The replays against the shipped laws: minutes and ~3 GB per module — **do not** build on this box; `ampheck` does not need it |
 | Full `lake build` of Aptop / interp | Needs mathlib oleans via `lake exe cache get` and far more RAM — **do not** on this 4 GB box for v1 |
 | Disk | Do not copy mathlib sources unnecessarily; use `lake exe cache get` for any Aptop build |
 
