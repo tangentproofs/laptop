@@ -148,7 +148,7 @@ Prefer the built binary so systemd does **not** invoke `lake` on every restart
 (faster, less RAM spike):
 
 ```
-Environment=AMPHECK_CMD=/home/michal/ver/laptop/.lake/build/bin/ampheck --serve
+Environment="AMPHECK_CMD=/home/michal/ver/laptop/.lake/build/bin/ampheck --serve"
 ```
 
 Fallback if the binary is missing: `lake exe ampheck --serve` (slower cold start).
