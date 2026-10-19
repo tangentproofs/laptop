@@ -1,6 +1,6 @@
-# laptop (LaPToP)
+# Aptop (aPToP)
 
-Lean formalization of Eric Hehner's *A Practical Theory of Programming*, with a
+The `Aptop` Lean library (this repository, `tangentproofs/laptop`): a Lean formalization of Eric Hehner's *A Practical Theory of Programming*, with a
 [Verso Blueprint](https://github.com/leanprover/verso-blueprint) site.
 
 ## Toolchain
@@ -31,9 +31,9 @@ does **not** build PDF (`--pdf` is intentionally omitted from CI).
 ## Run a program (`lake exe interp`)
 
 The programming notations of Chapters 4 and 5 are not only specified but
-executed: `LaPToP/ProgramTheory/Interpreter.lean` is an interpreter for them,
+executed: `Aptop/ProgramTheory/Interpreter.lean` is an interpreter for them,
 and `interp` runs programs written in the language of
-`LaPToP/ProgramTheory/InterpreterLang.lean`.
+`Aptop/ProgramTheory/InterpreterLang.lean`.
 
 ```bash
 lake build interp                      # first time: compiles the exe (a few minutes)
@@ -80,7 +80,7 @@ variables it assigns and sees the other's only at their initial values, so
 `x:= y || y:= x` swaps; on the clock it finishes when both processes have.
 
 A program with channels and a `||` is a network of communicating processes
-(Chapter 9, `LaPToP/ProgramTheory/Network.lean`): the processes of the main `||`,
+(Chapter 9, `Aptop/ProgramTheory/Network.lean`): the processes of the main `||`,
 each parenthesized, run concurrently with their own variables, communicate only
 on channels, and a message arrives one unit of time after it is sent (§9.1.2).
 The machine that runs them is proved determinate (any order of turns gives the
@@ -128,7 +128,7 @@ not build it.
 
 ## Compile to the b4 virtual machine
 
-`LaPToP/ProgramTheory/CompileB4.lean` compiles the integer fragment of the
+`Aptop/ProgramTheory/CompileB4.lean` compiles the integer fragment of the
 language (assignment, sequence, `if`, `while`, calls of named statements, local
 variables, over `+ - × div mod`, `<`, `=`, `¬ ∧ ∨`, reals (as IEEE single-precision
 floats, on b4's float instructions) and conditional expressions
@@ -204,28 +204,32 @@ The seed comes from the clock, or `--seed=K`:
 lake exe interp --b4 --demo=rand      # => x = 3, r = 2, time = 0  (or another outcome)
 ```
 
-## Prove a theorem by calculation (`lake exe netty`)
+## Prove a theorem by calculation (`lake exe ampheck`)
 
-Netty is a prover's assistant for calculational proofs — the tool described in
-[the Netty document](https://www.cs.toronto.edu/~naiman/Netty_document.pdf) by
-Eric Hehner, Robert Will, Lev Naiman and David Kordalewski. It keeps the proof,
+Ampheck is a prover's assistant for calculational proofs, a Lean
+reimplementation of the design described in
+[the Netty document](https://www.cs.toronto.edu/~naiman/Netty_document.pdf).
+
+> Ampheck is inspired by Netty, the calculational prover's assistant designed by Eric Hehner, Robert Will, Lev Naiman, David Kordalewski and others at the University of Toronto (named for Netty van Gasteren); see [the Netty document](https://www.cs.toronto.edu/~hehner/Netty.pdf).
+
+It keeps the proof,
 its direction, the context and the law lists, and suggests the next line by
-*showing what applying each law would write*. `Netty/` is its kernel: the
+*showing what applying each law would write*. `Ampheck/` is its kernel: the
 document model, the law matching, the suggestions and the save format, with no
 user interface but a script language.
 
 ```bash
-lake build netty                      # a few seconds: it needs neither Mathlib nor LaPToP
-lake exe netty --help                 # options and the script language
-lake exe netty --demo=portation       # the example proof from page 0 of the document
-lake exe netty --demo=discharge       # zooming in, and the context a zoom in supplies
-lake exe netty --demo=gap             # a gap left by direct entry, and closing it
-lake exe netty --demo=minimize        # a law applied to a part of a line
-lake exe netty --demo=segment         # a law applied to a segment of an association
-lake exe netty --demo=segfold         # the same fold, by zooming into that segment
-lake exe netty --list-laws            # the boolean laws in force
-lake exe netty --selftest             # laws, law file and demonstrations
-printf 'start ⇐ a ⇒ (b ⇒ a)\nsuggest\n' | lake exe netty
+lake build ampheck                      # a few seconds: it needs neither Mathlib nor Aptop
+lake exe ampheck --help                 # options and the script language
+lake exe ampheck --demo=portation       # the example proof from page 0 of the document
+lake exe ampheck --demo=discharge       # zooming in, and the context a zoom in supplies
+lake exe ampheck --demo=gap             # a gap left by direct entry, and closing it
+lake exe ampheck --demo=minimize        # a law applied to a part of a line
+lake exe ampheck --demo=segment         # a law applied to a segment of an association
+lake exe ampheck --demo=segfold         # the same fold, by zooming into that segment
+lake exe ampheck --list-laws            # the boolean laws in force
+lake exe ampheck --selftest             # laws, law file and demonstrations
+printf 'start ⇐ a ⇒ (b ⇒ a)\nsuggest\n' | lake exe ampheck
 ```
 
 The `portation` demonstration replays the document's own first example and
@@ -279,10 +283,10 @@ of a single operand can do; ordering by place first buried it 124 suggestions
 deep, behind every way of reassociating and commuting the whole line. It is now
 the third of the 227 offered.
 
-Laws are plain text files (`Netty/laws/boolean.laws` holds the Binary laws of
-aPToP §11.3.1); add your own with `--laws=FILE`. `Netty/Laws.lean` reads the
-shipped file at compile time and `Netty.boolean_isTautology` checks in Lean's
-kernel that every law in it is a tautology; `Netty/Replay.lean` replays every
+Laws are plain text files (`Ampheck/laws/boolean.laws` holds the Binary laws of
+aPToP §11.3.1); add your own with `--laws=FILE`. `Ampheck/Laws.lean` reads the
+shipped file at compile time and `Ampheck.boolean_isTautology` checks in Lean's
+kernel that every law in it is a tautology; `Ampheck/Replay.lean` replays every
 demonstration in Lean and proves that each ends with no gaps, fully
 zoomed out, and proving the formula it claims. Exit status is 1 when a `check`
 fails and 2 for a bad script or law file.
@@ -291,8 +295,8 @@ fails and 2 for a bad script or law file.
 
 A *calculation file* holds proofs laid out as the book lays them out: the
 connective in the margin, the law that justifies the step at the end of the
-line. Netty checks every step by applying the named law (anywhere in the line),
-and `netty_proofs` translates each calculation into a Lean theorem whose every
+line. Ampheck checks every step by applying the named law (anywhere in the line),
+and `ampheck_proofs` translates each calculation into a Lean theorem whose every
 step Lean proves again.
 
 ```
@@ -313,9 +317,9 @@ unfolds it), and `refine R ⟸ PROGRAM` states a refinement to be proved. A file
 that `extends "spec.calc"` inherits the state, the specifications and the
 theorems of the file it extends, and must refine every specification it
 inherits or calls — the book's way of going from a specification to a program
-(`LaPToP/Exercises/calc/sum.spec.calc` and `sum.calc`, Exercise 140).
+(`Aptop/Exercises/calc/sum.spec.calc` and `sum.calc`, Exercise 140).
 
-Every law has a **Lean twin**, a theorem `Netty.Twin.boolean.l7` generated from
+Every law has a **Lean twin**, a theorem `Ampheck.Twin.boolean.l7` generated from
 the law file and proved by Lean, and the kernel records how it took each step.
 So the Lean proof of a step *is* the law it names: the twin, instantiated where
 the kernel applied it and carried to the whole line by congruence or
@@ -323,33 +327,33 @@ monotonicity. A rule (`substitution law`, `one point`) is a tactic in the same
 way, and so are `arithmetic` (polynomial normalization, checked by the kernel and
 proved in Lean by reflection through Lean's verified normalizer) and `binary
 algebra` (a truth table). A hint that names nothing the kernel knows is left to
-Lean's automation, and `netty_proofs` reports, for each theorem, how many steps
+Lean's automation, and `ampheck_proofs` reports, for each theorem, how many steps
 came from the twins, the rule tactics and automation — for every calculation in
-`LaPToP/Exercises/calc/` that last number is zero. The twins work as a tactic in any Lean proof:
+`Aptop/Exercises/calc/` that last number is zero. The twins work as a tactic in any Lean proof:
 
 ```lean
 example (a b : Prop) : (¬(a ∧ b)) = (¬a ∨ ¬b) := by law "duality"
 ```
 
 ```bash
-lake exe netty --check=Netty/Proofs/demo.calc      # check with the Netty kernel
-lake env lean LaPToP/Exercises/Calc.lean           # check, translate, and prove in Lean
-NETTY_TRACE=1 lake env lean LaPToP/Exercises/Calc.lean   # …printing each Lean theorem
+lake exe ampheck --check=Ampheck/Proofs/demo.calc      # check with the Ampheck kernel
+lake env lean Aptop/Exercises/Calc.lean           # check, translate, and prove in Lean
+AMPHECK_TRACE=1 lake env lean Aptop/Exercises/Calc.lean   # …printing each Lean theorem
 ```
 
-### The three panes in a browser (`netty-web/`)
+### The three panes in a browser (`ampheck-web/`)
 
-`netty --serve` answers one JSON request per line of standard input with the
+`ampheck --serve` answers one JSON request per line of standard input with the
 whole state of the session — every line with its depth, its margin connective
 and its main operands, the context, the numbered suggestions, and what the
 proof proves — which is what a window with three panes needs and a terminal
-does not. `netty-web/` is that window: a Node server that forwards a request to
+does not. `ampheck-web/` is that window: a Node server that forwards a request to
 the kernel, and a TypeScript client that draws the proof, context and
 suggestion panes and turns a click into one line of the script language.
 
 ```bash
-lake build netty
-cd netty-web && npm install && npm run serve   # http://127.0.0.1:4173/
+lake build ampheck
+cd ampheck-web && npm install && npm run serve   # http://127.0.0.1:4173/
 ```
 
 The model is not duplicated in TypeScript: a click on a suggestion is
@@ -358,8 +362,8 @@ line before the focus is `zoom` and the name the kernel gave that part — `N` f
 a main operand, `S:L` for a contiguous segment of an association, the runs the
 client draws under the line. The client never composes those names, so a click
 cannot mean a different part from the one a suggestion's site or a script zoom
-means, and every change still goes through `Netty.Doc.step`. `netty-web/README.md`
-has the details; `netty --selftest` checks the request service too, by replaying
+means, and every change still goes through `Ampheck.Doc.step`. `ampheck-web/README.md`
+has the details; `ampheck --selftest` checks the request service too, by replaying
 each demonstration through it and saving and loading the result.
 
 ## GitHub Pages
@@ -385,7 +389,7 @@ Every section of Chapters 1–9 of the book is formalized, and the law tables of
 the Reference chapter (§11.3) are surveyed law by law. The Blueprint nodes are
 formalized and sorry-free (the old `collatz_conjecture` demo node was removed;
 Exercise 255 timing remains as `collatz_time`). Chapter 10 exercise *statements*
-are deferred stubs in `LaPToP/Exercises/` (signatures with `sorry` only). What
+are deferred stubs in `Aptop/Exercises/` (signatures with `sorry` only). What
 is intentionally not formalized is listed in `MISSING.md`.
 
 | Blueprint chapter | Book sections |
@@ -413,7 +417,7 @@ finite domains for Σ and Π, indices in range) are stated on the theorems.
 ## Layout
 
 ```text
-LaPToP/
+Aptop/
   Basic.lean                 # existing library stub (imports Mathlib)
   Blueprint.lean             # top-level Blueprint document
   Chapters/                  # one Verso chapter per theme, in book order
@@ -448,21 +452,21 @@ LaPToP/
   Concurrency/               # Composition, ListConcurrency, Transformation, InsertionSort, DiningPhilosophers
   Interaction/               # InteractiveVariables, GrowSlow, Communication, CommunicationTiming, Merge,
                              #   MergeInterleave, ChannelDeclaration, Deadlock, PowerSeries, Thermostat
-Netty/                       # the Netty proof-assistant kernel (no Mathlib, no LaPToP)
+Ampheck/                       # the Ampheck proof-assistant kernel (no Mathlib, no Aptop)
   Expr.lean Parser.lean      #   the boolean/number fragment of aPToP, and reading it
   Law.lean Laws.lean         #   laws, their variants, matching; the shipped law list
-  laws/boolean.laws          #   the Binary laws of §11.3.1, as a Netty law file
+  laws/boolean.laws          #   the Binary laws of §11.3.1, as an Ampheck law file
   Doc.lean Render.lean       #   the proof document, zoom stack, context, suggestions
   Json.lean Script.lean      #   saving a proof; the script language and the demos
   Api.lean                   #   the session as one JSON request and one JSON answer
   Replay.lean                #   the document's examples, replayed and checked in Lean
-netty-web/                   # the three panes in a browser, over `netty --serve`
-  src/protocol.ts            #   the shapes Netty/Api.lean writes
+ampheck-web/                   # the three panes in a browser, over `ampheck --serve`
+  src/protocol.ts            #   the shapes Ampheck/Api.lean writes
   src/kernel.ts src/server.ts#   the kernel as a child process; static files and POST /api
   src/client.ts public/      #   the proof, context and suggestion panes
-LaPToPMain.lean              # Verso generator entry point (`lake exe vbp`)
+AptopMain.lean              # Verso generator entry point (`lake exe vbp`)
 InterpMain.lean              # interpreter command line (`lake exe interp`)
-NettyMain.lean               # Netty command line (`lake exe netty`)
+AmpheckMain.lean               # Ampheck command line (`lake exe ampheck`)
 scripts/ci-pages.sh          # builds the site, then scripts/enhance-site-ux.py
 .sci/laws-survey.md          # §11.3 Reference law tables mapped to Lean theorems
 ```

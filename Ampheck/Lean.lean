@@ -1,0 +1,1115 @@
+import Lean
+import Ampheck.Proof
+import Ampheck.Tactics
+
+/-!
+# Ampheck proofs as Lean theorems
+
+`ampheck_proofs "file.calc"` reads a calculation file (`Ampheck.Proof`), checks each
+calculation with the Ampheck kernel, and then *translates* each calculation into a
+Lean theorem and elaborates it. The proof stays written in aPToP's notation, in
+the file; Lean sees an ordinary theorem whose proof is a `calc` chain with one
+link per line of the calculation.
+
+## The translation
+
+Each identifier becomes a universally quantified variable of the theorem, typed
+by how the calculation uses it: `Prop` when it is boolean, `Int` when it is a
+number. The operators become their Lean counterparts:
+
+| aPToP | Lean, boolean | Lean, number |
+| ----- | ------------- | ------------ |
+| `⊤ ⊥` | `True False` | |
+| `¬ ∧ ∨` | `¬ ∧ ∨` | |
+| `a ⇒ b`, `a ⇐ b` | `a → b`, `b → a` | |
+| `a = b`, `a ⧧ b` | `a ↔ b`, `¬(a ↔ b)` | `a = b`, `a ≠ b` |
+| `< > ≤ ≥ + - ×` | | `< > ≤ ≥ + - *` |
+| `if c then a else b fi` | `(c → a) ∧ (¬c → b)` | `if c then a else b` |
+| `∀x: nat· b`, `∃x: nat· b` | `∀ x : Int, 0 ≤ x → b`, `∃ x : Int, 0 ≤ x ∧ b` | |
+| `x: nat`, `x: int` | `0 ≤ x`, `True` | |
+
+A margin `⇒` between two lines becomes `Ampheck.Calc.Imp`, which is `→`, a `⇐`
+becomes `Ampheck.Calc.Rimp`, the converse, and a boolean `=` becomes `↔`; number
+margins are Lean's own relations. The links are chained by `Trans`.
+
+## Each step is proved by the law it names
+
+Every law of the shipped lists has a *Lean twin* (`Ampheck.Twins`), a theorem
+stating it, and the kernel records how it took each step (`Cert`): where in the
+line the law was applied, which reading of it, and the substitution. The step's
+Lean proof is built from that, with no search: the twin instantiated by the
+substitution, read the way the step read the law, converted to the place as the
+line writes it (`ampheck_ac`: association, symmetry, units), and carried to the
+whole line by congruence or, for a step in a direction, by monotonicity through
+exactly the positions the kernel's direction rules went through. A rule's step
+(`Ampheck.Program`) is proved the same way by the rule's tactic (`ampheck_rule`), and
+an earlier theorem cited as a law is its own twin.
+
+`arithmetic` and `binary algebra` are decisions the kernel computes
+(`Ampheck.Arith`), and their twins are a theorem and a truth table: an arithmetic
+step is proved by reflection (`Ampheck.Calc.ring_eq`, from Lean's verified
+polynomial normalizer), a comparison through its normal form, and a binary
+algebra step case by case on its identifiers. A step by a fact of the context
+(`context`) is carried by congruence lemmas that gain the same facts the kernel
+gained on the way in (`ctxEq`).
+
+Each such proof is elaborated once, as a lemma of its own (`NAME.stepK`,
+by `defineStep`), and the theorem chains those lemmas. A step with no
+certificate — a hint that names nothing the kernel knows — or whose
+certificate's proof Lean does not accept is proved by Lean's automation
+(`ampheck_step`) instead, and the command reports, for every theorem, how many
+steps came from the twins, how many from rule tactics and how many from
+automation, and why.
+
+Finally the chain is turned into the claim, by the rule `Doc.outcome` uses: a
+chain `A = … = ⊤` or `A ⇐ … ⇐ ⊤` proves `A`, a chain `A = … = ⊥` or
+`A ⇒ … ⇒ ⊥` proves `¬A`, and any other chain proves `A op Z`.
+-/
+
+
+namespace Ampheck.ToLean
+
+open _root_.Lean (Syntax mkIdent quote Name Term Ident TSyntax)
+open _root_.Lean.Elab.Command (CommandElabM CommandElab elabCommand)
+
+/-- The types of the identifiers of an expression, as far as the expression
+settles them. -/
+abbrev Tys := List (String × Ty)
+
+/-- Record that `n` has type `t`, unless it already has one. -/
+def note (n : String) (t : Ty) (env : Tys) : Tys :=
+  if (env.lookup n).isSome then env else (n, t) :: env
+
+/-- The type an expression has, from its operator or from what is known of its
+identifiers. -/
+def tyIn (env : Tys) : Expr → Option Ty
+  | .var n => env.lookup n
+  | e => e.tyOf?
+
+/-- The type of the elements of a domain, when the kernel knows the domain. -/
+def domainTy : Expr → Option Ty
+  | .var "nat" | .var "int" => some .number
+  | .var "bin" | .var "bool" => some .boolean
+  | _ => none
+
+/-- One pass of type inference: walk the expression with the type its place
+expects, if the place settles one, noting the type of every identifier met in a
+place that does. `bound` are the names a quantifier binds, which are not
+identifiers of the theorem. -/
+partial def infer (bound : List String) (expect : Option Ty) (env : Tys) : Expr → Tys
+  | .var n =>
+      match expect with
+      | some t => if bound.contains n then env else note n t env
+      | none => env
+  | .neg a => infer bound (some .boolean) env a
+  | .bin o l r =>
+      match o.operandTy with
+      | some t => infer bound (some t) (infer bound (some t) env l) r
+      | none =>
+          if o == .mem then infer bound (some .number) env l
+          else
+            let t := (tyIn env l).orElse fun _ => tyIn env r
+            infer bound t (infer bound t env l) r
+  | .cond c x y =>
+      let t := expect.orElse fun _ => (tyIn env x).orElse fun _ => tyIn env y
+      infer bound t (infer bound t (infer bound (some .boolean) env c) x) y
+  | .quant _ ids _ b => infer (ids ++ bound) (some .boolean) env b
+  | _ => env
+
+/-- The types of the identifiers of a theorem: inference run over the claim
+and every line until nothing changes, so that `x = y` learns `x` is a number
+from a later `x ≤ 3`. Whatever is still unsettled is boolean. -/
+def theoremTys (init : Tys) (es : List Expr) : Tys := Id.run do
+  let mut env : Tys := init
+  for _ in [0:6] do
+    env := es.foldl (fun env e => infer [] (some .boolean) env e) env
+  return env
+
+/-- A Lean identifier for an aPToP identifier: primes become `'`. -/
+def ident (n : String) : Ident :=
+  mkIdent (Name.mkSimple ((n.replace "″" "''").replace "′" "'"))
+
+/-- What a translation knows: the types of the identifiers, the state and the
+named specifications, and the renaming of state variables that sequential
+composition has made on the way in (`x′` to an intermediate state, say). -/
+structure Scope where
+  /-- The identifiers' types. -/
+  env : Tys
+  /-- The state and the named specifications. -/
+  prog : Prog
+  /-- Names standing for other names. -/
+  ren : List (String × String) := []
+  /-- How many sequential compositions deep the translation is, for fresh names. -/
+  depth : Nat := 0
+  /-- The hole of a context (`holeName`), and the identifiers it is applied
+  to: the translation of a context writes `H a₁ … aₙ` there. -/
+  hole : Option (Ident × List String) := none
+
+/-- The Lean type of a domain's elements. -/
+def leanTy : Ty → CommandElabM Term
+  | .boolean => `(Prop)
+  | .number => `(Int)
+
+/-- The guard a domain puts on a variable of it: `0 ≤ x` for `nat`. -/
+def guard (d : Expr) (x : Term) : CommandElabM (Option Term) :=
+  match d with
+  | .var "nat" => do return some (← `(0 ≤ $x))
+  | _ => return none
+
+/-- The hole a context leaves where a law was applied. -/
+def holeName : String := "□"
+
+/-- A chain of sequential compositions as its first specification and the
+rest, the rest nested to the right. -/
+def seqChain (e : Expr) : Expr × Option Expr :=
+  match Expr.flattenOp .seq e with
+  | a :: rest@(_ :: _) =>
+      let r := (rest.dropLast).foldr (fun x acc => Expr.bin .seq x acc) rest.getLast!
+      (a, some r)
+  | _ => (e, none)
+
+/-- The name an identifier stands for here. -/
+def Scope.name (sc : Scope) (n : String) : String := (sc.ren.lookup n).getD n
+
+mutual
+
+/-- Translate an expression of type `ty` into a Lean term. -/
+partial def term (sc : Scope) (ty : Ty) : Expr → CommandElabM Term
+  | .var n => do
+      if n == "ok" && !sc.prog.state.isEmpty then
+        return ← term sc .boolean sc.prog.okBody
+      if sc.prog.specs.any (·.1 == n) then
+        let args := sc.prog.params.map fun v => (ident (sc.name v) : Term)
+        return ← `($(ident n) $(args.toArray)*)
+      return ident (sc.name n)
+  | .num n => `(($(quote n) : Int))
+  | .top => `(True)
+  | .bot => `(False)
+  | .neg a => do `(¬ $(← term sc .boolean a))
+  | .bin .assign (.var x) e => term sc .boolean (sc.prog.assignBody x e)
+  | .bin .seq a b =>
+      -- A chain of compositions is one chain whichever way the line brackets
+      -- it, since `.` is associative; it is translated nested to the right, so
+      -- that two bracketings of it are the same Lean term.
+      match seqChain (.bin .seq a b) with
+      | (a', some b') => seqTerm sc a' b'
+      | (_, none) => seqTerm sc a b
+  | .bin o l r => do
+      let env := sc.env
+      let lt := match o.operandTy with
+        | some t => t
+        | none => (tyIn env l).getD ((tyIn env r).getD .boolean)
+      if o == .mem then
+        let x ← term sc .number l
+        return ← match r with
+          | .var "nat" => `(0 ≤ $x)
+          | .var "int" => `(True)
+          | d => throwError s!"Ampheck: no translation of the domain {d.render}"
+      let a ← term sc lt l
+      let b ← term sc lt r
+      match o, lt with
+      | .and, _ => `($a ∧ $b)
+      | .or, _ => `($a ∨ $b)
+      | .imp, _ => `($a → $b)
+      | .rimp, _ => `($b → $a)
+      | .eq, .boolean => `(($a = $b))
+      | .eq, .number => `($a = $b)
+      | .ne, .boolean => `(¬($a = $b))
+      | .ne, .number => `($a ≠ $b)
+      | .lt, _ => `($a < $b)
+      | .gt, _ => `($a > $b)
+      | .le, _ => `($a ≤ $b)
+      | .ge, _ => `($a ≥ $b)
+      | .add, _ => `($a + $b)
+      | .sub, _ => `($a - $b)
+      | .mul, _ => `($a * $b)
+      | o, _ => throwError s!"Ampheck: no translation of ‘{o.symbol}’ here"
+  | .cond c x y => do
+      let c' ← term sc .boolean c
+      let t := (tyIn sc.env x).getD ((tyIn sc.env y).getD ty)
+      let x' ← term sc t x
+      let y' ← term sc t y
+      match t with
+      | .boolean => `((($c' → $x') ∧ (¬$c' → $y')))
+      | .number => `((if $c' then $x' else $y'))
+  | .quant k ids d b => do
+      let dt ← match domainTy d with
+        | some t => pure t
+        | none => throwError s!"Ampheck: no translation of the domain {d.render}"
+      let sc' := { sc with env := ids.map (·, dt) ++ sc.env,
+                           ren := sc.ren.filter fun p => !ids.contains p.1 }
+      let body ← term sc' .boolean b
+      let lty ← leanTy dt
+      ids.foldrM (fun n acc => do
+        let x := ident n
+        match k, ← guard d x with
+        | .all, some g => `(∀ $x:ident : $lty, $g → $acc)
+        | .all, none => `(∀ $x:ident : $lty, $acc)
+        | .ex, some g => `(∃ $x:ident : $lty, $g ∧ $acc)
+        | .ex, none => `(∃ $x:ident : $lty, $acc)) body
+  | .mvar n => do
+      if n == holeName then
+        if let some (h, args) := sc.hole then
+          let as ← args.mapM fun v => term sc .boolean (.var v)
+          return ← `($h $(as.toArray)*)
+      throwError s!"Ampheck: a law variable ‘{n}’ is left in the proof"
+
+/-- `P. Q`: there is an intermediate state, which is `P`'s final state and
+`Q`'s initial one. Rather than substitute into `P` and `Q`, the translation
+renames: inside `P` the primed state variables stand for the intermediate
+ones, inside `Q` the unprimed ones do. So a named specification called in
+either is applied to the right state. -/
+partial def seqTerm (sc : Scope) (a b : Expr) : CommandElabM Term := do
+  let mids := sc.prog.state.map fun (v, d) => (v, d, s!"{v}_{sc.depth}")
+  let scA := { sc with depth := sc.depth + 1,
+                       ren := mids.map (fun (v, _, m) => (prime v, m)) ++ sc.ren,
+                       env := mids.map (fun (v, _, m) => (m, (sc.env.lookup v).getD .number)) ++ sc.env }
+  let scB := { scA with ren := mids.map (fun (v, _, m) => (v, m)) ++ sc.ren }
+  let a' ← term scA .boolean a
+  let b' ← term scB .boolean b
+  -- The same shape as the translation of the sequential composition rule's
+  -- expansion (`Prog.seqBody`), `∃x″: d· ∃y″: d· …`, so that the rule's step is
+  -- definitional.
+  let body ← `($a' ∧ $b')
+  mids.foldrM (fun (v, d, m) acc => do
+    let lty ← leanTy ((sc.env.lookup v).getD .number)
+    let x := ident m
+    match ← guard d x with
+    | some g => `(∃ $x:ident : $lty, $g ∧ $acc)
+    | none => `(∃ $x:ident : $lty, $acc)) body
+
+end
+
+/-- The `calc` relation of a margin connective between two translated lines. -/
+def link (ty : Ty) (o : BinOp) (a b : Term) : CommandElabM Term :=
+  match o, ty with
+  | .eq, .boolean => `(($a ↔ $b))
+  | .eq, .number => `($a = $b)
+  | .imp, _ => `(Ampheck.Calc.Imp $a $b)
+  | .rimp, _ => `(Ampheck.Calc.Rimp $a $b)
+  | .lt, _ => `($a < $b)
+  | .gt, _ => `($a > $b)
+  | .le, _ => `($a ≤ $b)
+  | .ge, _ => `($a ≥ $b)
+  | o, _ => throwError s!"Ampheck: ‘{o.symbol}’ cannot stand in the margin"
+
+/-- The types the state gives its variables and their primes. -/
+def stateTys (p : Prog) : Tys :=
+  p.state.flatMap fun (v, d) =>
+    let t := (domainTy d).getD .number
+    [(v, t), (prime v, t)]
+
+/-- The Lean definition of a named specification: a proposition about the
+state variables and their primes. -/
+def specCmd (p : Prog) (name : String) (body : Expr) : CommandElabM Syntax := do
+  let env := theoremTys (stateTys p) [body]
+  let sc : Scope := { env := env, prog := { p with specs := p.specs.filter (·.1 != name) } }
+  let b ← term sc .boolean body
+  let binders ← p.params.mapM fun n => do
+    `(bracketedBinder| ($(ident n) : $(← leanTy ((env.lookup n).getD .number))))
+  let bs := binders.toArray
+  `(open Classical in def $(ident name):ident $bs* : Prop := $b)
+
+/-! ### Steps proved from the laws' twins
+
+A step the kernel took by a law carries a `Cert`: the line it started from, the
+zooms to where the law was applied, the reading of the law and its substitution.
+From that the translation builds the step's Lean proof without any search:
+
+* the *context* is the line with the place the law was applied replaced by a
+  hole (`plug`), translated as a function of what fills the hole;
+* the *leaf* is the law's twin, instantiated by the substitution, read the way
+  the step read the law (reversed, `= ⊤`, conditional), and converted from the
+  law's left side to the place as the line writes it — which differ only by
+  association, symmetry and units (`ampheck_ac`);
+* an equality at the leaf is carried to the whole line by congruence
+  (`congrArg`), and an implication by monotonicity (`mono`), following exactly
+  the positions the kernel's direction rules followed.
+
+A rule's step (`Ampheck.Program`) is proved the same way with the rule's tactic
+(`ampheck_rule`) at the leaf; `ok`, assignment, sequential composition and the
+definition of a specification are definitional in the translation. A step that
+none of this covers — a law without a twin, a context fact, a hint that names
+no law — is proved by `ampheck_step`, and the command says which steps those were.
+-/
+
+/-- A law's statement with its law variables as ordinary identifiers. -/
+def unMVar : Expr → Expr
+  | .mvar n => .var n
+  | .neg a => .neg (unMVar a)
+  | .bin o l r => .bin o (unMVar l) (unMVar r)
+  | .cond c x y => .cond (unMVar c) (unMVar x) (unMVar y)
+  | .quant k ids d b => .quant k ids (unMVar d) (unMVar b)
+  | e => e
+
+/-- How a step was proved in Lean. -/
+inductive How
+  /-- From the twins of the laws it names. -/ | twin
+  /-- By the tactics of the rules it names. -/ | rule
+  /-- By automation, for the reason given. -/ | auto (why : String)
+  deriving Inhabited, BEq
+
+/-- Whether an expression holds the hole. -/
+def hasHole : Expr → Bool
+  | .mvar n => n == holeName
+  | .neg a => hasHole a
+  | .bin _ l r => hasHole l || hasHole r
+  | .cond c x y => hasHole c || hasHole x || hasHole y
+  | .quant _ _ d b => hasHole d || hasHole b
+  | _ => false
+
+/-- The line `e` with the place a certificate's step rewrote replaced by the
+hole: down the zooms of `path`, then the part `site` of the line found there. -/
+def plug : Expr → List Part → Part → Option Expr
+  | _, [], .whole => some (.mvar holeName)
+  | e, [], sp => sp.replace e (.mvar holeName)
+  | e, p :: ps, sp => do p.replace e (← plug (← p.exprOf e) ps sp)
+
+/-- Fill the hole. -/
+def fill (h : Expr) : Expr → Expr
+  | .mvar n => if n == holeName then h else .mvar n
+  | .neg a => .neg (fill h a)
+  | .bin o l r => .bin o (fill h l) (fill h r)
+  | .cond c x y => .cond (fill h c) (fill h x) (fill h y)
+  | .quant k ids d b => .quant k ids (fill h d) (fill h b)
+  | e => e
+
+/-- The identifiers quantifiers bind on the way to the hole, with their types. -/
+def boundToHole : Expr → List (String × Ty)
+  | .quant _ ids d b =>
+      if hasHole b then ids.map (·, (domainTy d).getD .number) ++ boundToHole b
+      else boundToHole d
+  | .neg a => boundToHole a
+  | .bin _ l r => if hasHole l then boundToHole l else boundToHole r
+  | .cond c x y => if hasHole c then boundToHole c else if hasHole x then boundToHole x
+      else boundToHole y
+  | _ => []
+
+/-- The identifiers a sequential composition renames on the way to the hole:
+inside its first specification the primed state variables stand for an
+intermediate state, inside its second the unprimed ones do. -/
+partial def renamedToHole (p : Prog) : Expr → List String
+  | .bin .seq a0 b0 =>
+      let (a, b) := match seqChain (.bin .seq a0 b0) with
+        | (a', some b') => (a', b')
+        | (_, none) => (a0, b0)
+      if hasHole a then p.state.map (prime ·.1) ++ renamedToHole p a
+      else p.state.map (·.1) ++ renamedToHole p b
+  | .quant _ _ d b => if hasHole b then renamedToHole p b else renamedToHole p d
+  | .neg a => renamedToHole p a
+  | .bin _ l r => if hasHole l then renamedToHole p l else renamedToHole p r
+  | .cond c x y => if hasHole c then renamedToHole p c else if hasHole x then renamedToHole p x
+      else renamedToHole p y
+  | _ => []
+
+/-- The name of the hypothesis that a natural variable is at least zero, as the
+theorem's binders and the monotonicity proofs name it. -/
+def guardHyp (leanName : String) : Ident := mkIdent (Name.mkSimple ("h_" ++ leanName))
+
+/-- `fun a₁ … aₙ => body`. -/
+def lams (as : List (Ident × Term)) (body : Term) : CommandElabM Term :=
+  as.foldrM (fun (a, t) acc => `(fun ($a : $t) => $acc)) body
+
+/-- The identifiers `nat` quantifiers bind on the way to the hole. -/
+def natBoundToHole : Expr → List String
+  | .quant _ ids d b =>
+      if hasHole b then (if d == .var "nat" then ids else []) ++ natBoundToHole b
+      else natBoundToHole d
+  | .neg a => natBoundToHole a
+  | .bin _ l r => if hasHole l then natBoundToHole l else natBoundToHole r
+  | .cond c x y => if hasHole c then natBoundToHole c else if hasHole x then natBoundToHole x
+      else natBoundToHole y
+  | _ => []
+
+/-- Monotonicity: from the leaf's implication, an implication between the
+context filled one way and the other. `want` is `true` for `C[S] → C[T]` and
+`false` for `C[T] → C[S]`; `fwd` says which the leaf gives, `S → T` or `T → S`.
+A negative position turns the wanted direction round, as the kernel's direction
+rules did on the way in. -/
+partial def mono (leaf : Scope → Bool → CommandElabM Term) (sc : Scope) (want : Bool) :
+    Expr → CommandElabM Term
+  | .mvar n => do
+      if n != holeName then throwError "Ampheck: not a context"
+      leaf sc want
+  | .neg a => do
+      let m ← mono leaf sc (!want) a
+      `(fun hn h => hn ($m h))
+  | .bin .and l r => do
+      if hasHole l then let m ← mono leaf sc want l; `(fun h => And.intro ($m h.1) h.2)
+      else let m ← mono leaf sc want r; `(fun h => And.intro h.1 ($m h.2))
+  | .bin .or l r => do
+      if hasHole l then let m ← mono leaf sc want l; `(Or.imp $m id)
+      else let m ← mono leaf sc want r; `(Or.imp id $m)
+  | .bin .imp l r => do
+      if hasHole r then let m ← mono leaf sc want r; `(fun f x => $m (f x))
+      else let m ← mono leaf sc (!want) l; `(fun f x => f ($m x))
+  | .bin .rimp l r => do
+      -- `l ⇐ r` is `r → l`.
+      if hasHole l then let m ← mono leaf sc want l; `(fun f x => $m (f x))
+      else let m ← mono leaf sc (!want) r; `(fun f x => f ($m x))
+  | .cond c x y => do
+      if hasHole c then throwError "Ampheck: a condition is not a monotonic position"
+      if hasHole x then
+        let m ← mono leaf sc want x
+        `(fun h => And.intro (fun hc => $m (h.1 hc)) h.2)
+      else
+        let m ← mono leaf sc want y
+        `(fun h => And.intro h.1 (fun hc => $m (h.2 hc)))
+  | .quant k ids d b => do
+      if hasHole d then throwError "Ampheck: a domain is not a monotonic position"
+      let dt := (domainTy d).getD .number
+      let sc' := { sc with env := ids.map (·, dt) ++ sc.env,
+                           ren := sc.ren.filter fun p => !ids.contains p.1 }
+      let m ← mono leaf sc' want b
+      ids.foldrM (fun n acc => do
+        let x := ident n
+        let hx := guardHyp x.getId.toString
+        let g ← guard d x
+        match k, g with
+        | .all, some _ => `(fun f ($x) ($hx) => $acc (f $x $hx))
+        | .all, none => `(fun f ($x) => $acc (f $x))
+        | .ex, some _ => `(Exists.imp (fun ($x) hgb => (fun ($hx) => And.intro $hx ($acc hgb.2)) hgb.1))
+        | .ex, none => `(Exists.imp (fun ($x) => $acc))) m
+  | .bin .seq a0 b0 => do
+      let (a, b) := match seqChain (.bin .seq a0 b0) with
+        | (a', some b') => (a', b')
+        | (_, none) => (a0, b0)
+      let p := sc.prog
+      let mids := p.state.map fun (v, d) => (v, d, s!"{v}_{sc.depth}")
+      let scA := { sc with depth := sc.depth + 1,
+                           ren := mids.map (fun (v, _, m) => (prime v, m)) ++ sc.ren,
+                           env := mids.map (fun (v, _, m) => (m, (sc.env.lookup v).getD .number))
+                             ++ sc.env }
+      let scB := { scA with ren := mids.map (fun (v, _, m) => (v, m)) ++ sc.ren }
+      let inner ← if hasHole a then
+          let m ← mono leaf scA want a; `(And.imp $m id)
+        else
+          let m ← mono leaf scB want b; `(And.imp id $m)
+      mids.foldrM (fun (_, d, m) acc => do
+        let x := ident m
+        let hx := guardHyp x.getId.toString
+        match ← guard d x with
+        | some _ => `(Exists.imp (fun ($x) hgb => (fun ($hx) => And.intro $hx ($acc hgb.2)) hgb.1))
+        | none => `(Exists.imp (fun ($x) => $acc))) inner
+  | _ => throwError "Ampheck: no monotonicity through this operator"
+
+/-- An integer expression as a `Lean.Grind.CommRing.Expr`, its identifiers
+numbered by `vs`. -/
+partial def reify (vs : List String) : Expr → CommandElabM Term
+  | .num n => `(Lean.Grind.CommRing.Expr.num $(quote n))
+  | .var x => do
+      let some i := vs.idxOf? x | throwError s!"Ampheck: {x} is not numbered"
+      `(Lean.Grind.CommRing.Expr.var $(quote i))
+  | .bin .add a b => do `(Lean.Grind.CommRing.Expr.add $(← reify vs a) $(← reify vs b))
+  | .bin .sub a b => do `(Lean.Grind.CommRing.Expr.sub $(← reify vs a) $(← reify vs b))
+  | .bin .mul a b => do `(Lean.Grind.CommRing.Expr.mul $(← reify vs a) $(← reify vs b))
+  | e => throwError s!"Ampheck: {e.render} is not an integer expression"
+
+/-- The context a reified expression is read in: its identifiers, as a
+`Lean.RArray`, balanced. -/
+partial def rarray (ts : List Term) (lo : Nat := 0) : CommandElabM Term := do
+  match ts with
+  | [] => `(Lean.RArray.leaf (0 : Int))
+  | [t] => `(Lean.RArray.leaf $t)
+  | _ =>
+      let half := ts.length / 2
+      let l ← rarray (ts.take half) lo
+      let r ← rarray (ts.drop half) (lo + half)
+      `(Lean.RArray.branch $(quote (lo + half)) $l $r)
+
+/-- The proof that `s` is `t` by arithmetic (`Ampheck.Arith.arith`): the ring
+twin `Ampheck.Calc.ring_eq` on the two sides, or on the normal forms of two
+comparisons, or the value of a comparison of numerals. -/
+def arithLeaf (sc : Scope) (s t : Expr) (s' t' : Term) : CommandElabM Term := do
+  let some how := Arith.arith s t | throwError "Ampheck: not arithmetic"
+  let vs := (s.vars ++ t.vars).eraseDups
+  let ctx ← rarray (← vs.mapM fun v => term sc .number (.var v))
+  let ringEq (a b : Term) : CommandElabM Term :=
+    `((Ampheck.Calc.ring_eq (ctx := $ctx) $a $b (by decide)))
+  match how with
+  | .ring =>
+      `((show $s' = $t' from $(← ringEq (← reify vs s) (← reify vs t))))
+  | .ground v =>
+      -- The comparison's polynomial is a constant `c`: rewrite it to `c` by the
+      -- ring twin, then decide `c`. (Its sides may mention identifiers that
+      -- cancel, as `m = m + 9 - 9` does, which `decide` alone cannot read.)
+      let some a := Arith.cmp? s | throwError "Ampheck: not a comparison"
+      let c := (a.poly.head?.map (·.2)).getD 0
+      let diff : Expr := .bin .sub (.bin .sub a.big a.small) (.num a.k.toNat)
+      let pd ← term sc .number diff
+      let cE : Expr := if c ≥ 0 then .num c.toNat else .bin .sub (.num 0) (.num c.natAbs)
+      let cT ← term sc .number cE
+      let hp ← `((show $pd = $cT from $(← ringEq (← reify vs diff) (← reify vs cE))))
+      let .bin o l r := s | throwError "Ampheck: not a comparison"
+      let l' ← term sc .number l
+      let r' ← term sc .number r
+      let norm ← match o with
+        | .ge => `(Ampheck.Calc.ge_norm $l' $r')
+        | .le => `(Ampheck.Calc.le_norm $l' $r')
+        | .gt => `(Ampheck.Calc.gt_norm $l' $r')
+        | .lt => `(Ampheck.Calc.lt_norm $l' $r')
+        | .eq => `(Ampheck.Calc.eq_norm $l' $r')
+        | _ => `(Ampheck.Calc.ne_norm $l' $r')
+      let motive ← match a.kind with
+        | "ge" => `(fun (p : Int) => 0 ≤ p)
+        | "eq" => `(fun (p : Int) => p = 0)
+        | _ => `(fun (p : Int) => ¬(p = 0))
+      let canon ← `(($norm).trans (congrArg $motive $hp))
+      if v then `((show $s' = $t' from ($canon).trans (eq_true (by decide))))
+      else `((show $s' = $t' from ($canon).trans (eq_false (by decide))))
+  | .cmp neg => do
+      let some a := Arith.cmp? s | throwError "Ampheck: not a comparison"
+      let some b := Arith.cmp? t | throwError "Ampheck: not a comparison"
+      let norm (e : Expr) : CommandElabM Term := do
+        let .bin o l r := e | throwError "Ampheck: not a comparison"
+        let l' ← term sc .number l
+        let r' ← term sc .number r
+        match o with
+        | .ge => `(Ampheck.Calc.ge_norm $l' $r')
+        | .le => `(Ampheck.Calc.le_norm $l' $r')
+        | .gt => `(Ampheck.Calc.gt_norm $l' $r')
+        | .lt => `(Ampheck.Calc.lt_norm $l' $r')
+        | .eq => `(Ampheck.Calc.eq_norm $l' $r')
+        | _ => `(Ampheck.Calc.ne_norm $l' $r')
+      let diff (c : Arith.Cmp) : Expr := .bin .sub (.bin .sub c.big c.small) (.num c.k.toNat)
+      let da := diff a
+      let db := diff b
+      let pa ← term sc .number da
+      let pb ← term sc .number db
+      let ra ← reify vs da
+      let rb ← reify vs db
+      let normS ← norm s
+      let normT ← norm t
+      match a.kind, neg with
+      | "ge", _ =>
+          let hp ← `((show $pa = $pb from $(← ringEq ra rb)))
+          `((show $s' = $t' from ($normS).trans ((congrArg (fun p => 0 ≤ p) $hp).trans ($normT).symm)))
+      | "eq", false =>
+          let hp ← `((show $pa = $pb from $(← ringEq ra rb)))
+          `((show $s' = $t' from ($normS).trans ((congrArg (fun p => p = 0) $hp).trans ($normT).symm)))
+      | "eq", true =>
+          let hp ← `((show $pa = -$pb from $(← ringEq ra (← `(Lean.Grind.CommRing.Expr.neg $rb)))))
+          `((show $s' = $t' from ($normS).trans ((Ampheck.Calc.eq_zero_neg _ _ $hp).trans ($normT).symm)))
+      | _, false =>
+          let hp ← `((show $pa = $pb from $(← ringEq ra rb)))
+          `((show $s' = $t' from ($normS).trans ((congrArg (fun p => ¬(p = 0)) $hp).trans ($normT).symm)))
+      | _, true =>
+          let hp ← `((show $pa = -$pb from $(← ringEq ra (← `(Lean.Grind.CommRing.Expr.neg $rb)))))
+          `((show $s' = $t' from ($normS).trans ((Ampheck.Calc.ne_zero_neg _ _ $hp).trans ($normT).symm)))
+  | .taut => throwError "Ampheck: not arithmetic"
+
+/-- The facts a hypothesis `h` of `e` gives: one per conjunct, by projection —
+as the kernel gains a conjunction as one context law per conjunct. -/
+partial def splitFacts (e : Expr) (h : Term) : CommandElabM (List (Expr × Term)) := do
+  match e with
+  | .bin .and a b => return (← splitFacts a (← `(($h).1))) ++ (← splitFacts b (← `(($h).2)))
+  | _ => return [(e, h)]
+
+/-- Equality of the context filled one way and the other, for a step by a fact
+of the context (`context`): down to the place by congruence, gaining, as the
+kernel did, the other conjuncts of `∧`, the antecedent of `⇒`, the condition of
+a branch, and the domain of a bound identifier, each as a hypothesis — which
+the leaf then cites. Below a place that gains nothing, plain congruence. -/
+partial def ctxEq (sc : Scope) (facts : List (Expr × Term)) (n : Nat)
+    (leaf : Scope → List (Expr × Term) → CommandElabM Term) (ty : Ty) :
+    Expr → CommandElabM Term
+  | .mvar m => do
+      if m != holeName then throwError "Ampheck: not a context"
+      leaf sc facts
+  | .bin .and l r => do
+      let h := mkIdent (Name.mkSimple s!"hctx{n}")
+      if hasHole r then
+        let sub ← ctxEq sc (facts ++ (← splitFacts l h)) (n + 1) leaf .boolean r
+        `(propext (and_congr_right (fun $h => Iff.of_eq $sub)))
+      else
+        let sub ← ctxEq sc (facts ++ (← splitFacts r h)) (n + 1) leaf .boolean l
+        `(propext (and_congr_left (fun $h => Iff.of_eq $sub)))
+  | .bin .imp l r => do
+      let h := mkIdent (Name.mkSimple s!"hctx{n}")
+      if hasHole r then
+        let sub ← ctxEq sc (facts ++ (← splitFacts l h)) (n + 1) leaf .boolean r
+        `(propext (imp_congr_right (fun $h => Iff.of_eq $sub)))
+      else
+        let sub ← ctxEq sc facts (n + 1) leaf .boolean l
+        `(propext (imp_congr_left (Iff.of_eq $sub)))
+  | .bin .rimp l r => do
+      -- `l ⇐ r` is `r → l`.
+      let h := mkIdent (Name.mkSimple s!"hctx{n}")
+      if hasHole l then
+        let sub ← ctxEq sc (facts ++ (← splitFacts r h)) (n + 1) leaf .boolean l
+        `(propext (imp_congr_right (fun $h => Iff.of_eq $sub)))
+      else
+        let sub ← ctxEq sc facts (n + 1) leaf .boolean r
+        `(propext (imp_congr_left (Iff.of_eq $sub)))
+  | .cond c x y => do
+      if hasHole c then throwError "Ampheck: no context in a condition"
+      let h := mkIdent (Name.mkSimple s!"hctx{n}")
+      let t := (tyIn sc.env x).getD ((tyIn sc.env y).getD ty)
+      if t != .boolean then throwError "Ampheck: a number conditional"
+      if hasHole x then
+        let sub ← ctxEq sc (facts ++ (← splitFacts c h)) (n + 1) leaf .boolean x
+        `(propext (and_congr_left (fun _ => imp_congr_right (fun $h => Iff.of_eq $sub))))
+      else
+        let sub ← ctxEq sc (facts ++ (← splitFacts (Expr.negate c) h)) (n + 1) leaf .boolean y
+        `(propext (and_congr_right (fun _ => imp_congr_right (fun $h => Iff.of_eq $sub))))
+  | .quant k ids d b => do
+      if hasHole d then throwError "Ampheck: no context in a domain"
+      let dt := (domainTy d).getD .number
+      let sc' := { sc with env := ids.map (·, dt) ++ sc.env,
+                           ren := sc.ren.filter fun p => !ids.contains p.1 }
+      -- `x: nat` is the guard `0 ≤ x`; `x: int` says nothing.
+      let guarded := d == .var "nat"
+      let hs := ids.map fun v => guardHyp (ident v).getId.toString
+      let mems ← (ids.zip hs).filterMapM fun (v, h) => do
+        if guarded then return some (Expr.bin .mem (.var v) d, (h : Term)) else return none
+      let sub ← ctxEq sc' (facts ++ mems) (n + 1) leaf .boolean b
+      (ids.zip hs).foldrM (fun (v, h) acc => do
+        let x := ident v
+        match k, guarded with
+        | .all, true => `(propext (forall_congr' (fun $x => imp_congr_right (fun $h => Iff.of_eq $acc))))
+        | .all, false => `(propext (forall_congr' (fun $x => Iff.of_eq $acc)))
+        | .ex, true => `(propext (exists_congr (fun $x => and_congr_right (fun $h => Iff.of_eq $acc))))
+        | .ex, false => `(propext (exists_congr (fun $x => Iff.of_eq $acc)))) sub
+  | .bin .seq .. => throwError "Ampheck: no context through a composition"
+  | e => do
+      -- A place that gains nothing: plain congruence on the child that holds the
+      -- hole, through this one operator.
+      let (child, rebuild) : Expr × (Expr → Expr) := match e with
+        | .bin o l r => if hasHole l then (l, fun c => .bin o c r) else (r, fun c => .bin o l c)
+        | .neg a => (a, fun c => .neg c)
+        | e => (e, id)
+      if child == e then throwError "Ampheck: no congruence here"
+      let cty : Ty := match e with
+        | .bin o l r => match o.operandTy with
+          | some t => t
+          | none => (tyIn sc.env (if hasHole l then r else l)).getD
+              ((tyIn sc.env child).getD (if Arith.isNumberish child then .number else .boolean))
+        | _ => .boolean
+      let sub ← ctxEq sc facts (n + 1) leaf cty child
+      let H := mkIdent `H
+      let τ ← leanTy cty
+      let body ← term { sc with hole := some (H, []) } ty (rebuild (.mvar holeName))
+      `(congrArg (fun ($H : $τ) => $body) $sub)
+
+/-- The Lean proof of one application of a law or rule, as a link from `a` to
+`b` (the line the certificate wrote, or the written line it stands for) with
+the certificate's connective. -/
+def certLink (env : Tys) (p : Prog) (ty : Ty) (a b : Expr) (c : Cert) :
+    CommandElabM (Term × How) := do
+  let s := c.sugg
+  let some ctx := (match c.ctx with
+      | some k => some (k.replaceHole (.mvar holeName))
+      | none => plug c.src c.path s.part)
+    | throwError "Ampheck: the place is not in the line"
+  if !hasHole ctx then throwError "Ampheck: the place is not in the line"
+  let S := s.site
+  let T := s.replacement
+  let sc : Scope := { env := env, prog := p }
+  -- What the hole is applied to: the identifiers of the place, and the whole
+  -- state when the place is written in programming notation.
+  let progish := !(p.isPlain S && p.isPlain T)
+  let fv := (S.vars ++ T.vars).filter fun n =>
+    n != "ok" && !p.specs.any (·.1 == n) && !["int", "nat", "bin", "bool"].contains n
+  -- Only what is bound or renamed on the way to the place is abstracted: the
+  -- theorem's own identifiers stay themselves, with their hypotheses (`0 ≤ n`
+  -- for a natural state variable), which a step over `nat` may need.
+  let local_ := (boundToHole ctx).map (·.1) ++ renamedToHole p ctx
+  let args := (((if progish then p.params else []) ++ fv).eraseDups).filter local_.contains
+  let envH := boundToHole ctx ++ env
+  let argTys := args.map fun v => (v, (envH.lookup v).getD .boolean)
+  -- The abstracted identifiers that range over `nat`: a renamed natural state
+  -- variable, or one a `nat` quantifier binds. The leaf takes their guards too.
+  let natBound := natBoundToHole ctx
+  let natArgs := args.filter fun v =>
+    natBound.contains v || p.state.any fun (x, d) => (x == v || prime x == v) && d == .var "nat"
+  let scL : Scope := { env := argTys ++ env, prog := p }
+  let sty : Ty := match s.op.connTy with
+    | some t => t
+    | none => (tyIn scL.env S).getD ((tyIn scL.env T).getD .boolean)
+  let S' ← term scL sty S
+  let T' ← term scL sty T
+  let binders ← argTys.mapM fun (v, t) => do return (ident v, ← leanTy t)
+  let guardBinders ← natArgs.mapM fun v => do
+    let x := ident v
+    return (guardHyp x.getId.toString, ← `(0 ≤ $x))
+  -- The leaf: the step at the place, `S` to `T`.
+  -- A fact of the context: congruence that gains the facts, and the fact itself
+  -- at the leaf.
+  if let some v := s.variant then
+    if v.law == "context" then
+      if v.op != .eq then throwError "Ampheck: a context step in a direction"
+      let f := match v.kind with
+        | "eqTop" | "topEq" => if v.kind == "eqTop" then v.lhs else v.rhs
+        | _ => .bin .eq v.lhs v.rhs
+      let leaf : Scope → List (Expr × Term) → CommandElabM Term := fun sc' facts => do
+        let some (_, hf) := facts.find? (fun (e, _) =>
+            e.normAssoc == f.normAssoc || (match v.kind with
+              | "eqTop" | "topEq" => false
+              | _ => e.normAssoc == (Expr.bin .eq v.rhs v.lhs).normAssoc))
+          | throwError s!"Ampheck: the fact {f.render} is not in the context Lean gains"
+        let S' ← term sc' sty S
+        let T' ← term sc' sty T
+        let L' ← term sc' sty v.lhs
+        let base ← match v.kind with
+          | "eqTop" => `(eq_true $hf)
+          | "topEq" => `((eq_true $hf).symm)
+          | "flip" => `((show $(← term sc' sty v.lhs) = $(← term sc' sty v.rhs) from
+              by first | exact ($hf).symm | exact $hf))
+          | _ => `((show $(← term sc' sty v.lhs) = $(← term sc' sty v.rhs) from
+              by first | exact $hf | exact ($hf).symm))
+        if S == v.lhs then `((show $S' = $T' from $base))
+        else `((show $S' = $T' from Eq.trans (show $S' = $L' by ampheck_ac) $base))
+      let core ← ctxEq sc [] 0 leaf ty ctx
+      let A' ← term sc ty a
+      let B' ← term sc ty b
+      let CS' ← term sc ty (fill S ctx)
+      let CT' ← term sc ty (fill T ctx)
+      let e ← `(Eq.trans (show $A' = $CS' by ampheck_ac)
+        (Eq.trans (show $CS' = $CT' from $core) (show $CT' = $B' by ampheck_ac)))
+      let pf ← if ty == .boolean then `(Iff.of_eq $e) else pure e
+      return (pf, How.twin)
+  let (leafProof, how, isEq, fwd) ← match s.rule, s.variant with
+    | some .arith, _ =>
+        let pf ← arithLeaf scL S T S' T'
+        pure (pf, How.rule, true, true)
+    | some .binAlg, _ =>
+        let atoms := (S.vars ++ T.vars).eraseDups
+        let close ← `(tactic| simp [*])
+        let tac ← (atoms.zipIdx).foldrM (fun (x, i) acc => do
+          let h := mkIdent (Name.mkSimple s!"hc{i}")
+          `(tactic| (by_cases $h : $(ident x)) <;> $acc)) close
+        let pf ← `((show $S' = $T' by apply propext; $tac))
+        pure (pf, How.rule, true, true)
+    | some .onePoint, _ => do
+        -- The identifier, the equation and the value the kernel used, so Lean
+        -- eliminates the same one: `Ampheck.Calc.exists_eq_elim` with the
+        -- equation projected out of the body.
+        let some (layer, v, i, t, _) := (Prog.onePointAll S).find? (·.2.2.2.2 == T)
+          | throwError "Ampheck: no such one-point reading"
+        let (pre, body) := Prog.exPrefix S
+        let some (ids0, d0) := pre.head? | throwError "Ampheck: not a quantifier"
+        if layer != 0 || ids0.head? != some v then
+          throwError "Ampheck: one point on an inner quantifier"
+        let t' ← term scL .number t
+        -- From a proof `hx` of the body under `∃v`, the proof of `v = t`.
+        let rec conjCount : Expr → Nat
+          | .bin .and l r => conjCount l + conjCount r
+          | _ => 1
+        let rec proj (e : Expr) (k : Nat) (h : Term) : CommandElabM Term := do
+          match e with
+          | .bin .and l r =>
+              let n := conjCount l
+              if k < n then proj l k (← `(($h).1)) else proj r (k - n) (← `(($h).2))
+          | _ => return h
+        let eqn := (Expr.conjuncts body)[i]?
+        let rev : Bool := match eqn with
+          | some (.bin .eq l _) => l != .var v
+          | _ => false
+        let guarded (d : Expr) := d == .var "nat"
+        -- The quantifiers after `v`: the rest of its layer, then the inner ones.
+        let inner := (ids0.drop 1).map (·, d0) ++ (pre.drop 1).flatMap fun (ids, d) => ids.map (·, d)
+        -- Open the quantifiers after `v` one by one, then project the equation.
+        let rec opens (cur : Term) (k : Nat) : List (String × Expr) → CommandElabM Term
+          | [] => do
+              let c ← proj body i cur
+              if rev then `(($c).symm) else pure c
+          | (w, d) :: rest => do
+              let hg := mkIdent (Name.mkSimple s!"hg{k}")
+              let next ← if guarded d then `(($hg).2) else pure hg
+              let inner ← opens next (k + 1) rest
+              `(Exists.elim $cur (fun $(ident w) $hg => $inner))
+        let hx := mkIdent `hx
+        let start ← if guarded d0 then `(($hx).2) else pure hx
+        let h ← `(fun $(ident v) $hx => $(← opens start 0 inner))
+        let pf ← `((show $S' = $T' from Eq.trans (Ampheck.Calc.exists_eq_elim $t' $h)
+          (by simp only [eq_self_iff_true, true_and, and_true] <;> ampheck_ac)))
+        pure (pf, How.rule, true, true)
+    | some .domain, _ =>
+        -- The theorem's own hypothesis that the variable is in its domain.
+        let pf ← `((show $S' = $T' from eq_true (by assumption)))
+        pure (pf, How.rule, true, true)
+    | some _, _ =>
+        let pf ← `((show $S' = $T' by ampheck_rule))
+        pure (pf, How.rule, true, true)
+    | none, some v => do
+        if v.twin.isEmpty then throwError s!"Ampheck: {v.law} has no Lean twin"
+        let σ := s.subst ++ c.bind
+        let lawEnv := theoremTys [] [unMVar v.lhs, unMVar v.rhs] ++
+          (match v.premise with | some q => theoremTys [] [unMVar q] | none => [])
+        let insts ← if v.vars.isEmpty && !v.twinArgs.isEmpty then
+            -- An earlier theorem: its twin is applied to the identifiers it is
+            -- stated over, and their guards.
+            v.twinArgs.flatMapM fun x => do
+              let isNat := p.state.any fun (y, d) => (y == x || prime y == x) && d == .var "nat"
+              let a ← term scL .boolean (.var x)
+              if isNat then return [a, ← `((by assumption))] else return [a]
+          else v.vars.mapM fun x => do
+            let some e := σ.lookup x | throwError s!"Ampheck: {v.law} leaves {x} unbound"
+            term scL ((tyIn scL.env e).getD ((lawEnv.lookup x).getD .boolean)) e
+        let twinId := mkIdent v.twin.toName
+        let inst ← `(($twinId $(insts.toArray)*))
+        let inst ← if v.kind == "cond" || v.kind == "condFlip" then
+            `(($inst (by ampheck_step))) else pure inst
+        let L := v.lhs.instantiate σ
+        let L' ← term scL sty L
+        let formIsEq := match v.lhs with | .bin .eq _ _ => true | _ => false
+        if v.op == .eq then
+          let base ← match v.kind with
+            | "flip" | "condFlip" => `(($inst).symm)
+            | "eqTop" => if v.flipped && formIsEq then `(eq_true ($inst).symm) else `(eq_true $inst)
+            | "topEq" =>
+                let form := v.rhs
+                let fe := match form with | .bin .eq _ _ => true | _ => false
+                if v.flipped && fe then `((eq_true ($inst).symm).symm) else `((eq_true $inst).symm)
+            | _ => pure inst
+          let pf ← if S == L then `((show $S' = $T' from $base))
+            else `((show $S' = $T' from Eq.trans (show $S' = $L' by ampheck_ac) $base))
+          pure (pf, How.twin, true, true)
+        else if sty == .boolean then
+          -- `S ⇒ T` is `S → T`; `S ⇐ T` is `T → S`.
+          let fwd := v.op == .imp
+          let pf ← if S == L then
+              if fwd then `((show $S' → $T' from $inst)) else `((show $T' → $S' from $inst))
+            else if fwd then
+              `((show $S' → $T' from fun h => $inst (Eq.mp (show $S' = $L' by ampheck_ac) h)))
+            else
+              `((show $T' → $S' from fun h => Eq.mpr (show $S' = $L' by ampheck_ac) ($inst h)))
+          pure (pf, How.twin, false, fwd)
+        else throwError "Ampheck: a number step in a direction is not replayed yet"
+    | none, none => throwError "Ampheck: no certificate"
+  let leafFn ← lams (binders ++ guardBinders) leafProof
+  -- The leaf applied at the hole, to the place's identifiers as the context
+  -- names them and to the guards the context has in scope for them.
+  let leafAt : Scope → CommandElabM Term := fun sc' => do
+    let as ← args.mapM fun v => term sc' .boolean (.var v)
+    let gs := natArgs.map fun v => guardHyp (ident (sc'.name v)).getId.toString
+    `($leafFn $(as.toArray)* $(gs.toArray)*)
+  let A' ← term sc ty a
+  let B' ← term sc ty b
+  let CS' ← term sc ty (fill S ctx)
+  let CT' ← term sc ty (fill T ctx)
+  if isEq && !natArgs.isEmpty then
+    -- An equality under guards: both directions by monotonicity, each using
+    -- the guards the context supplies.
+    -- At the hole, either direction of the equality, as the position asks.
+    let leafEq : Scope → Bool → CommandElabM Term := fun sc' w => do
+      if w then `(Eq.mp $(← leafAt sc')) else `(Eq.mpr $(← leafAt sc'))
+    let mp ← mono leafEq sc true ctx
+    let mpr ← mono leafEq sc false ctx
+    let core ← `(propext (Iff.intro $mp $mpr))
+    let e ← `(Eq.trans (show $A' = $CS' by ampheck_ac)
+      (Eq.trans (show $CS' = $CT' from $core) (show $CT' = $B' by ampheck_ac)))
+    let pf ← if ty == .boolean then `(Iff.of_eq $e) else pure e
+    return (pf, how)
+  if isEq then
+    let H := mkIdent `H
+    let resTy ← leanTy sty
+    let τ ← binders.foldrM (fun (_, t) acc => `($t → $acc)) resTy
+    let C' ← term { sc with hole := some (H, args) } ty ctx
+    let funexts ← binders.foldrM (fun (x, t) acc => `(funext fun ($x : $t) => $acc))
+      (← `($leafFn $(binders.toArray.map (·.1))*))
+    let core ← `(congrArg (fun ($H : $τ) => $C') $funexts)
+    let e ← `(Eq.trans (show $A' = $CS' by ampheck_ac)
+      (Eq.trans (show $CS' = $CT' from $core) (show $CT' = $B' by ampheck_ac)))
+    let pf ← if ty == .boolean then `(Iff.of_eq $e) else pure e
+    return (pf, how)
+  else
+    let want := c.op == .imp
+    let leafDir : Scope → Bool → CommandElabM Term := fun sc' w => do
+      if w != fwd then throwError "Ampheck: the law goes the other way here"
+      leafAt sc'
+    let core ← mono leafDir sc want ctx
+    if want then
+      let pf ← `((show Ampheck.Calc.Imp $A' $B' from fun h =>
+        Eq.mp (show $CT' = $B' by ampheck_ac)
+          ((show $CS' → $CT' from $core) (Eq.mp (show $A' = $CS' by ampheck_ac) h))))
+      return (pf, how)
+    else
+      let pf ← `((show Ampheck.Calc.Rimp $A' $B' from fun h =>
+        Eq.mpr (show $A' = $CS' by ampheck_ac)
+          ((show $CT' → $CS' from $core) (Eq.mpr (show $CT' = $B' by ampheck_ac) h))))
+      return (pf, how)
+
+/-- State one step as a lemma of its own, `name`, over the theorem's binders,
+proved by `pf`; elaborated once, synchronously. `none` when Lean accepts it, and
+the lemma is then in the environment for the theorem to cite; otherwise the
+first error, with the environment and the message log as they were. -/
+def defineStep (name : Ident) (bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder))
+    (rel pf : Term) : CommandElabM (Option String) := do
+  let saved ← get
+  let cmd ← `(command|
+    open Classical in set_option Elab.async false in theorem $name:ident $bs* : $rel := $pf)
+  elabCommand cmd
+  let errs := (← get).messages.toList.filter (·.severity == .error)
+  let before := saved.messages.toList.filter (·.severity == .error) |>.length
+  if errs.length > before then
+    let msg ← (errs.drop before).head!.data.toString
+    if (← IO.getEnv "AMPHECK_DEBUG").isSome then
+      _root_.Lean.logInfo m!"certificate proof failed:\n{cmd}\n{msg}"
+    set saved
+    return some ((msg.splitOn "\n").headD "")
+  else return none
+
+/-- The proof of one step, from `a` to `b` with the connective `o`: from the
+certificates when the kernel checked the step by laws or rules, and by
+automation otherwise. -/
+def stepProof (name : Ident) (args : Array Ident)
+    (bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder)) (env : Tys) (p : Prog)
+    (ty : Ty) (unfold : Array Ident) (a b : Expr)
+    (o : BinOp) (sc : StepCheck) : CommandElabM (Term × How) := do
+  let use ← `(($name $args*))
+  let scope : Scope := { env := env, prog := p }
+  let A' ← term scope ty a
+  let B' ← term scope ty b
+  let rel ← link ty o A' B'
+  let auto (why : String) : CommandElabM (Term × How) := do
+    let lemmas : Array (TSyntax `Lean.Parser.Tactic.simpLemma) ←
+      unfold.mapM fun i => `(Lean.Parser.Tactic.simpLemma| $i:ident)
+    let pf ← if unfold.isEmpty then `((show $rel from by ampheck_step))
+      else `((show $rel from by (try simp only [$lemmas,*] at *) <;> ampheck_step))
+    -- Automation's own failure is a real error, and is left to be reported.
+    let _ ← defineStep name bs rel pf
+    return (use, How.auto why)
+  let certs := match sc with
+    | .law _ cs => cs
+    | .lawIf _ _ cs => cs
+    | .lean _ => []
+  match sc with
+  | .lean h => auto s!"‘{h}’ names no law"
+  | _ =>
+    if certs.isEmpty then auto "no certificate" else
+    try
+      -- The lines the applications pass through: the written line first, the
+      -- written line last, and what the kernel wrote between.
+      let mids := (certs.dropLast).map (·.dst)
+      let froms := a :: mids
+      let tos := mids ++ [b]
+      let mut links : List Term := []
+      let mut hows : List How := []
+      for ((x, y), cert) in (froms.zip tos).zip certs do
+        let (pf, h) ← certLink env p ty x y cert
+        links := links ++ [pf]
+        hows := hows ++ [h]
+      let chain ← match links with
+        | l :: ls => ls.foldlM (fun acc x => `(Trans.trans $acc $x)) l
+        | [] => throwError "no links"
+      -- The applications may add up to more than the written connective claims
+      -- (an equality where `⇒` is written); then the claim is weakened.
+      let pf ← `((show $rel from by
+        first
+          | exact $chain
+          | exact ($chain).mp
+          | exact ($chain).mpr
+          | exact Int.le_of_eq $chain
+          | exact Int.le_of_eq ($chain).symm
+          | exact Int.le_of_lt $chain))
+      let how := if hows.all (· == How.twin) then How.twin
+        else if hows.any (· == How.rule) then How.rule else How.twin
+      match ← defineStep name bs rel pf with
+      | none => return (use, how)
+      | some err => auto s!"the certificate's proof failed: {err}"
+    catch e => auto s!"{← e.toMessageData.toString}"
+
+/-- The Lean command a checked calculation translates to, and how each step
+was proved. -/
+def theoremCmd (c : Checked) : CommandElabM (Syntax × List How) := do
+  let t := c.thm
+  let p := t.cx.prog
+  let exprs := t.claim :: t.lines.map (·.expr)
+  let env := theoremTys (stateTys p) exprs
+  let sc : Scope := { env := env, prog := p }
+  -- The theorem is about its free identifiers, and — when any line is written in
+  -- programming notation — about the whole state before and after.
+  let names := Proof.theoremParams p t.claim (t.lines.map (·.expr))
+  let lines ← t.lines.mapM fun l => term sc c.ty l.expr
+  let claim ← term sc .boolean t.claim
+  -- The named specifications are unfolded before each step is proved.
+  let unfold : Array Ident := (p.specs.map fun (n, _) => ident n).toArray
+  let _ := lines
+  let mut binders : Array Syntax := #[]
+  let mut args : Array Ident := #[]
+  for n in names do
+    let ty ← leanTy ((env.lookup n).getD .boolean)
+    binders := binders.push (← `(bracketedBinder| ($(ident n) : $ty)))
+    args := args.push (ident n)
+    -- A natural state variable, or its prime, is at least zero.
+    let isNat := p.state.any fun (v, d) => (v == n || prime v == n) && d == .var "nat"
+    if isNat then
+      let h := mkIdent (Name.mkSimple ("h_" ++ (ident n).getId.toString))
+      binders := binders.push (← `(bracketedBinder| ($h : 0 ≤ $(ident n))))
+      args := args.push h
+  let bs : Array (TSyntax `Lean.Parser.Term.bracketedBinder) := binders.map (⟨·⟩)
+  let pairs := t.lines.zip (t.lines.drop 1)
+  -- Each step is a lemma of its own, `NAME.stepK`, elaborated once; the
+  -- theorem chains them.
+  let base := Proof.twinName t.name
+  let proofs ← ((pairs.zip c.steps).zipIdx).mapM fun (((la, lb), st), k) =>
+    stepProof (mkIdent (Name.mkStr (Name.mkSimple base) s!"step{k + 1}")) args bs env p c.ty
+      unfold la.expr lb.expr (lb.conn.getD .eq) st
+  let links := proofs.map (·.1)
+  let chain ← match links with
+    | l :: ls => ls.foldlM (fun acc x => `(Trans.trans $acc $x)) l
+    | [] => throwError "Ampheck: a calculation needs two lines"
+  let bottom := (t.lines.getLast?.map (·.expr)).getD .top
+  let first := (t.lines.head?.map (·.expr)).getD .top
+  let whole := (Ampheck.Expr.bin c.rel first bottom).normAssoc == t.claim.normAssoc
+  let body ← if whole then
+      (if c.ty == .boolean && c.rel == .eq then `(propext $chain) else pure chain)
+    else match c.rel, bottom with
+    | .eq, .top => if c.ty == .boolean then `(($chain).mpr trivial) else pure chain
+    | .rimp, .top => `(($chain) trivial)
+    | .eq, .bot => if c.ty == .boolean then `(fun h => ($chain).mp h) else pure chain
+    | .imp, .bot => `(fun h => ($chain) h)
+    | _, _ => pure chain
+  let declName := mkIdent (Name.mkSimple (Proof.twinName t.name))
+  let cmd ← `(open Classical in theorem $declName:ident $bs* : $claim := $body)
+  return (cmd, proofs.map (·.2))
+
+/-- `ampheck_proofs "file"` checks every calculation of a calculation file with the
+Ampheck kernel, then elaborates each as a Lean theorem named after it (spaces
+becoming `_`), in the current namespace. The path is relative to the Lean file
+the command appears in. -/
+syntax (name := ampheckProofs) "ampheck_proofs " str : command
+
+open _root_.Lean Elab Command in
+@[command_elab ampheckProofs] def elabAmpheckProofs : CommandElab := fun stx => do
+  let p := stx[1].isStrLit?.getD ""
+  let dir := (System.FilePath.mk (← getFileName)).parent.getD (System.FilePath.mk ".")
+  let path := dir / p
+  let text ← IO.FS.readFile path
+  let _ := text
+  let f ← match ← (Proof.load path).toBaseIO with
+    | .ok f => pure f
+    | .error e => throwError s!"{e}"
+  match Proof.checkParsed f with
+  | .error e => throwError s!"{path}: {e}"
+  | .ok cs =>
+      -- The specifications this file names become Lean definitions, in the
+      -- order they were named; those of the files it extends are the Lean
+      -- definitions of those files' own modules, which the importing module
+      -- must have open.
+      let mut prog : Prog := { state := f.cx.prog.state }
+      let own := f.ownSpecs
+      for (n, body) in f.cx.prog.specs do
+        if own.contains n then
+          withRef stx (elabCommand (← specCmd prog n body))
+        prog := { prog with specs := prog.specs ++ [(n, body)] }
+      for c in cs do
+        let (cmd, hows) ← theoremCmd c
+        -- `AMPHECK_TRACE=1` prints each Lean theorem before it is elaborated.
+        if (← IO.getEnv "AMPHECK_TRACE").isSome then logInfo m!"{cmd}"
+        let before := (← get).messages.toList.filter (·.severity == .error) |>.length
+        withRef stx (elabCommand cmd)
+        let after := (← get).messages.toList.filter (·.severity == .error) |>.length
+        if after > before then
+          logError m!"Lean could not prove a step of {c.thm.name} (line {c.thm.lineNo}); \
+            the statement it was proving:\n{cmd}"
+        else
+          let tw := (hows.filter (· == How.twin)).length
+          let ru := (hows.filter (· == How.rule)).length
+          let au := hows.filterMap fun h => match h with | .auto w => some w | _ => none
+          logInfo m!"{c.summary}\nin Lean: {tw} from the laws' twins, {ru} by rule tactics, \
+            {au.length} by automation{if au.isEmpty then "" else
+              " (" ++ String.intercalate "; " au.eraseDups ++ ")"}"
+
+end Ampheck.ToLean

@@ -1,0 +1,11 @@
+import VersoManual
+import VersoBlueprint.PreviewManifest
+import Aptop.Blueprint
+
+open Verso.Genre Manual
+
+def main (args : List String) : IO UInt32 :=
+  Informal.PreviewManifest.blueprintMainWithPreviewData
+    (%doc Aptop.Blueprint)
+    args
+    (extensionImpls := by exact extension_impls%)

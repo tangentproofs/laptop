@@ -3,7 +3,7 @@
 .build/
 _out/
 
-# netty-web: npm's tree and what the TypeScript compiler writes
-netty-web/node_modules/
-netty-web/dist/
-netty-web/public/js/
+# ampheck-web: npm's tree and what the TypeScript compiler writes
+ampheck-web/node_modules/
+ampheck-web/dist/
+ampheck-web/public/js/

@@ -1,7 +1,7 @@
 # STUB — do NOT install or enable.
 # The interpreter web wrapper is not ready. CLI remains `lake exe interp`.
 # When a Node (or other) wrapper exists, bind loopback only on :4712 and
-# mirror aptop-netty.service (User=michal, MemoryMax honest for Lean+runner).
+# mirror aptop-ampheck.service (User=michal, MemoryMax honest for Lean+runner).
 # Until then, /interp/ is a static coming-soon page under deploy/aptop/site/.
 
 [Unit]

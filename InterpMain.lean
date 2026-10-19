@@ -1,10 +1,10 @@
-import LaPToP.ProgramTheory.B4Lang
-import LaPToP.ProgramTheory.Alloc
+import Aptop.ProgramTheory.B4Lang
+import Aptop.ProgramTheory.Alloc
 
 /-!
 # `interp`: running programs of the aPToP interpreter from a shell
 
-A thin command-line wrapper over `LaPToP.ProgramTheory.Interpreter`. It parses a
+A thin command-line wrapper over `Aptop.ProgramTheory.Interpreter`. It parses a
 program in the concrete syntax of `Interpreter.Lang`, runs it with `run` (one
 poststate, the deterministic fragment) or searches with `runAll` (every
 poststate, so a choice can backtrack), with `runT`/`runAllT` in place of those on
@@ -12,14 +12,14 @@ a state with a clock, and prints the final state. No semantics lives here: the
 parser, the interpreter and their theorems are in the library, and this file is
 argument handling and printing.
 
-The Verso blueprint generator is `LaPToPMain`; this is a separate executable and
+The Verso blueprint generator is `AptopMain`; this is a separate executable and
 does not touch it.
 -/
 
-open LaPToP.ProgramTheory.Interpreter
-open LaPToP.ProgramTheory.Interpreter.Lang
-open LaPToP.ProgramTheory.Interpreter.Timed (TState runT runAllT renderTime)
-open LaPToP.ProgramTheory.Interpreter.Demo (Toks)
+open Aptop.ProgramTheory.Interpreter
+open Aptop.ProgramTheory.Interpreter.Lang
+open Aptop.ProgramTheory.Interpreter.Timed (TState runT runAllT renderTime)
+open Aptop.ProgramTheory.Interpreter.Demo (Toks)
 
 /-- What the command line asked for. -/
 structure Options where
@@ -299,10 +299,10 @@ def runSelfTest : IO UInt32 := do
      ("sort", ["n", "A"], Lang.Demo.sortToks, Function.update (given [(0, 6)]) 1
        (.list ([5, 3, 9, 1, 4, 2].map .int)))]
   -- The allocator: read from its source, it is the statement proved (Alloc.alloc_sEval).
-  let allocToks := (tokenize (LaPToP.ProgramTheory.Alloc.allocSrc.length + 1) LaPToP.ProgramTheory.Alloc.allocSrc.toList).toOption.getD []
+  let allocToks := (tokenize (Aptop.ProgramTheory.Alloc.allocSrc.length + 1) Aptop.ProgramTheory.Alloc.allocSrc.toList).toOption.getD []
   match parseB4 ["n", "M"] allocToks with
   | .ok bp =>
-    if reprStr bp.procs == reprStr [LaPToP.ProgramTheory.Alloc.allocStmt] then
+    if reprStr bp.procs == reprStr [Aptop.ProgramTheory.Alloc.allocStmt] then
       IO.println "ok    alloc: the source reads as the allocator proved in Alloc"
     else IO.eprintln "FAIL  alloc: the source does not read as the proved allocator"; bad := bad + 1
   | .error e => IO.eprintln s!"FAIL  alloc: {e}"; bad := bad + 1

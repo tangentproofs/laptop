@@ -35,7 +35,7 @@ a:hover { text-decoration: underline; }
   padding: 0 1.25rem 3rem;
 }
 
-/* Top nav is full-bleed (same chrome as /netty/), body content stays in .wrap. */
+/* Top nav is full-bleed (same chrome as /ampheck/), body content stays in .wrap. */
 header.site {
   display: flex;
   flex-wrap: wrap;

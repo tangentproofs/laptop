@@ -245,7 +245,7 @@ export function insertIntoEditor(view, text) {
  * One Symbols control for the whole editor.
  *
  * mode:
- *   - "dock"  — always-visible side panel (desktop / Netty-suggestions style)
+ *   - "dock"  — always-visible side panel (desktop / Ampheck-suggestions style)
  *   - "sheet" — one button + popover / bottom sheet (mobile)
  *   - "auto"  — dock when viewport ≥ 900px, sheet otherwise (default)
  *

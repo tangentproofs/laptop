@@ -161,6 +161,6 @@
    "inputRev": "main",
    "inherited": true,
    "configFile": "lakefile.lean"}],
- "name": "LaPToP",
+ "name": "Aptop",
  "lakeDir": ".lake",
  "fixedToolchain": false}

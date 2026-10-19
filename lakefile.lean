@@ -5,7 +5,7 @@ require VersoBlueprint from git
   "https://github.com/tangentforks/verso-blueprint" @ "bump/lean-4.35"
 
 -- The b4 virtual machine, which Hehner's language is compiled to
--- (`LaPToP.ProgramTheory.CompileB4`). Pinned to a commit of the branch carrying
+-- (`Aptop.ProgramTheory.CompileB4`). Pinned to a commit of the branch carrying
 -- its formalization until that is merged.
 require b4 from git
   "https://github.com/tangentstorm/b4" @ "e5827437f9d287b0e150de3ad62020885b76e1d6" / "imp/lean"
@@ -14,33 +14,33 @@ require b4 from git
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4" @ "09a9e06e4e5ccd5b783f25e52ad3ebecfb1e2d68"
 
-package «LaPToP» where
+package «Aptop» where
   precompileModules := false
   leanOptions := #[⟨`experimental.module, true⟩]
 
 @[default_target]
-lean_lib «LaPToP» where
+lean_lib «Aptop» where
 
--- The interpreter command line (`lake exe interp`). `LaPToPMain` stays the Verso
+-- The interpreter command line (`lake exe interp`). `AptopMain` stays the Verso
 -- blueprint generator; this is a separate root and a separate executable.
 lean_exe «interp» where
   root := `InterpMain
 
--- Blueprint/docs target (Verso docs path). Also covered by default via LaPToP.lean.
-lean_lib «LaPToPBlueprint» where
+-- Blueprint/docs target (Verso docs path). Also covered by default via Aptop.lean.
+lean_lib «AptopBlueprint» where
   globs := #[
-    `LaPToP.Blueprint,
-    .submodules `LaPToP.Chapters,
+    `Aptop.Blueprint,
+    .submodules `Aptop.Chapters,
   ]
 
--- Netty: the calculational proof assistant's kernel. It is deliberately free of
--- Mathlib and of LaPToP, so `lake build Netty` is fast and the kernel's own
--- soundness checks are self-contained. Precompiled, so the `netty_proof` command
--- that checks calculations while LaPToP builds runs as native code rather than in
+-- Ampheck: the calculational proof assistant's kernel. It is deliberately free of
+-- Mathlib and of Aptop, so `lake build Ampheck` is fast and the kernel's own
+-- soundness checks are self-contained. Precompiled, so the `ampheck_proof` command
+-- that checks calculations while Aptop builds runs as native code rather than in
 -- the interpreter.
-lean_lib «Netty» where
+lean_lib «Ampheck» where
   precompileModules := true
 
--- The headless Netty command line (`lake exe netty`).
-lean_exe «netty» where
-  root := `NettyMain
+-- The headless Ampheck command line (`lake exe ampheck`).
+lean_exe «ampheck» where
+  root := `AmpheckMain

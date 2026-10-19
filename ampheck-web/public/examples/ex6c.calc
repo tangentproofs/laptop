@@ -1,0 +1,11 @@
+# aPToP Exercise 6(c) — Ampheck-applicable steps.
+
+laws boolean
+
+theorem ex6c: ¬a ⇒ (a ⇒ b)
+    ¬a ⇒ (a ⇒ b)                   portation
+=   ¬a ∧ a ⇒ b                     symmetry
+=   a ∧ ¬a ⇒ b                     inclusion
+=   ¬(a ∧ ¬a) ∨ b                  noncontradiction
+=   ⊤ ∨ b                          base
+=   ⊤

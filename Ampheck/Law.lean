@@ -1,0 +1,608 @@
+import Ampheck.Parser
+
+/-!
+# Laws, their variants, and matching
+
+A *law* is an optional name and a boolean expression, exactly as the Netty
+document describes a line of a law file. The expression's identifiers are
+universally quantified: the document notes that the law written `a ∧ b ⇒ a` is
+really `∀a, b: bool· a ∧ b ⇒ a`, and that its application is what unification
+with the line before the focus decides. A law file line may make that
+quantifier explicit (`∀a, b· a ∧ b ⇒ a`); otherwise every identifier of the
+line is taken to be quantified. A law with *no* quantified variables is a
+ground fact about particular identifiers — that is what the laws in the
+context pane are.
+
+## Variants
+
+The document: "For each law, there are potentially six variants. If the main
+operator can appear in the left margin of a proof, then the reversed law is a
+variant … And any law has a variant with `=T` appended and another with `T=`
+prepended." So `a ∧ b ⇒ a` has the six variants
+
+```
+a ∧ b ⇒ a        a ⇐ a ∧ b
+(a ∧ b ⇒ a) = ⊤  (a ⇐ a ∧ b) = ⊤
+⊤ = (a ∧ b ⇒ a)  ⊤ = (a ⇐ a ∧ b)
+```
+
+and a law whose main operator cannot appear in the margin has only the two
+`⊤` variants. A variant is a triple `lhs op rhs` with `op` a direction; the
+line before the focus is matched against `lhs`, and `rhs` under the resulting
+substitution is what the suggestion offers.
+
+A law of the form `Q ⇒ P` or `P ⇐ Q` has one more reading, the *conditional* one
+(`Law.conditional`), where it is `P` and not the implication that stands in the
+margin, with `Q` left over as a premise. `x ≤ x + y ⇐ 0 ≤ y` is a step a boolean
+line can take as it is written — its main operator is `⇐` — and only this reading
+makes it a step a *number* line can take, `≤` being a number direction. The
+premise is not a new kind of obligation: `Doc.suggestions` asks whether the laws
+in force settle it (`Law.settles`), and if they do not, taking the step leaves the
+same gap direct entry leaves, with the premise recorded as what would close it.
+
+## Matching
+
+Matching is one-way: law variables (`Expr.mvar`) are the only things that bind,
+so a law about `a` and a proof about `a` cannot capture one another.
+
+It is also *modulo the names a quantifier binds*. A law about `∀x: d· b` has to
+read a line about `∀i: nat· i ≥ 0`, so matching a quantifier against a quantifier
+renames the pattern's own binder names to the line's before the bodies are
+matched, and remembers the renaming (`Expr.binderKey`) so that `Expr.instantiate`
+puts the line's names into the law's other side. The two quantifiers must be the
+same one and bind the same number of identifiers; nothing else about the binder is
+read. The renaming is by *visible* name, which is weaker than the document's stack
+of internal names — see `Expr.renameVars`.
+
+It is *modulo associativity, symmetry and the identity element* — the three
+things the document says a user need not write an associative, symmetry or
+identity law to get. The document says that clicking any operand of `a + b + c`
+zooms in to it, with no need of associative laws; applying a law reads a line
+the same way.
+
+**Associativity.** When the pattern is an association of an associative
+operator, both it and the line are flattened (`Expr.flattenOp`) and the line's
+operands are shared out among the pattern's, each group rebuilt left-associated
+(`Expr.rebuildOp`). So `a ∧ b ⇒ a` sees `x ∧ y ∧ z` as `x ∧ (y ∧ z)` as readily
+as `(x ∧ y) ∧ z`. A pattern operand that is not a law variable can only take one
+operand: the pattern was flattened too, so no operand of it is an association of
+that same operator, and an association is all a longer group can be.
+
+**Symmetry.** For an operator the document declares symmetric (`BinOp.comm`:
+`∧ ∨ = ⧧` and `+ ×`), the group a pattern operand takes need not be contiguous:
+`Expr.shares` offers every sub-list of what is left, each keeping the line's own
+order inside it. So `a ∧ b ⇒ a` reads `x ∧ y ∧ z` as `y ∧ (x ∧ z)` and offers
+`y`, and `x ∧ y` matches `y ∧ x`. A symmetric operator that is *not* an
+association — `=` and `⧧` — is matched by trying its two operands both ways
+round instead.
+
+**The identity element.** For an operator the document names a unit for
+(`BinOp.identity`: `⊤` for `∧`, `⊥` for `∨`, `0` for `+`, `1` for `×`), a
+pattern operand that *is* that unit may take no operands at all, so a law
+written `x + 0` reads the line `n`; and a unit the line writes may be struck out
+of it (`Expr.lineForms`), so `a ∧ a` reads `x ∧ ⊤ ∧ x`. Only a pattern operand
+that is literally the unit may take nothing — a law variable never quietly binds
+to a unit the line does not mention, which is what keeps `a ∧ b ⇒ a` from
+matching every line there is.
+
+Readings that need no rearrangement are offered first: `Expr.shares` puts the
+contiguous prefixes, shortest first, before the sub-lists that only symmetry
+allows. A match can succeed in many ways, so `Expr.matchAll` returns every one
+of them — deduplicated, since symmetry and the identity can reach the same
+substitution by more than one route — and the suggestion pane shows one
+suggestion for each.
+
+None of this is a new *step*: a law is still applied by matching a line and
+writing the variant's right side, and the line and the matched left side differ
+only by an associativity, a symmetry or a unit, all of which are equalities. So
+no soundness argument is added — which is what `ampheck --selftest` checks by
+evaluation, every suggestion the whole law list offers for a battery of lines
+having to be a true step.
+
+The recursion is bounded by fuel rather than by a well-founded measure, and the
+fuel is the pattern's size. One unit is spent per level of the pattern — every
+recursive call is on an operand of the pattern, whose height is one less — and
+an expression's height is at most its size, so the fuel cannot run out. Fuel is
+what keeps the matcher *structurally* recursive, and that is what lets `decide`
+run a whole proof session inside Lean's kernel in `Ampheck.Replay`. A line that is
+not an association of the pattern's operator at all is rejected before any of
+the sharing out begins, unless the pattern mentions that operator's unit, so the
+common case costs what it always did.
+
+## Soundness
+
+`Law.isTautology` decides whether a law with at most eight variables is true
+under every boolean assignment. It is what `Ampheck.Laws` uses to check, inside
+Lean, that every law the kernel ships with really is a law.
+-/
+
+namespace Ampheck
+
+/-- A law: an optional name, its universally quantified variables, and its
+statement, in which those variables appear as `Expr.mvar`. -/
+structure Law where
+  /-- The law's name; `""` when the law file gave none. -/
+  name : String := ""
+  /-- The universally quantified variables. -/
+  vars : List String := []
+  /-- The statement, with `vars` appearing as `Expr.mvar`. -/
+  stmt : Expr
+  /-- The name of the law's *Lean twin*: the Lean theorem that states it
+  (`Ampheck.Twins`), which the translation of a calculation cites for every step
+  the law takes. `""` when there is none, and then a step by the law is proved
+  by Lean's automation instead, and said to be. -/
+  twin : String := ""
+  /-- For a law that is an earlier theorem of a calculation file, the
+  identifiers its twin — that theorem — is stated over, in order: the twin is
+  applied to them rather than to law variables, which such a law has none of. -/
+  twinArgs : List String := []
+  deriving Repr, DecidableEq, Inhabited
+
+/-- One of the (at most six) ways a law can be read as a proof step: match a
+line against `lhs`, and the next line is `rhs` joined by the direction `op`. -/
+structure Variant where
+  /-- The name of the law this variant comes from. -/
+  law : String
+  /-- What the line before the focus must match. -/
+  lhs : Expr
+  /-- The connective that will stand in the left margin. -/
+  op : BinOp
+  /-- What the next line will be. -/
+  rhs : Expr
+  /-- What must hold for the step to be licensed, for a *conditional* reading of
+  a law (`Law.conditional`); `none` for the readings that need nothing. -/
+  premise : Option Expr := none
+  /-- Which reading of the law this is, which is what the translation needs to
+  derive the step from the law's twin: `direct` (the law as written), `flip`
+  (its direction reversed), `eqTop`/`topEq` with the form they read (`0` the law
+  as written, `1` reversed), `cond`/`condFlip` (the conditional readings). -/
+  kind : String := "direct"
+  /-- Which form a `⊤` reading reads: `false` the law as written. -/
+  flipped : Bool := false
+  /-- The twin of the law. -/
+  twin : String := ""
+  /-- The law's variables, in the order its twin takes them. -/
+  vars : List String := []
+  /-- What the twin is applied to instead, for a theorem (`Law.twinArgs`). -/
+  twinArgs : List String := []
+  deriving Repr, DecidableEq, Inhabited
+
+/-- A binding of law variables to expressions. -/
+abbrev Subst := List (String × Expr)
+
+namespace Expr
+
+/-- Bind a law variable to an expression, if that agrees with what it is bound
+to already. -/
+def bindMVar (n : String) (e : Expr) (σ : Subst) : List Subst :=
+  match σ.lookup n with
+  | some e' => if e' == e then [σ] else []
+  | none => [(n, e) :: σ]
+
+/-- The key under which a substitution remembers that the pattern's binder `n` is
+the line's binder. A law variable can never be spelled this way — `·` is not a
+character an identifier may contain — so a binder renaming and a law variable
+cannot be mistaken for one another, and `Expr.instantiate` can read both out of
+the one substitution. -/
+def binderKey (n : String) : String := "·" ++ n
+
+/-- Record that the pattern binds `a` where the line binds `c`, for each binder of
+a quantifier, if that agrees with what is recorded already. It does not agree when
+one law mentions the same binder twice and the line binds two different names
+there: `(∀x: d· b) ∧ (∀x: d· c)` reads two quantifiers over the *same* variable
+and nothing else, which is what that law is about. -/
+def bindBinders : List (String × String) → Subst → List Subst
+  | [], σ => [σ]
+  | (a, c) :: rest, σ => (bindMVar (binderKey a) (var c) σ).flatMap (bindBinders rest)
+
+/-- Match one operand of the pattern against the operands of the line it has
+been given, using `m` when it is given exactly one.
+
+Several operands are an association of `op`, and the pattern's operands were
+flattened, so none of them is one: only a law variable can take them. *No*
+operand is `op`'s identity element, where the document names one — that is
+matching modulo identity, and it is how a law that mentions `⊤` in `a ∧ ⊤`
+reads a line that left it out. Only a pattern operand that *is* the identity may
+take none, so a law variable never quietly binds to a unit the line does not
+mention. -/
+def matchSegment (m : Expr → Expr → Subst → List Subst) (op : BinOp)
+    (p : Expr) (es : List Expr) (σ : Subst) : List Subst :=
+  match es with
+  | [] =>
+      match op.identity with
+      | some u => if p == u then [σ] else []
+      | none => []
+  | [e] => m p e σ
+  | _ =>
+      match p, rebuildOp op es with
+      | mvar n, some e => bindMVar n e σ
+      | _, _ => []
+
+/-- Every sub-list of `es`, paired with what is left over, both keeping the
+line's own order. -/
+def subLists : List Expr → List (List Expr × List Expr)
+  | [] => [([], [])]
+  | e :: rest => (subLists rest).flatMap fun (c, r) => [(e :: c, r), (c, e :: r)]
+
+/-- The ways of giving one pattern operand some of the line's operands, with
+the rest left over, in the order they are offered.
+
+The contiguous *prefixes* come first, shortest first: those are the readings
+associativity alone gives, and a reading that needs no rearrangement is always
+offered before one that does. When the operator is symmetric every other
+sub-list follows, each keeping the line's own order inside it — that is matching
+modulo symmetry, and it is why `a ∧ b ⇒ a` can read `x ∧ y ∧ z` as `y ∧ (x ∧ z)`
+and so offer `y`. -/
+def shares (comm : Bool) (es : List Expr) : List (List Expr × List Expr) :=
+  let pres := (List.range (es.length + 1)).map fun k => (es.take k, es.drop k)
+  if comm then pres ++ (subLists es).filter (fun s => !pres.contains s) else pres
+
+/-- Match the pattern's operands against the line's, each pattern operand
+taking some of them and `one` matching it against those. The recursion is on the
+pattern's operands, which is why `one` is a parameter: `matchFuel`'s own
+recursion is on its fuel. -/
+def matchSegments (comm : Bool) (one : Expr → List Expr → Subst → List Subst) :
+    List Expr → List Expr → Subst → List Subst
+  | [], es, σ => if es.isEmpty then [σ] else []
+  | [p], es, σ => one p es σ
+  | p :: ps, es, σ =>
+      (shares comm es).flatMap fun (mine, rest) =>
+        (one p mine σ).flatMap fun σ' => matchSegments comm one ps rest σ'
+
+/-- The readings of the line `e` as operands of `o`: the flattening, and — when
+`o` has an identity element that the line actually writes — the flattening with
+those operands struck out. Striking them out is matching modulo identity from
+the line's side, so `a ∧ a` reads `x ∧ ⊤ ∧ x`. A line that is nothing but units
+is left alone, since striking them all out would leave no line. -/
+def lineForms (o : BinOp) (e : Expr) : List (List Expr) :=
+  let es := flattenOp o e
+  match o.identity with
+  | some u =>
+      let kept := es.filter (· != u)
+      if kept.isEmpty || kept.length == es.length then [es] else [es, kept]
+  | none => [es]
+
+/-- Every way of matching the pattern `pat` against `e`, extending `σ`. Only
+`mvar` binds; an association is matched modulo associativity, symmetry and the
+identity element, following what the document declares of each operator. The
+fuel is spent one unit per level of the pattern. -/
+def matchFuel : Nat → Expr → Expr → Subst → List Subst
+  | 0, _, _, _ => []
+  | _ + 1, mvar n, e, σ => bindMVar n e σ
+  | _ + 1, var n, var m, σ => if n == m then [σ] else []
+  | _ + 1, num n, num m, σ => if n == m then [σ] else []
+  | _ + 1, top, top, σ => [σ]
+  | _ + 1, bot, bot, σ => [σ]
+  | f + 1, neg a, neg b, σ => matchFuel f a b σ
+  -- `if … fi` matches an `if … fi`, condition against condition and branch
+  -- against branch. Nothing is rearranged and nothing is distributed: a law that
+  -- mentions the form reads a line that writes it, and that is all.
+  | f + 1, cond c x y, cond c' x' y', σ =>
+      (matchFuel f c c' σ).flatMap fun σ₁ =>
+        (matchFuel f x x' σ₁).flatMap fun σ₂ => matchFuel f y y' σ₂
+  -- A quantifier matches the same quantifier binding as many identifiers, domain
+  -- against domain and body against body, with the pattern's binder names renamed
+  -- to the line's first. Nothing is rearranged and nothing is instantiated: a law
+  -- that mentions `∀` reads a line that writes one.
+  | f + 1, quant k ids d b, quant k' ids' d' b', σ =>
+      if k == k' && ids.length == ids'.length then
+        let ren := ids.zip ids'
+        (bindBinders ren σ).flatMap fun σ₁ =>
+          (matchFuel f d d' σ₁).flatMap fun σ₂ =>
+            matchFuel f (renameVars ren b) b' σ₂
+      else []
+  | f + 1, bin o l r, e, σ =>
+      if o.assoc || o.identity.isSome then
+        let es := flattenOp o e
+        let ps := flattenOp o (bin o l r)
+        -- `es` is one operand exactly when the line is not an association of
+        -- `o` at all. The pattern has at least two, so all but one of them
+        -- would have to take nothing, which only `o`'s own identity may do.
+        if es.length == 1 && !ps.any (fun p => o.identity == some p) then []
+        else
+          (lineForms o e).flatMap fun line =>
+            matchSegments o.comm (matchSegment (matchFuel f) o) ps line σ
+      else
+        match e with
+        | bin o' l' r' =>
+            if o != o' then []
+            else
+              (matchFuel f l l' σ).flatMap (fun σ' => matchFuel f r r' σ') ++
+                (if o.comm then
+                   (matchFuel f l r' σ).flatMap fun σ' => matchFuel f r l' σ'
+                 else [])
+        | _ => []
+  | _ + 1, _, _, _ => []
+
+/-- Keep the first occurrence of each substitution: symmetry and the identity
+can find one and the same match by more than one route. -/
+def dedupSubst (σs : List Subst) : List Subst :=
+  (σs.foldl (fun acc σ => if acc.contains σ then acc else σ :: acc) []).reverse
+
+/-- Every way of matching the pattern `pat` against `e`, extending `σ`. -/
+def matchAll (pat e : Expr) (σ : Subst) : List Subst :=
+  dedupSubst (matchFuel pat.size pat e σ)
+
+/-- The first way of matching `pat` against `e`, when there is one. -/
+def matchWith (pat e : Expr) (σ : Subst) : Option Subst := (matchAll pat e σ).head?
+
+/-- Replace the law variables bound by `σ`, and rename the identifiers `ren`
+renames, in one pass.
+
+The two go together because of what a quantifier needs. A law read off
+`∀i: nat· …` must write `∃i: nat· …` and not `∃x: nat· …`, so the binder names the
+match renamed (`bindBinders`) are renamed here too, and the renaming goes on into
+the body. It has to be *one* pass and not a rename followed by a substitution:
+what a law variable stands for came from the line, and is already written in the
+line's own names, so renaming must not touch it. That is why `mvar` inserts what
+`σ` gives and recurses no further into it. -/
+def instantiateRen (σ : Subst) (ren : List (String × String)) : Expr → Expr
+  | mvar n => match σ.lookup n with | some e => e | none => mvar n
+  | var n => match ren.lookup n with | some m => var m | none => var n
+  | neg a => neg (instantiateRen σ ren a)
+  | bin o l r => bin o (instantiateRen σ ren l) (instantiateRen σ ren r)
+  | cond c x y =>
+      cond (instantiateRen σ ren c) (instantiateRen σ ren x) (instantiateRen σ ren y)
+  | quant k ids d b =>
+      let ids' := ids.map fun n =>
+        match σ.lookup (binderKey n) with | some (var m) => m | _ => n
+      -- Inside the body, this quantifier's own renaming comes first, so it wins
+      -- over an outer one for a name it shadows.
+      quant k ids' (instantiateRen σ ren d)
+        (instantiateRen σ (ids.zip ids' ++ ren.filter fun p => !ids.contains p.1) b)
+  | e => e
+
+/-- Replace the law variables bound by `σ`; leave the rest alone, except for the
+binder names `σ` says a match renamed (`instantiateRen`). -/
+def instantiate (σ : Subst) : Expr → Expr := instantiateRen σ []
+
+end Expr
+
+namespace Law
+
+/-- The law itself and, when its main operator is a direction, the law with
+that direction reversed. -/
+def forms (l : Law) : List Expr :=
+  match l.stmt with
+  | .bin o a b =>
+      if o.isMargin then
+        match o.flip with
+        | some f => [l.stmt, .bin f b a]
+        | none => [l.stmt]
+      else [l.stmt]
+  | _ => [l.stmt]
+
+/-- The *conditional* readings of a law.
+
+A law of the form `Q ⇒ P` or `P ⇐ Q` whose consequent `P` is itself a relation
+that can stand in a left margin gives a step in *that* margin, with `Q` left over
+as a premise. So `x ≤ x + y ⇐ 0 ≤ y` lets a number line `x + y` be written `x`
+with `≥` in the margin, and a number line `x` be written `x + y` with `≤`,
+provided `0 ≤ y`; and `(a ⇒ b) ⇒ (a ∧ c ⇒ b ∧ c)` lets a boolean line `a ∧ c` be
+written `b ∧ c` with `⇒`, provided `a ⇒ b`.
+
+Both directions of the consequent are offered, as `Law.forms` offers both
+directions of a law: `a op b` is `b op.flip a`, and a premise that licenses the
+one licenses the other.
+
+Every margin connective is read this way, of both types. A *number* law has no
+other reading a number line can take at all — its own main operator is `⇐`, which
+no number margin admits — and that is why this began with numbers only. At the
+boolean level the law is already a step a boolean line can take, so the concern
+was that a second reading would bury the readings that need nothing. Two things
+answer that, and neither is new:
+
+* the conditional readings come **last** in `Law.variants`, so when a law can
+  write one and the same line both with a premise and without, the dedup in
+  `Doc.suggestions` keeps the one that needs nothing; and
+* `Doc.rank` puts every step that needs nothing before every step that leaves a
+  gap, so the pane a user reads down is the pane they read before.
+
+Nothing of the shipped boolean list becomes applicable by this reading *on its
+own*: a monotonicity or transitivity law relates the line to a third formula the
+line does not determine, so matching always leaves a variable free. Those readings
+are rows that say what the law would do and what it would need, and the way to
+take one is to say what the free variable is — the document's small dialog box,
+which `Cmd.apply`'s bindings are. What the reading buys without any of that is the
+*context*: a
+context law is ground, so when the fact a zoom in supplied is itself an
+implication whose consequent is a relation, its conditional reading has nothing
+left unconstrained and is a step that can be taken, licensed by another fact in
+force. That is modus ponens as the document would have a user do it.
+
+The premise is not a new kind of obligation. `Doc.suggestions` instantiates it
+along with the rest of the reading and asks whether the laws in force settle it
+(`Law.settles`); if they do, the step is an ordinary step, and if they do not, it
+is a step with a gap — the document's warning sign, the same one direct entry
+leaves. Nothing is claimed that has not been justified. -/
+def conditional (l : Law) : List Variant :=
+  let name := if l.name.isEmpty then "unnamed law" else l.name
+  match l.stmt with
+  | .bin .imp q (.bin o a b) | .bin .rimp (.bin o a b) q =>
+      if o.isMargin then
+        { law := name, lhs := a, op := o, rhs := b, premise := some q, kind := "cond",
+          twin := l.twin, vars := l.vars, twinArgs := l.twinArgs } ::
+          (match o.flip with
+           | some f => [{ law := name, lhs := b, op := f, rhs := a, premise := some q,
+                          kind := "condFlip", twin := l.twin, vars := l.vars, twinArgs := l.twinArgs }]
+           | none => [])
+      else []
+  | _ => []
+
+/-- The variants of a law: its forms that are already directions, plus each
+form with `= ⊤` appended and with `⊤ =` prepended. -/
+def variants (l : Law) : List Variant :=
+  -- "Laws are not required to have names; any law without a name is labelled
+  -- ‘unnamed law’."
+  let name := if l.name.isEmpty then "unnamed law" else l.name
+  let forms := l.forms.zipIdx
+  let direct := forms.filterMap fun (s, i) =>
+    match s with
+    | .bin o a b =>
+        if o.isMargin then
+          some ({ law := name, lhs := a, op := o, rhs := b,
+                  kind := if i == 0 then "direct" else "flip",
+                  twin := l.twin, vars := l.vars, twinArgs := l.twinArgs } : Variant)
+        else none
+    | _ => none
+  let tops := forms.flatMap fun (s, i) =>
+    [({ law := name, lhs := s, op := .eq, rhs := .top, kind := "eqTop", flipped := i != 0,
+        twin := l.twin, vars := l.vars, twinArgs := l.twinArgs } : Variant),
+     { law := name, lhs := .top, op := .eq, rhs := s, kind := "topEq", flipped := i != 0,
+       twin := l.twin, vars := l.vars, twinArgs := l.twinArgs }]
+  -- The conditional readings come last, so that when a law can write one and the
+  -- same line both with a premise and without, `Doc.suggestions` keeps the one
+  -- that needs nothing.
+  direct ++ tops ++ l.conditional
+
+/-- Whether the laws in force settle `q` outright: whether one of them has an
+unconditional reading that reads `q` and writes `⊤`.
+
+That is the same match the suggestion pane would make on a line holding `q`, so a
+premise is discharged exactly when the tool would have offered to write `⊤` for
+it in one step — by a law of the list, or by a `context` law that zooming in put
+in force, which is where a domain condition such as `0 ≤ y` comes from. One step,
+and by an unconditional reading, so the question cannot recur. An unbound law
+variable in the reading is no obstacle: the law holds for every instantiation, so
+if `q` is an instance of a side that the law equates with `⊤`, `q` is `⊤`. -/
+def settles (laws : List Law) (q : Expr) : Bool :=
+  laws.any fun l => l.variants.any fun v =>
+    v.premise.isNone && v.rhs == .top && (v.op == .eq || v.op == .rimp)
+      && !(Expr.matchAll v.lhs q []).isEmpty
+
+/-- Every assignment of `true`/`false` to the given names. -/
+def assignments : List String → List (List (String × Bool))
+  | [] => [[]]
+  | n :: ns => (assignments ns).flatMap fun σ => [(n, true) :: σ, (n, false) :: σ]
+
+/-- Whether the law is true under every boolean assignment to its variables
+and identifiers. Laws with more than eight names are not checked. -/
+def isTautology (l : Law) : Bool :=
+  let names := l.stmt.mvars ++ l.stmt.vars
+  names.length ≤ 8 &&
+    (assignments names).all fun σ => l.stmt.evalBool σ == some true
+
+/-- Every assignment of the given integers to the given names. -/
+def intAssignments (vals : List Int) : List String → List (List (String × Int))
+  | [] => [[]]
+  | n :: ns => (intAssignments vals ns).flatMap fun σ => vals.map fun v => (n, v) :: σ
+
+/-- Whether the law holds under every assignment of `vals` to its variables and
+identifiers, read as integers.
+
+This is a *test*, not a decision procedure: a law that is false in general can
+hold on a small range of integers, where `Law.isTautology` really settles a
+boolean law. It is what the kernel can check about a number law without doing
+arithmetic, which is out of scope here, and it is offered as evidence and not as
+a proof. Laws with more than four names are not checked. -/
+def holdsOnInts (vals : List Int) (l : Law) : Bool :=
+  let names := l.stmt.mvars ++ l.stmt.vars
+  names.length ≤ 4 &&
+    (intAssignments vals names).all fun σ => l.stmt.evalProp σ == some true
+
+/-- The ground law that a zoom-in adds to the context. -/
+def context (e : Expr) : Law := { name := "context", vars := [], stmt := e }
+
+/-- Write the law back in law-file notation. The quantifier is printed only
+when the default reading — every identifier of the line is quantified — would
+not reproduce the law. -/
+def render (l : Law) : String :=
+  let needsQuantifier := l.vars != l.stmt.mvars || l.stmt.vars != []
+  let body :=
+    (if needsQuantifier then "∀" ++ String.intercalate ", " l.vars ++ "· " else "")
+      ++ l.stmt.render
+  -- A law's name is whatever precedes the first `:` (`Parser.lawLine`), and `:` is
+  -- now an operator. So a law with *no* name whose statement writes one — a
+  -- context law `x: nat`, say — is written with an empty name in front of it,
+  -- rather than left for `x` to be read as its name.
+  (if l.name.isEmpty then (if body.contains ':' then ": " else "")
+   else l.name ++ ": ")
+    ++ body
+
+instance : ToString Law := ⟨render⟩
+
+end Law
+
+namespace Parser
+
+/-- Read the law variables of an explicit `∀a, b·` prefix. -/
+private def lawVars : List Tok → List String → Except String (List String × List Tok)
+  | .dot :: rest, acc | .period :: rest, acc => .ok (acc.reverse, rest)
+  | .ident n :: rest, acc => lawVars rest (n :: acc)
+  | .comma :: rest, acc => lawVars rest acc
+  | t :: _, _ => .error s!"unexpected ‘{t}’ among the law variables"
+  | [], _ => .error "expected ‘·’ after the law variables"
+
+/-- Whether an initial `∀` opens the law line's own binder rather than an
+expression quantifier.
+
+The law line's binder leaves the domain out — the document writes the law
+`a ∧ b ⇒ a` in full as `∀a, b: bool· a ∧ b ⇒ a` and a law file writes it short as
+`∀a, b· a ∧ b ⇒ a` — and an *expression* quantifier may not leave it out, the
+document having excluded the abbreviated forms. So the `:` before the `·` is
+exactly what tells the two apart, and a law file can write either. -/
+private def isLawBinder : List Tok → Bool
+  | .dot :: _ | .period :: _ => true
+  | .op .mem :: _ => false
+  | .ident _ :: rest | .comma :: rest => isLawBinder rest
+  | _ => false
+
+/-- Every identifier of an expression is a law variable, which is what a law file
+line means when it writes no binder of its own. -/
+private def generalizeAll (ts : List Tok) : Except String (List String × Expr) := do
+  let e ← exprOfToks ts
+  let ns := e.vars
+  .ok (ns, e.generalize ns)
+
+/-- Parse the statement of a law: an optional `∀…·` prefix and an expression.
+Without the prefix, every identifier of the expression is quantified — and the
+identifiers a quantifier *inside* the expression binds are not identifiers of it
+(`Expr.vars`), so `∀x: nat· x ≥ 0` is a law about `nat` and not about `x`. -/
+def lawBody (s : String) : Except String (List String × Expr) := do
+  let ts ← tokenize s
+  match ts with
+  | .univ :: rest =>
+      if isLawBinder rest then
+        let (names, body) ← lawVars rest []
+        let e ← exprOfToks body
+        .ok (names, e.generalize names)
+      else generalizeAll ts
+  | _ => generalizeAll ts
+
+/-- Parse one line of a law file. Blank lines and lines whose first
+non-blank character is `#` are comments and yield nothing. A law's name is
+whatever precedes the first `:`; the name may contain spaces.
+
+That rule and the membership operator share the character, so a law whose
+statement writes a `:` has to be given a name — `Law.render` writes an empty one
+rather than a wrong one, and a hand-written line that leaves the name out will
+have its first `:` taken for the name's. -/
+def lawLine (s : String) : Except String (Option Law) := do
+  let t := trim s
+  if t.isEmpty || beginsWith t '#' then return none
+  let (name, body) :=
+    match t.splitOn ":" with
+    | first :: rest@(_ :: _) => (trim first, String.intercalate ":" rest)
+    | _ => ("", t)
+  let (vars, stmt) ← lawBody body
+  return some { name := name, vars := vars, stmt := stmt }
+
+/-- Parse a whole law file. -/
+def lawFile (text : String) : Except String (List Law) :=
+  go 1 (text.splitOn "\n") []
+where
+  go : Nat → List String → List Law → Except String (List Law)
+    | _, [], acc => .ok acc.reverse
+    | n, line :: rest, acc =>
+        match lawLine line with
+        | .error e => .error s!"law file line {n}: {e}"
+        | .ok none => go (n + 1) rest acc
+        | .ok (some l) => go (n + 1) rest (l :: acc)
+
+end Parser
+
+/-- Write a list of laws back as the text of a law file. -/
+def renderLawFile (laws : List Law) : String :=
+  String.intercalate "\n" (laws.map Law.render) ++ "\n"
+
+end Ampheck

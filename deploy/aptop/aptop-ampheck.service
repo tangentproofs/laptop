@@ -1,0 +1,21 @@
+[Unit]
+Description=aptop Ampheck (three-pane + Lean kernel; inspired by Toronto's Netty)
+# Replaces aptop-netty.service (renamed Netty -> Ampheck).
+After=network.target
+
+[Service]
+Type=simple
+User=michal
+WorkingDirectory=/home/michal/ver/laptop/ampheck-web
+Environment=PATH=/home/michal/.elan/bin:/usr/local/bin:/usr/bin:/bin
+Environment=AMPHECK_HOST=127.0.0.1
+Environment=AMPHECK_PORT=4711
+Environment=AMPHECK_CWD=/home/michal/ver/laptop
+Environment=AMPHECK_CMD=/home/michal/ver/laptop/.lake/build/bin/ampheck --serve
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=3
+MemoryMax=768M
+
+[Install]
+WantedBy=default.target

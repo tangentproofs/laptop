@@ -1,7 +1,7 @@
 /**
  * aPToP interpreter-language highlighter for CodeMirror 6 (CDN / no npm).
  *
- * Keywords match LaPToP/ProgramTheory/InterpreterLangSyntax.lean `keywords`.
+ * Keywords match Aptop/ProgramTheory/InterpreterLangSyntax.lean `keywords`.
  * Comments: `--` to end of line. Operators include ASCII and book glyphs.
  * Strings: "…" or '…'.
  */

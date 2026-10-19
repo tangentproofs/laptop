@@ -1,11 +1,11 @@
-# Missing from the LaPToP formalization
+# Missing from the Aptop formalization
 
 This file lists what from Eric Hehner's *A Practical Theory of Programming*
 (aPToP) is **not** formalized in Lean, and why. Coverage of Chapters 1–9
 section-by-section and of the §11.3 law tables is otherwise complete; see
 `README.md`, `.sci/laws-survey.md`, and the Blueprint nodes.
 
-Chapter 10's exercises are in `LaPToP/Exercises/`, one module per section: an
+Chapter 10's exercises are in `Aptop/Exercises/`, one module per section: an
 exercise is either formalized and proved there, or still a deferred stub
 (`Statement n`, with `sorry`), or recorded below as informal. The stubs are not
 proofs and are not Blueprint nodes; see §5 for the count.
@@ -63,11 +63,11 @@ chapter intro; there is no Lean statement.
   The precedence table is compared with the parsers below.
 - **Precedence**: the book's table (Section 11.6) next to the two parsers that
   read the book's notation, the interpreter's language
-  (`InterpreterLangSyntax.lean`, `interp --grammar`) and Netty's
-  (`Netty/Parser.lean`). The first level binds tightest; a dash means the parser
+  (`InterpreterLangSyntax.lean`, `interp --grammar`) and Ampheck's
+  (`Ampheck/Parser.lean`). The first level binds tightest; a dash means the parser
   does not have the operator.
 
-  | level | the book (§11.6) | `interp` | Netty |
+  | level | the book (§11.6) | `interp` | Ampheck |
   | ----- | ---------------- | -------- | ----- |
   | 0 | `⊤ ⊥ ( ) { } [ ] 〈 〉 if fi do od`, numbers, names, superscripts | `⊤ ⊥ ( ) [ ]`, `if … fi` in expressions, numbers, names; `a ^ n` (the superscript) just below juxtaposition, so `-a^2` is `-(a^2)` | `⊤ ⊥ ( )`, `if … fi`, numbers, names |
   | 1 | `@`, adjacency (left to right) | adjacency is indexing: `A i j` is `(A i) j` | — |
@@ -91,19 +91,19 @@ chapter intro; there is no Lean statement.
   - **Continuing operators.** On levels 7, 11 and 16 the book's operators are
     continuing: `a = b = c` means `a = b ∧ b = c`, and `a ≤ b < c` means
     `a ≤ b ∧ b < c`. Neither parser reads them so. The interpreter takes at most
-    one comparison and groups `⇒ ⇐` to the right; Netty groups everything to the
+    one comparison and groups `⇒ ⇐` to the right; Ampheck groups everything to the
     left.
   - **`¬`.** In the interpreter the glyph `¬` binds tightest (`¬x = y` is
     `(¬x) = y`), and the word `not` takes the book's level 8.
   - **`.` and `||`.** The book puts them on one level. The interpreter binds
     `||` tighter, so `P. Q || R` is `P. (Q || R)`.
-  - **Netty's quantifiers.** Their body runs past the large operators, as in the
+  - **Ampheck's quantifiers.** Their body runs past the large operators, as in the
     Netty document's grammar, where the book's level 15 stops at level 16.
   - **`or`.** Program-level choice is on level 13, with `ensure` and `assert`:
     between the assignments of level 12 and the `.` and `||` of level 14. That is
     where the interpreter has it.
 - **Exercise solutions** (hehner.ca/aPToP/solutions): not imported. Chapter 10
-  exercises are being formalized from the book's text in `LaPToP/Exercises/`
+  exercises are being formalized from the book's text in `Aptop/Exercises/`
   (§5).
 
 ## 4. Residual honesty notes (already explained in nodes)
@@ -119,23 +119,23 @@ so “missing” is not confused with “unfinished demo”:
   extended-natural cursors.
 - Open **Collatz conjecture** (termination / finiteness of the time function
   `f` in Exercise 255): *not* a Blueprint node. The Exercise 255 *timing
-  refinements* are proved (`collatz_time` / `LaPToP.ProgramTheory.CollatzTime`).
+  refinements* are proved (`collatz_time` / `Aptop.ProgramTheory.CollatzTime`).
   The conjecture itself remains open mathematics; see stub `exercise_255`.
 
 ## 5. Chapter 10 exercise inventory
 
 | Book § | Theme | Module | Count | Proved | Informal | Stubs left |
 |---|---|---|---|---|---|---|
-| 10.0 | Introduction | `LaPToP.Exercises.Ch0` | 4 | 4 | 0 | 0 |
-| 10.1 | Basic Theories | `LaPToP.Exercises.Ch1` | 37 | 27 | 10 | 0 |
-| 10.2 | Basic Data Structures | `LaPToP.Exercises.Ch2` | 28 | 16 | 12 | 0 |
-| 10.3 | Function Theory | `LaPToP.Exercises.Ch3` | 52 | 38 | 14 | 0 |
-| 10.4 | Program Theory | `LaPToP.Exercises.Ch4` | 185 | 5 | | 180 |
-| 10.5 | Programming Language | `LaPToP.Exercises.Ch5` | 60 | | | 60 |
-| 10.6 | Recursive Definition | `LaPToP.Exercises.Ch6` | 55 | | | 55 |
-| 10.7 | Theory Design and Implementation | `LaPToP.Exercises.Ch7` | 55 | | | 55 |
-| 10.8 | Concurrency | `LaPToP.Exercises.Ch8` | 18 | | | 18 |
-| 10.9 | Interaction | `LaPToP.Exercises.Ch9` | 39 | | | 39 |
+| 10.0 | Introduction | `Aptop.Exercises.Ch0` | 4 | 4 | 0 | 0 |
+| 10.1 | Basic Theories | `Aptop.Exercises.Ch1` | 37 | 27 | 10 | 0 |
+| 10.2 | Basic Data Structures | `Aptop.Exercises.Ch2` | 28 | 16 | 12 | 0 |
+| 10.3 | Function Theory | `Aptop.Exercises.Ch3` | 52 | 38 | 14 | 0 |
+| 10.4 | Program Theory | `Aptop.Exercises.Ch4` | 185 | 5 | | 180 |
+| 10.5 | Programming Language | `Aptop.Exercises.Ch5` | 60 | | | 60 |
+| 10.6 | Recursive Definition | `Aptop.Exercises.Ch6` | 55 | | | 55 |
+| 10.7 | Theory Design and Implementation | `Aptop.Exercises.Ch7` | 55 | | | 55 |
+| 10.8 | Concurrency | `Aptop.Exercises.Ch8` | 18 | | | 18 |
+| 10.9 | Interaction | `Aptop.Exercises.Ch9` | 39 | | | 39 |
 | | **Total** | | **533** | **90** | **36** | **407** |
 
 *Informal* exercises ask to design notation, to explain in words, or to
@@ -145,13 +145,13 @@ parts, named in their module's docstring (4's succinctness, 11(e)–(f),
 15(b)–(d), 19's discussion, 29(c)–(f)).
 
 In §10.4 the proofs are written in aPToP's own notation, as calculation files
-(`LaPToP/Exercises/calc/`), checked step by step by the Netty kernel and
-translated into Lean theorems by `netty_proofs` (`LaPToP.Exercises.Calc`):
+(`Aptop/Exercises/calc/`), checked step by step by the Ampheck kernel and
+translated into Lean theorems by `ampheck_proofs` (`Aptop.Exercises.Calc`):
 121, 136 and 137 (all parts), 139 and 140 (a specification file and an
 implementation extending it) are proved.
 
 Numbering follows the book’s Chapter 10. Exercise **94** is in the book (the
 earlier inventory missed it, and it is now proved); **393** does not appear in
 this edition. A minority of exercises already
-have real developments under `LaPToP/**` (e.g. 172, 174, 255, 491, …); the
+have real developments under `Aptop/**` (e.g. 172, 174, 255, 491, …); the
 Chapter 10 stubs remain as inventory only.

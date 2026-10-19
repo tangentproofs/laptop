@@ -1,0 +1,10 @@
+# aPToP Exercise 6(i) — Ampheck-applicable steps (book uses noncontradiction as ⊥).
+# inclusion then noncontradiction (as ⊤) then base.
+
+laws boolean
+
+theorem ex6i: a ∧ ¬a ⇒ b
+    a ∧ ¬a ⇒ b                     inclusion
+=   ¬(a ∧ ¬a) ∨ b                  noncontradiction
+=   ⊤ ∨ b                          base
+=   ⊤

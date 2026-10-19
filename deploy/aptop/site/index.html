@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>aPToP / LaPToP — aptop.tangentcode.com</title>
+  <title>aPToP — aptop.tangentcode.com</title>
   <link rel="stylesheet" href="./site.css" />
 </head>
 <body>
   <div class="wrap">
     <header class="site">
-      <a class="brand" href="./">aPToP <span>/ LaPToP</span></a>
+      <a class="brand" href="./">aPToP</a>
             <nav class="top" aria-label="Primary">
         <span class="nav-local">
           <a href="./" aria-current="page">Home</a>
-          <a href="/netty/">Netty</a>
+          <a href="/ampheck/">Ampheck</a>
           <a href="./interp/">Interpreter</a>
           <a href="./examples/">Examples</a>
         </span>
@@ -31,9 +31,10 @@
     </p>
 
     <div class="cards">
-      <a class="card" href="/netty/">
-        <div class="label">Netty</div>
+      <a class="card" href="/ampheck/">
+        <div class="label">Ampheck</div>
         <p class="muted">Three-pane assistant for calculational proofs: proof, context, suggestions — Lean kernel, no Mathlib. Book exercises under Examples.</p>
+        <p class="muted credit">Inspired by Netty, the University of Toronto prover’s assistant (named for Netty van Gasteren).</p>
       </a>
       <a class="card" href="./interp/">
         <div class="label">Interpreter</div>
@@ -47,8 +48,11 @@
 
     <h2>What ships here</h2>
     <p>
-      Static home from <code>deploy/aptop/site/</code>; <code>/netty/</code> proxies to
-      a loopback Node + Lean Netty kernel; <code>/interp/</code> is an editable
+      Static home from <code>deploy/aptop/site/</code>; <code>/ampheck/</code> proxies to
+      a loopback Node + Lean Ampheck kernel (inspired by
+      <a href="https://www.cs.toronto.edu/~hehner/Netty.pdf">Netty</a>, the calculational
+      prover’s assistant designed by Eric Hehner, Robert Will, Lev Naiman, David Kordalewski
+      and others at the University of Toronto, named for Netty van Gasteren); <code>/interp/</code> is an editable
       runner (binary may be stubbed if Mathlib build is unavailable on this box).
     </p>
     <p class="muted">
@@ -57,7 +61,7 @@
     </p>
 
     <footer class="site">
-      aptop.tangentcode.com · LaPToP / Netty · public repo tangentproofs/laptop
+      aptop.tangentcode.com · aPToP / Ampheck · public repo tangentproofs/laptop
     </footer>
   </div>
 </body>

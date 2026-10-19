@@ -1,0 +1,398 @@
+import Ampheck.Render
+
+/-!
+# Scripts: driving a proof session from text
+
+A headless Ampheck needs a way to say what a user would do with a mouse. A
+script is one command per line; `#` begins a comment. The commands are the
+document's own transitions plus a few that only print or touch files.
+
+```
+start [boolean|number] DIRECTION EXPRESSION   begin the proof
+apply NAME                                   take the suggestion from a law
+apply NAME : CONNECTIVE EXPRESSION           …when the law offers several
+apply #N                                     take the N-th suggestion
+apply … with x := E, y := F                  …supplying the law variables the
+                                             match left unconstrained
+direct CONNECTIVE EXPRESSION                 type the next line in (leaves a gap)
+zoom N                                       zoom in to the N-th main operand
+zoom S:L                                     …or to the L operands from the S-th
+out                                          zoom out
+focus N                                      move the focus to just after line N
+undo                                         undo one command
+proof                                        print the proof pane
+suggest                                      print the suggestions pane
+context                                      print the context pane
+check [EXPRESSION]                           print what the proof proves, and
+                                             fail unless it is EXPRESSION
+laws FILE                                    add a law file
+load FILE / save FILE                        read or write a proof file
+state NAMES: DOMAIN                          declare program state variables
+spec NAME = EXPRESSION                       name a specification
+```
+
+`undo` is why a session is more than a document: `Session` keeps the documents
+the commands have passed through, and undoing pops one off.
+-/
+
+namespace Ampheck
+
+/-- A line of a script: a document command, or one of the things a command
+line can do that a document cannot. -/
+inductive ScriptCmd
+  /-- A transition on the document. -/        | doc (c : Cmd)
+  /-- Undo one command. -/                    | undo
+  /-- Print the proof pane. -/                | proof
+  /-- Print the suggestions pane. -/          | suggest
+  /-- Print the context pane. -/              | context
+  /-- Print what the proof proves, and fail
+  unless it is the given formula. -/          | check (expected : Option Expr)
+  /-- Add the laws in a file. -/              | laws (path : String)
+  /-- Read a proof file. -/                   | load (path : String)
+  /-- Write a proof file. -/                  | save (path : String)
+  /-- Declare program state variables (`state x, y: int`). -/
+                                              | state (vars : List (String × Expr))
+  /-- Name a specification (`spec R = …`). -/ | spec (name : String) (body : Expr)
+  deriving Repr, DecidableEq, Inhabited
+
+/-- A proof session: the document and enough history to undo. -/
+structure Session where
+  /-- The document as it stands. -/
+  doc : Doc
+  /-- Earlier states, most recent first. -/
+  history : List Doc := []
+  deriving Repr, DecidableEq, Inhabited
+
+namespace Session
+
+/-- Run a document command, remembering the state it came from. -/
+def step (s : Session) (c : Cmd) : Except String Session := do
+  let d ← s.doc.step c
+  return { doc := d, history := s.doc :: s.history }
+
+/-- Undo one command. -/
+def undo (s : Session) : Except String Session :=
+  match s.history with
+  | d :: rest => .ok { doc := d, history := rest }
+  | [] => .error "there is nothing to undo"
+
+/-- Remember the current document and replace it. -/
+def remember (s : Session) (d : Doc) : Session :=
+  { doc := d, history := s.doc :: s.history }
+
+/-- Add state variables for the programming rules. -/
+def addState (s : Session) (vs : List (String × Expr)) : Except String Session := do
+  for (v, _) in vs do
+    if s.doc.prog.state.any (·.1 == v) then
+      throw s!"‘{v}’ is already a state variable"
+  let p := { s.doc.prog with state := s.doc.prog.state ++ vs }
+  return s.remember { s.doc with prog := p }
+
+/-- Add a named specification. -/
+def addSpec (s : Session) (name : String) (body : Expr) : Except String Session := do
+  if s.doc.prog.specs.any (·.1 == name) then
+    throw s!"‘{name}’ is already a specification"
+  let p := { s.doc.prog with specs := s.doc.prog.specs ++ [(name, body)] }
+  return s.remember { s.doc with prog := p }
+
+end Session
+
+namespace Parser
+
+/-- Split off the first whitespace-delimited word. -/
+private def firstWord (s : String) : String × String :=
+  let cs := (trim s).toList
+  (String.ofList (cs.takeWhile fun c => !c.isWhitespace),
+   trim (String.ofList (cs.dropWhile fun c => !c.isWhitespace)))
+
+/-- Read a margin connective from the front of a token list. -/
+private def connective : List Tok → Except String (BinOp × List Tok)
+  | .op o :: rest
+  | .bigOp o :: rest =>
+      if o.isMargin then .ok (o, rest)
+      else .error s!"‘{o.symbol}’ cannot stand in the left margin of a proof"
+  | t :: _ => .error s!"expected a connective but found ‘{t}’"
+  | [] => .error "expected a connective"
+
+/-- Read an optional type, then a direction, from the front of a token list. -/
+private def direction : List Tok → Except String (Ty × Dir × List Tok)
+  | .ident "boolean" :: rest => do
+      let (o, rest) ← connective rest
+      let r ← orElseError s!"‘{o.symbol}’ is not a direction" o.rel?
+      return (.boolean, r.dir, rest)
+  | .ident "number" :: rest => do
+      let (o, rest) ← connective rest
+      let r ← orElseError s!"‘{o.symbol}’ is not a direction" o.rel?
+      return (.number, r.dir, rest)
+  | ts => do
+      let (o, rest) ← connective ts
+      let r ← orElseError s!"‘{o.symbol}’ is not a direction" o.rel?
+      -- `=` belongs to every type, so a proof that starts with it is boolean
+      -- unless the type was given.
+      return (o.connTy.getD .boolean, r.dir, rest)
+
+/-- Split a `with x := E, y := F` clause off the end of an `apply` line, and
+parse the bindings. The clause is the document's small dialog box written as
+text: it supplies the law variables that matching left unconstrained.
+
+`with` is a word of the command here, so a proof about a variable actually named
+`with` cannot use this clause; nothing else in the grammar is affected. The
+bindings are separated by `,`, which no expression contains, and each is a name,
+`:=`, and an expression. The `with` clause is taken off before the `:` of
+`apply NAME : …` is looked for, so a binding's `:=` is never mistaken for it. -/
+private def withClause (s : String) : Except String (String × Subst) :=
+  match s.splitOn " with " with
+  | [body] => .ok (body, [])
+  | body :: rest => do
+      let binds ← (String.intercalate " with " rest).splitOn "," |>.mapM fun b =>
+        match b.splitOn ":=" with
+        | [n, e] =>
+            if (trim n).isEmpty then .error "‘with’ wants a variable name before ‘:=’"
+            else do return (trim n, ← exprOfToks (← tokenize e))
+        | _ => .error s!"‘{trim b}’ is not a binding; write ‘x := expression’"
+      return (body, binds)
+  | [] => .ok (s, [])
+
+/-- Parse one line of a script; comments and blank lines yield nothing. -/
+def scriptLine (line : String) : Except String (Option ScriptCmd) := do
+  let t := trim line
+  if t.isEmpty || beginsWith t '#' then return none
+  let (word, rest) := firstWord t
+  match word with
+  | "start" => do
+      let (ty, dir, ts) ← direction (← tokenize rest)
+      return some (.doc (.start ty dir (← exprOfToks ts)))
+  | "apply" => do
+      let (body, bind) ← withClause rest
+      if beginsWith body '#' then
+        let n ← orElseError s!"‘{trim body}’ is not a suggestion number"
+          (trim (String.ofList (body.toList.drop 1))).toNat?
+        return some (.doc (.apply n bind))
+      match body.splitOn ":" with
+      | [name] =>
+          if (trim name).isEmpty then throw "apply what?"
+          -- Book hints are title-cased; kernel law/rule names are lowercase.
+          return some (.doc (.applyNamed (trim name).toLower none bind))
+      | name :: expected =>
+          let (o, ts) ← connective (← tokenize (String.intercalate ":" expected))
+          return some (.doc (.applyNamed (trim name).toLower (some (o, ← exprOfToks ts)) bind))
+      | [] => throw "apply what?"
+  | "direct" => do
+      let (o, ts) ← connective (← tokenize rest)
+      return some (.doc (.direct o (← exprOfToks ts)))
+  | "zoom" => do
+      match (trim rest).splitOn ":" with
+      | [one] =>
+          let n ← orElseError s!"‘{rest}’ is not an operand number" one.toNat?
+          return some (.doc (.zoomIn (.operand n)))
+      | [start, len] =>
+          let st ← orElseError s!"‘{rest}’ is not a segment start:length"
+            (trim start).toNat?
+          let l ← orElseError s!"‘{rest}’ is not a segment start:length"
+            (trim len).toNat?
+          if l < 2 then
+            throw s!"‘{rest}’ is a segment of {l}; a segment is two operands or more, \
+              and a single operand is written ‘zoom {st}’"
+          return some (.doc (.zoomIn (.segment st l)))
+      | _ => throw s!"‘{rest}’ is not an operand number or a segment start:length"
+  | "out" => return some (.doc .zoomOut)
+  | "focus" => do
+      let n ← orElseError s!"‘{rest}’ is not a line number" rest.toNat?
+      return some (.doc (.setFocus n))
+  | "undo" => return some .undo
+  | "proof" => return some .proof
+  | "suggest" => return some .suggest
+  | "context" => return some .context
+  | "check" =>
+      if rest.isEmpty then return some (.check none)
+      else return some (.check (some (← expr rest)))
+  | "laws" => return some (.laws rest)
+  | "load" => return some (.load rest)
+  | "save" => return some (.save rest)
+  | "state" => do
+      match rest.splitOn ":" with
+      | [names, dom] =>
+          let d ← expr dom
+          let ns := ((names.splitOn ",").map trim).filter (!·.isEmpty)
+          if ns.isEmpty then throw "‘state’ wants variable names"
+          return some (.state (ns.map (·, d)))
+      | _ => throw "write ‘state x, y: int’"
+  | "spec" => do
+      let (name, body) := firstWord rest
+      let body := trim body
+      if name.isEmpty || !beginsWith body '=' then
+        throw "write ‘spec NAME = SPECIFICATION’"
+      let e ← expr (String.ofList (body.toList.drop 1))
+      return some (.spec name e)
+  | w => throw s!"‘{w}’ is not a command"
+
+/-- Parse a whole script, keeping the line numbers for error messages. -/
+def script (text : String) : Except String (List (Nat × ScriptCmd)) :=
+  go 1 (text.splitOn "\n") []
+where
+  go : Nat → List String → List (Nat × ScriptCmd) → Except String (List (Nat × ScriptCmd))
+    | _, [], acc => .ok acc.reverse
+    | n, line :: rest, acc =>
+        match scriptLine line with
+        | .error e => .error s!"line {n}: {e}"
+        | .ok none => go (n + 1) rest acc
+        | .ok (some c) => go (n + 1) rest ((n, c) :: acc)
+
+end Parser
+
+namespace Demo
+
+/-- The short proof from the first page of the Netty document, the one whose
+proof pane reads
+
+```
+⇐  a ⇒ (b⇒a)  portation
+=  a∧b ⇒ a    specialization
+=  T
+```
+
+and which therefore proves `a ⇒ (b ⇒ a)`. -/
+def portation : String :=
+"# The example proof from page 0 of the Netty document.
+start ⇐ a ⇒ (b ⇒ a)
+suggest
+apply portation
+apply specialization : = ⊤
+proof
+check a ⇒ (b ⇒ a)
+"
+
+/-- A proof that uses the rest of the kernel: zooming in to a subexpression,
+the context that zooming in supplies, and zooming back out. -/
+def discharge : String :=
+"# (a ⇒ b) ⇒ (a ⇒ a ∧ b), proved by zooming in to the consequent, where the
+# antecedent a ⇒ b is available as context.
+start ⇐ (a ⇒ b) ⇒ (a ⇒ a ∧ b)
+zoom 1
+context
+apply discharge : = a ⇒ b
+apply context : = ⊤
+out
+proof
+apply base : = ⊤
+check (a ⇒ b) ⇒ (a ⇒ a ∧ b)
+"
+
+/-- A proof pane with a gap in it, and the gap then filled: direct entry
+leaves a warning sign, and moving the focus back and taking the suggestion
+that writes the line already there replaces the sign with the law's name. -/
+def gap : String :=
+"# Direct entry leaves a gap, which taking the right suggestion then closes.
+start ⇐ ¬¬a
+direct = a
+proof
+focus 0
+apply double negation : = a
+proof
+check ¬¬a ≡ a
+"
+
+/-- A law applied to a *part* of a line: idempotence matches the second main
+operand of `x ∧ (y ∨ y)` and folds it in place, which before a law could be
+applied to a part took a zoom in, an application and a zoom out. -/
+def minimize : String :=
+"# A law applied to a part of a line, as a result of minimization: idempotence
+# matches y ∨ y, the second main operand, and folds it where it stands.
+start = x ∧ (y ∨ y)
+suggest
+apply idempotent : = x ∧ y
+proof
+check x ∧ (y ∨ y) ≡ x ∧ y
+"
+
+/-- A law applied to a contiguous *segment* of an association: idempotence
+matches the middle two operands of `x ∧ y ∧ y ∧ z` and folds them where they
+stand. Neither the whole line nor any single main operand matches — the operands
+are the bare identifiers `x`, `y`, `y`, `z` — so before a segment was a site this
+step did not exist at all. -/
+def segment : String :=
+"# A law applied to a contiguous segment of an association: idempotence matches
+# y ∧ y, the middle two of four conjuncts, and folds them where they stand,
+# leaving x and z alone. The whole line does not match, and neither does any
+# single main operand.
+start = x ∧ y ∧ y ∧ z
+suggest
+apply idempotent : = x ∧ y ∧ z
+proof
+check x ∧ y ∧ y ∧ z ≡ x ∧ y ∧ z
+"
+
+/-- The first of the display collapses: a subproof that is a single law
+application is *drawn* as its parent line with the law's name moved up onto
+it. The proof pane is printed twice, once while the subproof is still open and
+once after the zoom out has closed it, so the fold can be seen happening — and
+what is left is line for line what `minimize` draws, which is the same step
+taken the short way round. -/
+def fold : String :=
+"# A one-step subproof, folded into its parent line by the display. The first
+# ‘proof’ shows the subproof open; the second shows it folded away, with
+# ‘idempotent’ moved up to line 0 — which is what the ‘minimize’ demonstration,
+# taking the same step in one application, draws.
+start = x ∧ (y ∨ y)
+zoom 1
+apply idempotent : = y
+proof
+out
+proof
+check x ∧ (y ∨ y) ≡ x ∧ y
+"
+
+/-- The long way round to the same fold: a contiguous segment of an association
+is a *level* as well as a site, so `zoom 1:2` opens a subproof on the two
+operands from the first, and zooming out splices its bottom line back into the
+middle of the association. What is left drawn is line for line what the
+`segment` demonstration, taking the step in one application, draws. -/
+def segfold : String :=
+"# A segment zoomed into rather than rewritten in place. ‘zoom 1:2’ opens a
+# subproof on y ∧ y, the two operands from the first; the context pane shows the
+# operands outside the run, x and z, which the zoom in gained; folding y ∧ y and
+# zooming out splices y back into the middle of the association. The second
+# ‘proof’ shows the subproof folded away — what the ‘segment’ demonstration,
+# taking the same step in one application, draws.
+start = x ∧ y ∧ y ∧ z
+zoom 1:2
+context
+apply idempotent : = y
+proof
+out
+proof
+check x ∧ y ∧ y ∧ z ≡ x ∧ y ∧ z
+"
+
+/-- The other display collapse: two zoom-ins matched by two zoom-outs are
+*drawn* as one zoom step. The middle level holds nothing of its own — its only
+two lines are the one the zoom in wrote and the one the zoom out wrote — so the
+subproof it holds is drawn a level further out. Again the pane is printed
+twice, before the outer zoom out and after it. -/
+def merge : String :=
+"# Two zoom-ins matched by two zoom-outs, merged by the display into one zoom
+# step. The middle level — the line ‘y ∨ ¬¬z ∧ ¬¬z’ and the line the first zoom
+# out writes — does nothing but hold the subproof, so after the second zoom out
+# the display draws that subproof one level out and leaves the middle level's
+# two lines undrawn. The inner subproof is two steps long, so it is not folded
+# away as well.
+start = x ∧ (y ∨ (¬¬z ∧ ¬¬z))
+zoom 1
+zoom 1
+apply idempotent : = ¬¬z
+apply double negation : = z
+out
+proof
+out
+proof
+check x ∧ (y ∨ (¬¬z ∧ ¬¬z)) ≡ x ∧ (y ∨ z)
+"
+
+/-- The demonstrations, by name. -/
+def all : List (String × String) :=
+  [("portation", portation), ("discharge", discharge), ("gap", gap),
+   ("minimize", minimize), ("segment", segment), ("segfold", segfold),
+   ("fold", fold), ("merge", merge)]
+
+end Demo
+end Ampheck
