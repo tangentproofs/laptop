@@ -872,9 +872,8 @@ function draw(): void {
         el('nav', { class: 'site-nav', 'aria-label': 'Primary' },
           el('span', { class: 'nav-local' },
             el('a', { href: '/' }, 'Home'),
-            el('a', { href: '/ampheck/', 'aria-current': 'page' }, 'Ampheck'),
-            el('a', { href: '/interp/' }, 'Interpreter'),
-            el('a', { href: '/examples/' }, 'Examples')),
+            el('a', { href: '/ampheck/', 'aria-current': 'page' }, 'Proof Assistant'),
+            el('a', { href: '/interp/' }, 'Interpreter')),
           el('span', { class: 'nav-hehner' },
             el('a', {
               class: 'ext book',

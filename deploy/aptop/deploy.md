@@ -19,9 +19,9 @@ Host: tangentcode Linode `45.79.174.182` (box ~4 GB RAM, disk tight).
 | Path | What |
 |------|------|
 | `/` | Static home (`deploy/aptop/site/`) |
-| `/ampheck/` | Ampheck three-pane UI (Node + Lean kernel) |
+| `/ampheck/` | Ampheck three-pane UI (Node + Lean kernel), labelled “Proof Assistant” on the site |
 | `/interp/` | Editable CodeMirror runner + Symbols sheet; Run POSTs to `/interp/api/run` |
-| `/examples/` | Highlighted editable demos + Symbols sheet |
+| `/examples/` | Redirects to `/interp/` (kept for old links; not in the nav) |
 | `/ampheck/` book examples | `.calc` files under `ampheck-web/public/examples/` load into the proof pane |
 | `/docs/` | Optional later |
 
