@@ -27,6 +27,10 @@ import {
   type CalcTheorem, type ExamplesManifest, type ManifestItem,
 } from './calc-load.js';
 import { appendHighlighted } from './highlight.js';
+import {
+  initTutorial, openTutorial, tutorialPanel, decorate as decorateTutorial,
+  onAnswer as tutorialOnAnswer, isActive as tutorialActive,
+} from './tutorial.js';
 
 /** The state the kernel last sent. */
 let state: StateView | null = null;
@@ -101,6 +105,8 @@ async function send(op: Op, arg = ''): Promise<Response | null> {
     note = answer.ok ? '' : answer.error;
     noteIsError = !answer.ok;
   }
+  // The tutorial judges a step only by the state the kernel just sent.
+  tutorialOnAnswer();
   draw();
   return answer;
 }
@@ -320,7 +326,7 @@ function startRow(): HTMLElement {
     placeholder: 'the first line, e.g. a ⇒ (b ⇒ a)', value: typed.start,
   });
   text.addEventListener('input', () => { typed.start = text.value; });
-  const go = el('button', { class: 'go' }, 'start');
+  const go = el('button', { class: 'go', 'data-tut': 'start' }, 'start');
   const run = () => {
     if (text.value.trim() === '') return;
     typed.start = '';
@@ -622,6 +628,8 @@ function suggestionRow(g: SuggestionView): HTMLElement {
   const gappy = g.premise !== '';
   const row = el('button', {
     class: 'suggestion' + (blocked ? ' blocked' : '') + (gappy ? ' gappy' : ''),
+    'data-law': g.law,
+    'data-result': g.result,
     title: blocked
       ? `${g.holes.join(', ')} unconstrained: this law needs more than the line to \
 settle it — click to say what ${g.holes.join(', ')} ${g.holes.length === 1 ? 'is' : 'are'}`
@@ -831,18 +839,23 @@ function examplesPicker(): HTMLElement {
 /** The toolbar. */
 function toolbar(s: StateView | null): HTMLElement {
   const bar = el('nav', { class: 'toolbar' });
-  const button = (label: string, title: string, run: () => void, off = false) => {
-    const b = el('button', { title }, label);
+  const button = (label: string, title: string, run: () => void, off = false, tut = '') => {
+    const b = el('button', tut === '' ? { title } : { title, 'data-tut': tut }, label);
     if (off) b.setAttribute('disabled', 'disabled');
     b.addEventListener('click', run);
     bar.append(b);
     return b;
   };
+  // The guided lessons, played in these same panes.
+  if (!tutorialActive()) {
+    button('tutorial', 'a guided tour: short lessons, each one tiny proof', openTutorial, false, 'tutorial')
+      .classList.add('tutorial-button');
+  }
   // Hierarchical Examples picker (chapter → section → proof); PASS/FAIL/MISSING open.
   bar.append(examplesPicker());
   button('new', 'start again with the same laws', () => void send('reset'));
-  button('undo (u)', 'undo one command', () => void cmd('undo'), s === null || !s.canUndo);
-  button('zoom out (o)', 'zoom out of this subproof', () => void cmd('out'), s === null || !s.canZoomOut);
+  button('undo (u)', 'undo one command', () => void cmd('undo'), s === null || !s.canUndo, 'undo');
+  button('zoom out (o)', 'zoom out of this subproof', () => void cmd('out'), s === null || !s.canZoomOut, 'out');
   button('save', 'save the proof as a file', () => {
     void send('save').then((a) => { if (a?.ok) download(a.save); });
   });
@@ -902,7 +915,8 @@ function draw(): void {
           + 'David Kordalewski and others at the University of Toronto (named for Netty van Gasteren).')),
     note === ''
       ? el('div', { class: 'note-bar quiet' },
-          'examples…: PASS loads cleanly; FAIL opens with gaps; MISSING shows the stub (goal only); click a suggestion to take it')
+          (tutorialActive() ? '' : 'New here? Press tutorial for short guided lessons. ')
+          + 'examples…: PASS loads cleanly; FAIL opens with gaps; MISSING shows the stub (goal only); click a suggestion to take it')
       : el('div', { class: 'note-bar' + (noteIsError ? ' error' : '') }, note),
   ];
   if (bookExample !== null) {
@@ -913,8 +927,11 @@ function draw(): void {
       el('summary', {}, summary),
       el('pre', {}, bookExample.text)));
   }
-  kids.push(el('main', { class: 'panes' }, proofPane(s), contextPane(s), suggestPane(s)));
+  const tour = tutorialPanel();
+  if (tour !== null) kids.push(tour);
+  kids.push(el('main', { class: 'panes' + (tour !== null ? ' touring' : '') }, proofPane(s), contextPane(s), suggestPane(s)));
   root.replaceChildren(...kids);
+  decorateTutorial();
 }
 
 /** The keys the document's own description gives to the mouse. */
@@ -947,4 +964,14 @@ function keys(e: KeyboardEvent): void {
 
 document.addEventListener('keydown', keys);
 draw();
-void send('state');
+void send('state').then(() => initTutorial({
+  send: (op, arg = '') => send(op, arg),
+  state: () => state,
+  redraw: draw,
+  prefillStart: (ty, conn, text) => {
+    typed.ty = ty;
+    typed.startConn = conn;
+    typed.start = text;
+  },
+  showSite,
+}));
