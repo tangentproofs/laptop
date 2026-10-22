@@ -54,6 +54,17 @@ checks both halves. The server listens on the loopback interface only.
 
 ## Using it
 
+* **tutorial** opens eight short guided lessons in these same panes (also at
+  `/ampheck/#tutorial`, or `#tutorial-N` for lesson N): the panes and what a
+  proof proves, taking a suggestion, choosing among suggestions, filling in a law
+  variable, zooming in and out, the context, laws with a condition, and the
+  book's Law of Portation (aPToP §1.0.1). Each lesson starts its proof with the
+  kernel's own `start`; a step counts only when the state the kernel sends back
+  says it was taken, and the thing to click next pulses. Progress is kept in the
+  browser's localStorage (`ampheck-tutorial-v1`). The lessons live in
+  `src/tutorial.ts`; `scripts/tutorial-e2e.mjs` plays all of them in a browser
+  against a running server (it needs Playwright, which is not a dependency).
+  The server has one kernel session, so a lesson replaces whatever proof was open.
 * **demonstration…** replays one of the kernel's demonstrations —
   `portation` is the document's own first example, `discharge` zooms in and
   uses the context, `gap` leaves a gap and then closes it, `minimize` applies a
